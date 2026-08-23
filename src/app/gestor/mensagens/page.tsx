@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { criarClienteServidor } from '@/lib/supabase/server';
-import { Aviso } from '@/components/ui';
+import { Aviso, Titulo } from '@/components/ui';
 import type { Config, EtapaMsg, Modelo, Variacao } from '@/lib/tipos-banco';
 import { EditorMensagens } from './editor';
 
@@ -32,11 +32,7 @@ export default async function PaginaMensagens() {
 
   return (
     <>
-      <h1 className="mb-1 text-xl font-semibold">Mensagens</h1>
-      <p className="mb-5 text-sm text-suave">
-        Você edita os textos sem depender do desenvolvedor. Algumas partes são obrigatórias e o
-        sistema não deixa salvar sem elas.
-      </p>
+      <Titulo sub="Você edita os textos sem depender do desenvolvedor. Algumas partes são obrigatórias e o sistema não deixa salvar sem elas.">Mensagens</Titulo>
 
       {!c?.candidato && (
         <Aviso tom="alerta" className="mb-5">

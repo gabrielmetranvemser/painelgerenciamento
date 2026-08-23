@@ -19,7 +19,7 @@ export function Descadastro({ token }: { token: string }) {
 
   if (fase === 'confirmar') {
     return (
-      <div className="rounded-lg border border-borda bg-fundo p-4">
+      <div className="rounded-2xl border border-borda bg-superficie-alta p-5">
         <p className="mb-3 text-sm">
           Confirma? Seu número sai da lista agora e é apagado em até 48 horas.
         </p>

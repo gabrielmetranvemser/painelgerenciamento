@@ -1,7 +1,8 @@
 'use client';
 
 import { useActionState, useState, useTransition } from 'react';
-import { Aviso, Botao, Campo, Cartao, Farol } from '@/components/ui';
+import { Pause, Play, Skull, SmartphoneCharging } from 'lucide-react';
+import { Avatar, Aviso, Botao, Campo, Cartao, Farol, Selecao } from '@/components/ui';
 import type { SaudeChip, StatusChip, Usuario } from '@/lib/tipos-banco';
 import { criarChip, matarChip, mudarStatus } from './acoes';
 
@@ -22,30 +23,22 @@ export function GerenciarChips({ chips, atendentes }: { chips: SaudeChip[]; aten
   return (
     <div className="grid gap-5 lg:grid-cols-[340px_1fr]">
       <div className="space-y-4">
-        <Cartao className="p-5">
-          <h2 className="mb-1 font-semibold">Novo número</h2>
+        <Cartao className="p-6">
+          <h2 className="mb-1 flex items-center gap-2 font-semibold"><SmartphoneCharging size={16} className="text-suave" /> Novo número</h2>
           <p className="mb-4 text-xs text-suave">
             Cada atendente trabalha com um ativo e um reserva. O reserva fica pareado e aquecido,
             sem tocar na lista.
           </p>
           <form action={acao} className="space-y-4">
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium">Atendente</span>
-              <select name="atendente_id" required defaultValue=""
-                      className="w-full rounded-lg border border-borda bg-superficie px-3 py-2.5 text-sm">
-                <option value="" disabled>escolha…</option>
-                {atendentes.map((a) => <option key={a.id} value={a.id}>{a.primeiro_nome}</option>)}
-              </select>
-            </label>
+            <Selecao rotulo="Atendente" name="atendente_id" required defaultValue="">
+              <option value="" disabled>escolha…</option>
+              {atendentes.map((a) => <option key={a.id} value={a.id}>{a.primeiro_nome}</option>)}
+            </Selecao>
             <Campo rotulo="Nome do número" name="rotulo" required placeholder="Chip A" />
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium">Função</span>
-              <select name="papel" defaultValue="ativo"
-                      className="w-full rounded-lg border border-borda bg-superficie px-3 py-2.5 text-sm">
-                <option value="ativo">Ativo — faz o atendimento</option>
-                <option value="reserva">Reserva — só aquecendo</option>
-              </select>
-            </label>
+            <Selecao rotulo="Função" name="papel" defaultValue="ativo">
+              <option value="ativo">Ativo — faz o atendimento</option>
+              <option value="reserva">Reserva — só aquecendo</option>
+            </Selecao>
             <Campo rotulo="Número (opcional)" name="numero" placeholder="(69) 99999-0000"
                    dica="Só para o relatório. O sistema não acessa o WhatsApp." />
             <Botao type="submit" disabled={ocupado}>Cadastrar</Botao>
@@ -68,10 +61,11 @@ export function GerenciarChips({ chips, atendentes }: { chips: SaudeChip[]; aten
           <Cartao className="p-8 text-center text-sm text-suave">Nenhum número cadastrado.</Cartao>
         )}
         {chips.map((c) => (
-          <Cartao key={c.chip_id} className="p-4">
+          <Cartao key={c.chip_id} className="p-5">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="mr-auto">
-                <p className="font-medium">
+              <Avatar nome={c.atendente} tamanho="p" />
+              <div className="mr-auto min-w-0">
+                <p className="font-semibold">
                   {c.rotulo}
                   <span className="ml-2 text-xs font-normal text-suave">
                     {c.atendente ?? 'sem dono'} · {c.papel === 'reserva' ? 'reserva' : 'ativo'}
@@ -99,13 +93,13 @@ export function GerenciarChips({ chips, atendentes }: { chips: SaudeChip[]; aten
                 {c.status !== 'ativo' && (
                   <Botao variante="neutro" tamanho="p" disabled={ocupado}
                     onClick={() => iniciar(async () => { await mudarStatus(c.chip_id, 'ativo'); })}>
-                    Marcar ativo
+                    <Play size={12} /> Marcar ativo
                   </Botao>
                 )}
                 {c.status !== 'pausado' && (
                   <Botao variante="neutro" tamanho="p" disabled={ocupado}
                     onClick={() => iniciar(async () => { await mudarStatus(c.chip_id, 'pausado'); })}>
-                    Pausar
+                    <Pause size={12} /> Pausar
                   </Botao>
                 )}
                 {confirmandoMorte === c.chip_id ? (
@@ -126,7 +120,7 @@ export function GerenciarChips({ chips, atendentes }: { chips: SaudeChip[]; aten
                   </>
                 ) : (
                   <Botao variante="perigo" tamanho="p" onClick={() => setConfirmandoMorte(c.chip_id)}>
-                    Marcar como morto
+                    <Skull size={12} /> Marcar como morto
                   </Botao>
                 )}
               </div>

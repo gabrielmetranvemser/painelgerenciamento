@@ -41,12 +41,12 @@ export default async function PaginaMaterial({
   });
 
   return (
-    <main className="mx-auto w-full max-w-xl flex-1 p-6">
-      <Cartao className="p-6">
+    <main className="mx-auto w-full max-w-xl flex-1 px-4 py-10 sm:px-6">
+      <Cartao className="p-7" elevado>
         <p className="text-sm text-suave">
           {cfg?.cargo} {cfg?.numero && `· nº ${cfg.numero}`}
         </p>
-        <h1 className="mt-1 text-2xl font-semibold">{cfg?.candidato}</h1>
+        <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight">{cfg?.candidato}</h1>
 
         <h2 className="mt-6 text-lg font-medium">{cfg?.material_titulo}</h2>
         <div className="mt-2 whitespace-pre-line text-[15px] leading-relaxed">
@@ -56,7 +56,7 @@ export default async function PaginaMaterial({
         {tokenCanal && (
           <a
             href={`/r/${tokenCanal}`}
-            className="mt-6 inline-flex w-full items-center justify-center rounded-lg bg-acento px-6 py-3.5 font-medium text-white hover:bg-acento-forte"
+            className="mt-7 inline-flex w-full items-center justify-center rounded-full bg-acento px-6 py-4 font-semibold text-tinta-acento transition-colors hover:bg-acento-alto"
           >
             Entrar no canal da campanha
           </a>

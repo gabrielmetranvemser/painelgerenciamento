@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { criarClienteServidor } from '@/lib/supabase/server';
-import { BotaoLink, Cartao, Vazio } from '@/components/ui';
+import { BotaoLink, Cartao, Vazio, Titulo } from '@/components/ui';
 import type { DesempenhoAtendente, FunilMunicipio, Lista } from '@/lib/tipos-banco';
 
 export const metadata: Metadata = { title: 'Relatórios' };
@@ -24,10 +24,7 @@ export default async function PaginaRelatorios() {
 
   return (
     <>
-      <h1 className="mb-1 text-xl font-semibold">Relatórios</h1>
-      <p className="mb-5 text-sm text-suave">
-        Os arquivos abrem direto no Excel, com acento certo.
-      </p>
+      <Titulo sub="Os arquivos abrem direto no Excel, com acento certo.">Relatórios</Titulo>
 
       <section className="mb-8">
         <h2 className="mb-2 text-sm font-medium text-suave">Exportar</h2>

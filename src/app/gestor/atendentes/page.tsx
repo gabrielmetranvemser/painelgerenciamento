@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Titulo } from '@/components/ui';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import type { Usuario } from '@/lib/tipos-banco';
 import { GerenciarAtendentes } from './lista';
@@ -12,11 +13,7 @@ export default async function PaginaAtendentes() {
 
   return (
     <>
-      <h1 className="mb-1 text-xl font-semibold">Atendentes</h1>
-      <p className="mb-5 text-sm text-suave">
-        Quem desativar perde o acesso na hora e some da fila. Os contatos que estavam com a
-        pessoa voltam para a fila quando o prazo de 20 minutos vencer.
-      </p>
+      <Titulo sub="Quem desativar perde o acesso na hora e some da fila. Os contatos que estavam com a pessoa voltam para a fila quando o prazo de 20 minutos vencer.">Atendentes</Titulo>
       <GerenciarAtendentes usuarios={(data ?? []) as Usuario[]} />
     </>
   );

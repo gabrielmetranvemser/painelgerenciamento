@@ -1,22 +1,24 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { ChevronRight, Inbox } from 'lucide-react';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { exigirAtendente } from '@/lib/sessao';
-import { Cartao, EtiquetaOrigem } from '@/components/ui';
+import { Avatar, Cartao, EtiquetaOrigem, Pilula, Titulo, Vazio } from '@/components/ui';
 import { formatarExibicao } from '@/lib/telefone';
 import type { Contato, StatusContato } from '@/lib/tipos-banco';
 
 export const metadata: Metadata = { title: 'Meus contatos' };
+export const dynamic = 'force-dynamic';
 
-const ROTULO: Partial<Record<StatusContato, string>> = {
-  em_atendimento: 'Aguardando resposta',
-  autorizou: 'Autorizou',
-  pediu_saida: 'Pediu saída',
-  invalido: 'Número inválido',
-  quer_ajudar: 'Quer ajudar',
-  encaminhado: 'Encaminhado',
-  sem_resposta: 'Não respondeu',
-  perdido: 'Perdido (chip caiu)',
+const ROTULO: Partial<Record<StatusContato, { texto: string; cor: 'neutro' | 'acento' | 'alerta' | 'perigo' }>> = {
+  em_atendimento: { texto: 'Aguardando resposta', cor: 'neutro' },
+  autorizou: { texto: 'Autorizou', cor: 'acento' },
+  pediu_saida: { texto: 'Pediu saída', cor: 'perigo' },
+  invalido: { texto: 'Número inválido', cor: 'neutro' },
+  quer_ajudar: { texto: 'Quer ajudar', cor: 'acento' },
+  encaminhado: { texto: 'Encaminhado', cor: 'alerta' },
+  sem_resposta: { texto: 'Não respondeu', cor: 'neutro' },
+  perdido: { texto: 'Perdido (o número caiu)', cor: 'perigo' },
 };
 
 /**
@@ -39,39 +41,41 @@ export default async function MeusContatos() {
 
   return (
     <>
-      <h1 className="mb-1 text-xl font-semibold">Meus contatos</h1>
-      <p className="mb-5 text-sm text-suave">
-        Quem você já abordou. Clique para ver o histórico, corrigir o resultado,
-        mandar outra mensagem ou anotar um pedido de kit.
-      </p>
+      <Titulo sub="Quem você já abordou. Clique para ver o histórico, corrigir o resultado, mandar outra mensagem ou anotar um pedido de kit.">
+        Meus contatos
+      </Titulo>
 
       {contatos.length === 0 ? (
-        <Cartao className="p-8 text-center text-sm text-suave">
-          Você ainda não abordou ninguém.
-        </Cartao>
+        <Vazio icone={<Inbox size={26} />}>
+          Você ainda não abordou ninguém. Quem você atender aparece aqui.
+        </Vazio>
       ) : (
-        <Cartao className="divide-y divide-borda">
-          {contatos.map((c) => (
-            <Link
-              key={c.id}
-              href={`/painel/contatos/${c.id}`}
-              className="flex flex-wrap items-center gap-3 px-5 py-3 hover:bg-fundo"
-            >
-              <div className="mr-auto min-w-0">
-                <p className="truncate font-medium">
-                  {c.primeiro_nome ?? c.nome ?? <span className="text-suave">(dado apagado)</span>}
-                </p>
-                <p className="text-xs text-suave">
-                  {c.telefone_e164 ? formatarExibicao(c.telefone_e164) : '—'}
-                  {c.primeiro_contato_em &&
-                    ` · ${new Date(c.primeiro_contato_em).toLocaleDateString('pt-BR')}`}
-                </p>
-              </div>
-              <EtiquetaOrigem origem={c.origem} />
-              <span className="text-xs text-suave">{ROTULO[c.status] ?? c.status}</span>
-              <span aria-hidden className="text-suave">›</span>
-            </Link>
-          ))}
+        <Cartao className="divide-y divide-borda overflow-hidden">
+          {contatos.map((c) => {
+            const estado = ROTULO[c.status];
+            return (
+              <Link
+                key={c.id}
+                href={`/painel/contatos/${c.id}`}
+                className="flex flex-wrap items-center gap-4 px-5 py-4 transition-colors hover:bg-superficie-alta"
+              >
+                <Avatar nome={c.nome ?? c.primeiro_nome} tamanho="m" />
+                <div className="mr-auto min-w-0">
+                  <p className="truncate font-semibold">
+                    {c.primeiro_nome ?? c.nome ?? <span className="text-tenue">(dados apagados)</span>}
+                  </p>
+                  <p className="truncate text-xs text-suave">
+                    {c.telefone_e164 ? formatarExibicao(c.telefone_e164) : '—'}
+                    {c.primeiro_contato_em &&
+                      ` · ${new Date(c.primeiro_contato_em).toLocaleDateString('pt-BR')}`}
+                  </p>
+                </div>
+                <EtiquetaOrigem origem={c.origem} />
+                {estado && <Pilula cor={estado.cor}>{estado.texto}</Pilula>}
+                <ChevronRight size={16} className="text-tenue" />
+              </Link>
+            );
+          })}
         </Cartao>
       )}
     </>

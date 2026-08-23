@@ -19,8 +19,8 @@ export default async function Privacidade() {
     .single();
 
   return (
-    <main className="mx-auto w-full max-w-xl flex-1 p-6 text-[15px] leading-relaxed">
-      <h1 className="mb-6 text-2xl font-semibold">Como tratamos seus dados</h1>
+    <main className="mx-auto w-full max-w-xl flex-1 px-4 py-10 text-[15px] leading-[1.7] sm:px-6">
+      <h1 className="mb-8 font-display text-3xl font-semibold tracking-tight">Como tratamos seus dados</h1>
 
       <Secao titulo="O que guardamos">
         Nome, telefone e cidade. Se você pediu material impresso, também o endereço de entrega.
@@ -59,7 +59,7 @@ export default async function Privacidade() {
 function Secao({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
     <section className="mb-6">
-      <h2 className="mb-1.5 font-semibold">{titulo}</h2>
+      <h2 className="mb-2 font-display text-lg font-semibold tracking-tight">{titulo}</h2>
       <p className="text-suave">{children}</p>
     </section>
   );

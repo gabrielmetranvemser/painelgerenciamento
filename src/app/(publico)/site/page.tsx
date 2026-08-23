@@ -30,19 +30,19 @@ export default async function PaginaSite() {
   ]);
 
   return (
-    <main className="mx-auto w-full max-w-lg flex-1 p-6">
+    <main className="mx-auto w-full max-w-lg flex-1 px-4 py-10 sm:px-6">
       <header className="mb-6 text-center">
         <p className="text-sm text-suave">
           {cfg?.cargo} {cfg?.numero && `· nº ${cfg.numero}`}
         </p>
-        <h1 className="mt-1 text-2xl font-semibold">{cfg?.candidato}</h1>
+        <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight">{cfg?.candidato}</h1>
         <p className="mt-3 text-[15px] text-suave">
           Deixe seu contato para receber as propostas pelo WhatsApp. Uma pessoa da equipe fala
           com você — sem robô e sem lista de transmissão.
         </p>
       </header>
 
-      <Cartao className="p-6">
+      <Cartao className="p-7" elevado>
         <FormularioSite municipios={(municipios ?? []) as Municipio[]} />
       </Cartao>
 

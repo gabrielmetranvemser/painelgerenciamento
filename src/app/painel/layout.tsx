@@ -1,28 +1,40 @@
-import Link from 'next/link';
+import { Headphones, LayoutGrid, LogOut, Users } from 'lucide-react';
 import { exigirAtendente } from '@/lib/sessao';
 import { sair } from '@/app/entrar/acoes';
+import { Avatar } from '@/components/ui';
+import { BarraNav } from '@/components/barra-nav';
 
 export default async function LayoutPainel({ children }: { children: React.ReactNode }) {
   const usuario = await exigirAtendente();
 
+  const abas = [
+    { href: '/painel', rotulo: 'Atender', icone: <Headphones size={15} /> },
+    { href: '/painel/meus-contatos', rotulo: 'Meus contatos', icone: <Users size={15} /> },
+    ...(usuario.papel === 'gestor'
+      ? [{ href: '/gestor', rotulo: 'Gestor', icone: <LayoutGrid size={15} /> }]
+      : []),
+  ];
+
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-borda bg-superficie">
-        <div className="mx-auto flex w-full max-w-6xl items-center gap-5 px-5 py-3">
-          <Link href="/painel" className="text-sm font-semibold">Painel</Link>
-          <nav className="flex gap-4 text-sm text-suave">
-            <Link href="/painel" className="hover:text-texto">Atender</Link>
-            <Link href="/painel/meus-contatos" className="hover:text-texto">Meus contatos</Link>
-            {usuario.papel === 'gestor' && (
-              <Link href="/gestor" className="hover:text-texto">Gestor</Link>
-            )}
-          </nav>
-          <form action={sair} className="ml-auto">
-            <button className="text-sm text-suave hover:text-texto">Sair</button>
-          </form>
+      <header className="sticky top-0 z-30 border-b border-borda bg-vidro backdrop-blur-2xl backdrop-saturate-150">
+        <div className="mx-auto flex w-full max-w-6xl items-center gap-4 px-4 py-3 sm:px-6">
+          <BarraNav abas={abas} />
+          <div className="ml-auto flex items-center gap-3">
+            <span className="hidden text-sm font-medium sm:block">{usuario.primeiro_nome}</span>
+            <Avatar nome={usuario.primeiro_nome} fotoUrl={usuario.foto_url} tamanho="p" />
+            <form action={sair}>
+              <button
+                title="Sair"
+                className="grid size-8 place-items-center rounded-full text-suave transition-colors hover:bg-superficie-alta hover:text-texto"
+              >
+                <LogOut size={15} />
+              </button>
+            </form>
+          </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 p-5">{children}</main>
+      <main className="surgir mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">{children}</main>
     </div>
   );
 }

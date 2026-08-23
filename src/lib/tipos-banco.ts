@@ -61,6 +61,7 @@ export type Usuario = {
   ativo: boolean;
   termo_aceito_em: string | null;
   termo_versao: number | null;
+  foto_url: string | null;
   criado_em: string;
 };
 

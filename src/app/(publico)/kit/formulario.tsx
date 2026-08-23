@@ -55,7 +55,7 @@ export function FormularioKit({ municipios }: { municipios: Municipio[] }) {
           name="municipio_id"
           required
           defaultValue=""
-          className="w-full rounded-lg border border-borda bg-superficie px-3.5 py-2.5 text-base"
+          className="w-full rounded-2xl border border-borda bg-superficie-alta px-4 py-3 text-[15px]"
         >
           <option value="" disabled>Escolha…</option>
           {municipios.map((m) => (
@@ -70,7 +70,7 @@ export function FormularioKit({ municipios }: { municipios: Municipio[] }) {
           {ITENS.map((i) => (
             <label
               key={i.valor}
-              className="flex cursor-pointer items-start gap-3 rounded-lg border border-borda bg-superficie p-3"
+              className="flex cursor-pointer items-start gap-3 rounded-2xl border border-borda bg-superficie-alta p-3.5"
             >
               <input type="checkbox" name="itens" value={i.valor} className="mt-0.5 size-5 accent-[var(--acento)]" />
               <span>
@@ -89,7 +89,7 @@ export function FormularioKit({ municipios }: { municipios: Municipio[] }) {
         dica="Opcional. Ajuda a entregar sem precisar ligar."
       />
 
-      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-borda bg-fundo p-4">
+      <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-borda bg-superficie-alta p-5">
         <input type="checkbox" name="aceite" required className="mt-0.5 size-5 accent-[var(--acento)]" />
         <span className="text-sm">
           Autorizo o contato pelo WhatsApp para combinar a entrega e receber material da campanha.

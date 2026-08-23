@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Titulo } from '@/components/ui';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import type { SaudeChip, Usuario } from '@/lib/tipos-banco';
 import { GerenciarChips } from './lista';
@@ -15,10 +16,7 @@ export default async function PaginaChips() {
 
   return (
     <>
-      <h1 className="mb-1 text-xl font-semibold">Números</h1>
-      <p className="mb-5 text-sm text-suave">
-        Teto e saúde são por número, não por pessoa — o WhatsApp olha o número.
-      </p>
+      <Titulo sub="Teto e saúde são por número, não por pessoa — o WhatsApp olha o número.">Números</Titulo>
       <GerenciarChips
         chips={(chips ?? []) as SaudeChip[]}
         atendentes={(atendentes ?? []) as Usuario[]}

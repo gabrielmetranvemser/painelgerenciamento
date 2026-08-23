@@ -1,165 +1,322 @@
 import Link from 'next/link';
 import type { ComponentProps, ReactNode } from 'react';
 
-function juntar(...c: (string | false | null | undefined)[]) {
+export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(' ');
 }
 
-const BASE_BOTAO =
-  'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors ' +
-  'disabled:cursor-not-allowed disabled:opacity-50';
-
-const TAMANHOS = {
-  g: 'px-6 py-3.5 text-base',
-  m: 'px-4 py-2.5 text-sm',
-  p: 'px-3 py-1.5 text-xs',
-} as const;
-
-const VARIANTES = {
-  principal: 'bg-acento text-white hover:bg-acento-forte',
-  neutro: 'border border-borda bg-superficie text-texto hover:bg-fundo',
-  perigo: 'border border-perigo/40 bg-superficie text-perigo hover:bg-perigo/10',
-  fantasma: 'text-suave hover:text-texto hover:bg-fundo',
-} as const;
-
-type BotaoProps = ComponentProps<'button'> & {
-  variante?: keyof typeof VARIANTES;
-  tamanho?: keyof typeof TAMANHOS;
-};
-
-export function Botao({ variante = 'principal', tamanho = 'm', className, ...props }: BotaoProps) {
-  return (
-    <button
-      {...props}
-      className={juntar(BASE_BOTAO, TAMANHOS[tamanho], VARIANTES[variante], className)}
-    />
-  );
-}
-
-type BotaoLinkProps = ComponentProps<typeof Link> & {
-  variante?: keyof typeof VARIANTES;
-  tamanho?: keyof typeof TAMANHOS;
-};
-
-export function BotaoLink({ variante = 'principal', tamanho = 'm', className, ...props }: BotaoLinkProps) {
-  return (
-    <Link {...props} className={juntar(BASE_BOTAO, TAMANHOS[tamanho], VARIANTES[variante], className)} />
-  );
-}
-
-export function Campo({
-  rotulo,
-  dica,
-  className,
-  ...props
-}: ComponentProps<'input'> & { rotulo: string; dica?: string }) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-sm font-medium text-texto">{rotulo}</span>
-      <input
-        {...props}
-        className={juntar(
-          'w-full rounded-lg border border-borda bg-superficie px-3.5 py-2.5 text-base text-texto',
-          'placeholder:text-suave',
-          className,
-        )}
-      />
-      {dica && <span className="mt-1.5 block text-xs text-suave">{dica}</span>}
-    </label>
-  );
-}
-
-const TOM_AVISO = {
-  info: 'border-borda bg-superficie text-suave',
-  ok: 'border-ok/30 bg-ok/10 text-ok',
-  alerta: 'border-alerta/30 bg-alerta/10 text-alerta',
-  erro: 'border-perigo/30 bg-perigo/10 text-perigo',
-} as const;
-
-export function Aviso({
-  tom = 'info',
-  children,
-  className,
-}: {
-  tom?: keyof typeof TOM_AVISO;
-  children: ReactNode;
-  className?: string;
-}) {
+/* ── Blocos ────────────────────────────────────────────────────────────────
+ * A borda superior clara por dentro (--brilho) é o truque que dá a sensação
+ * de material: a luz bate em cima e a sombra cai embaixo. Sem ela o card fica
+ * parecendo um retângulo desenhado.
+ */
+export function Cartao({
+  children, className, elevado,
+}: { children: ReactNode; className?: string; elevado?: boolean }) {
   return (
     <div
-      role={tom === 'erro' ? 'alert' : undefined}
-      className={juntar('rounded-lg border px-4 py-3 text-sm', TOM_AVISO[tom], className)}
+      className={cx(
+        'rounded-bloco border border-borda bg-superficie',
+        'shadow-[var(--brilho),var(--sombra)]',
+        elevado && 'shadow-[var(--brilho),var(--sombra-alta)]',
+        className,
+      )}
     >
       {children}
     </div>
   );
 }
 
-export function Cartao({ children, className }: { children: ReactNode; className?: string }) {
+/** Vidro fosco. Só onde existe conteúdo passando por trás. */
+export function Vidro({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={juntar('rounded-xl border border-borda bg-superficie', className)}>{children}</div>
+    <div
+      className={cx(
+        'rounded-bloco border border-borda bg-vidro backdrop-blur-2xl backdrop-saturate-150',
+        'shadow-[var(--brilho),var(--sombra)]',
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
-/** Etiqueta da origem do contato. Quente e frio nunca se misturam na tela. */
-export function EtiquetaOrigem({ origem }: { origem: 'site' | 'kit' | 'lista_fria' }) {
-  const frio = origem === 'lista_fria';
-  const texto = { site: 'Cadastrou no site', kit: 'Pediu o kit', lista_fria: 'Lista fria' }[origem];
+/* ── Botões ─────────────────────────────────────────────────────────────── */
+
+const BASE =
+  'inline-flex items-center justify-center gap-2 rounded-full font-medium tracking-tight ' +
+  'transition-[background,color,transform,box-shadow] duration-150 active:scale-[.985] ' +
+  'disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100';
+
+const TAM = {
+  g: 'px-7 py-4 text-[15px]',
+  m: 'px-5 py-2.5 text-sm',
+  p: 'px-3.5 py-1.5 text-xs',
+} as const;
+
+const VAR = {
+  principal:
+    'bg-acento text-tinta-acento hover:bg-acento-alto ' +
+    'shadow-[0_1px_0_0_rgba(255,255,255,.35)_inset,0_8px_24px_-12px_color-mix(in_oklab,var(--acento)_70%,transparent)]',
+  neutro: 'border border-borda bg-superficie-alta text-texto hover:border-borda-forte',
+  perigo: 'border border-perigo/35 bg-perigo/10 text-perigo hover:bg-perigo/16',
+  fantasma: 'text-suave hover:text-texto hover:bg-superficie-alta',
+} as const;
+
+type Variante = keyof typeof VAR;
+type Tamanho = keyof typeof TAM;
+
+export function Botao({
+  variante = 'principal', tamanho = 'm', className, ...props
+}: ComponentProps<'button'> & { variante?: Variante; tamanho?: Tamanho }) {
+  return <button {...props} className={cx(BASE, TAM[tamanho], VAR[variante], className)} />;
+}
+
+export function BotaoLink({
+  variante = 'principal', tamanho = 'm', className, ...props
+}: ComponentProps<typeof Link> & { variante?: Variante; tamanho?: Tamanho }) {
+  return <Link {...props} className={cx(BASE, TAM[tamanho], VAR[variante], className)} />;
+}
+
+/* ── Campos ─────────────────────────────────────────────────────────────── */
+
+const CAMPO =
+  'w-full rounded-2xl border border-borda bg-superficie-alta px-4 py-3 text-[15px] text-texto ' +
+  'placeholder:text-tenue transition-colors focus:border-borda-forte';
+
+export function Campo({
+  rotulo, dica, className, ...props
+}: ComponentProps<'input'> & { rotulo: string; dica?: string }) {
   return (
-    <span
-      className={juntar(
-        'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium',
-        frio ? 'bg-frio/10 text-frio' : 'bg-quente/10 text-quente',
-      )}
+    <label className="block">
+      <span className="mb-2 block text-[13px] font-semibold text-texto">{rotulo}</span>
+      <input {...props} className={cx(CAMPO, className)} />
+      {dica && <span className="mt-2 block text-xs leading-relaxed text-suave">{dica}</span>}
+    </label>
+  );
+}
+
+export function AreaTexto({
+  rotulo, dica, className, ...props
+}: ComponentProps<'textarea'> & { rotulo?: string; dica?: string }) {
+  const campo = <textarea {...props} className={cx(CAMPO, 'resize-y leading-relaxed', className)} />;
+  if (!rotulo) return campo;
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[13px] font-semibold text-texto">{rotulo}</span>
+      {campo}
+      {dica && <span className="mt-2 block text-xs leading-relaxed text-suave">{dica}</span>}
+    </label>
+  );
+}
+
+export function Selecao({
+  rotulo, dica, compacto, className, children, ...props
+}: ComponentProps<'select'> & { rotulo?: string; dica?: string; compacto?: boolean }) {
+  // `compacto` NÃO é o campo com classes extras: é uma base própria. Somar
+  // `w-auto` ao `w-full` da base não resolveria — no Tailwind quem vence é a
+  // ordem das regras no CSS, não a ordem das classes no atributo.
+  const base = compacto
+    ? 'rounded-full border border-borda bg-superficie-alta px-4 py-2 text-sm text-texto'
+    : cx(CAMPO, 'appearance-none');
+  const campo = <select {...props} className={cx(base, className)}>{children}</select>;
+  if (!rotulo) return campo;
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[13px] font-semibold text-texto">{rotulo}</span>
+      {campo}
+      {dica && <span className="mt-2 block text-xs leading-relaxed text-suave">{dica}</span>}
+    </label>
+  );
+}
+
+/* ── Avisos ─────────────────────────────────────────────────────────────── */
+
+const TOM = {
+  info: 'border-borda bg-superficie-alta text-suave',
+  ok: 'border-ok/25 bg-ok/10 text-ok',
+  alerta: 'border-alerta/25 bg-alerta/10 text-alerta',
+  erro: 'border-perigo/30 bg-perigo/10 text-perigo',
+} as const;
+
+export function Aviso({
+  tom = 'info', children, className, icone,
+}: { tom?: keyof typeof TOM; children: ReactNode; className?: string; icone?: ReactNode }) {
+  return (
+    <div
+      role={tom === 'erro' ? 'alert' : undefined}
+      className={cx('flex gap-3 rounded-2xl border px-4 py-3.5 text-sm leading-relaxed', TOM[tom], className)}
     >
-      {texto}
+      {icone && <span className="mt-px shrink-0">{icone}</span>}
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+/* ── Pílulas ────────────────────────────────────────────────────────────── */
+
+export function Pilula({
+  children, cor = 'neutro', className,
+}: {
+  children: ReactNode;
+  cor?: 'neutro' | 'acento' | 'quente' | 'frio' | 'alerta' | 'perigo';
+  className?: string;
+}) {
+  const cores = {
+    neutro: 'border-borda bg-superficie-alta text-suave',
+    acento: 'border-acento/25 bg-acento/12 text-acento',
+    quente: 'border-quente/25 bg-quente/12 text-quente',
+    frio: 'border-frio/25 bg-frio/12 text-frio',
+    alerta: 'border-alerta/25 bg-alerta/12 text-alerta',
+    perigo: 'border-perigo/25 bg-perigo/12 text-perigo',
+  } as const;
+  return (
+    <span className={cx(
+      'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold',
+      cores[cor], className,
+    )}>
+      {children}
     </span>
   );
 }
 
-/** Número grande com rótulo. Base dos painéis do gestor. */
+/** Quente e frio nunca se misturam na tela — a cor é parte da regra. */
+export function EtiquetaOrigem({ origem }: { origem: 'site' | 'kit' | 'lista_fria' }) {
+  const texto = { site: 'Cadastrou no site', kit: 'Pediu o kit', lista_fria: 'Lista fria' }[origem];
+  return <Pilula cor={origem === 'lista_fria' ? 'frio' : 'quente'}>{texto}</Pilula>;
+}
+
+/* ── Métrica ────────────────────────────────────────────────────────────── */
+
 export function Metrica({
-  rotulo, valor, detalhe, tom = '',
+  rotulo, valor, detalhe, tom, icone,
 }: {
   rotulo: string;
   valor: number | string;
   detalhe?: string;
-  tom?: string;
+  tom?: 'acento' | 'quente' | 'frio' | 'alerta' | 'perigo';
+  icone?: ReactNode;
 }) {
+  // Mapa estático, não interpolação: o Tailwind varre o código em busca de
+  // nomes de classe literais, e `text-${tom}` nunca chegaria a existir no CSS.
+  const cor = {
+    acento: 'text-acento', quente: 'text-quente', frio: 'text-frio',
+    alerta: 'text-alerta', perigo: 'text-perigo',
+  } as const;
+  const classe = tom ? cor[tom] : 'text-texto';
   return (
-    <Cartao className="p-4">
-      <p className={`text-2xl font-semibold tabular-nums ${tom}`}>
+    <Cartao className="p-5">
+      <div className="mb-3 flex items-center gap-2 text-suave">
+        {icone}
+        <span className="text-[11px] font-semibold uppercase tracking-[0.08em]">{rotulo}</span>
+      </div>
+      <p className={cx('font-display text-4xl font-semibold leading-none tabular', classe)}>
         {typeof valor === 'number' ? valor.toLocaleString('pt-BR') : valor}
       </p>
-      <p className="mt-0.5 text-xs font-medium">{rotulo}</p>
-      {detalhe && <p className="mt-0.5 text-xs text-suave">{detalhe}</p>}
+      {detalhe && <p className="mt-2 text-xs leading-relaxed text-suave">{detalhe}</p>}
     </Cartao>
   );
 }
 
-const CORES_FAROL = {
-  verde: 'bg-ok/15 text-ok',
-  amarelo: 'bg-alerta/15 text-alerta',
-  vermelho: 'bg-perigo/15 text-perigo',
-  sem_dados: 'bg-borda text-suave',
-} as const;
+/* ── Farol do chip (docs/03-OPERACAO.md §7) ─────────────────────────────── */
 
-const TEXTO_FAROL = {
-  verde: 'Saudável',
-  amarelo: 'Atenção',
-  vermelho: 'Trocar pelo reserva',
-  sem_dados: 'Poucos dados',
-} as const;
+const FAROL = {
+  verde:     { cor: 'acento' as const, texto: 'Saudável' },
+  amarelo:   { cor: 'alerta' as const, texto: 'Atenção' },
+  vermelho:  { cor: 'perigo' as const, texto: 'Trocar pelo reserva' },
+  sem_dados: { cor: 'neutro' as const, texto: 'Poucos dados' },
+};
 
-/** Termômetro do chip (docs/03-OPERACAO.md §7). */
-export function Farol({ estado }: { estado: keyof typeof CORES_FAROL }) {
+export function Farol({ estado }: { estado: keyof typeof FAROL }) {
+  const { cor, texto } = FAROL[estado];
   return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${CORES_FAROL[estado]}`}>
-      {TEXTO_FAROL[estado]}
+    <Pilula cor={cor}>
+      <span className={cx(
+        'size-1.5 rounded-full',
+        estado === 'verde' ? 'bg-acento' : estado === 'amarelo' ? 'bg-alerta'
+          : estado === 'vermelho' ? 'bg-perigo' : 'bg-tenue',
+      )} />
+      {texto}
+    </Pilula>
+  );
+}
+
+/* ── Avatar ─────────────────────────────────────────────────────────────── */
+
+/** Matiz derivada do nome: a mesma pessoa tem sempre a mesma cor. */
+function matiz(nome: string) {
+  let h = 0;
+  for (let i = 0; i < nome.length; i++) h = (h * 31 + nome.charCodeAt(i)) % 360;
+  return h;
+}
+
+export function Avatar({
+  nome, fotoUrl, tamanho = 'm', className,
+}: {
+  nome: string | null | undefined;
+  fotoUrl?: string | null;
+  tamanho?: 'p' | 'm' | 'g';
+  className?: string;
+}) {
+  const dims = { p: 'size-7 text-[11px]', m: 'size-10 text-sm', g: 'size-14 text-lg' }[tamanho];
+  const limpo = (nome ?? '').trim();
+  const iniciais = limpo
+    ? limpo.split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toLocaleUpperCase('pt-BR')
+    : '·';
+  const h = matiz(limpo || 'sem-nome');
+
+  if (fotoUrl) {
+    return (
+      // Foto vem de URL informada pelo gestor; next/image exigiria configurar
+      // domínios remotos para um avatar de 40px.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={fotoUrl}
+        alt={limpo || 'Foto'}
+        className={cx(dims, 'shrink-0 rounded-full border border-borda object-cover', className)}
+      />
+    );
+  }
+
+  return (
+    <span
+      aria-hidden
+      className={cx(dims, 'grid shrink-0 place-items-center rounded-full border font-bold', className)}
+      style={{
+        background: `oklch(0.32 0.07 ${h})`,
+        borderColor: `oklch(0.45 0.09 ${h})`,
+        color: `oklch(0.92 0.09 ${h})`,
+      }}
+    >
+      {iniciais}
     </span>
   );
 }
 
-export function Vazio({ children }: { children: ReactNode }) {
-  return <Cartao className="p-8 text-center text-sm text-suave">{children}</Cartao>;
+/* ── Vazio ──────────────────────────────────────────────────────────────── */
+
+export function Vazio({ children, icone }: { children: ReactNode; icone?: ReactNode }) {
+  return (
+    <Cartao className="grid place-items-center gap-3 px-6 py-14 text-center">
+      {icone && <span className="text-tenue">{icone}</span>}
+      <p className="max-w-sm text-sm leading-relaxed text-suave">{children}</p>
+    </Cartao>
+  );
+}
+
+/* ── Título de página ───────────────────────────────────────────────────── */
+
+export function Titulo({
+  children, sub, acao,
+}: { children: ReactNode; sub?: ReactNode; acao?: ReactNode }) {
+  return (
+    <header className="mb-6 flex flex-wrap items-end gap-4">
+      <div className="mr-auto">
+        <h1 className="font-display text-3xl font-semibold tracking-tight">{children}</h1>
+        {sub && <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-suave">{sub}</p>}
+      </div>
+      {acao}
+    </header>
+  );
 }

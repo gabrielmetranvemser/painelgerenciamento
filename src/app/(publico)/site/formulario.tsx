@@ -49,7 +49,7 @@ export function FormularioSite({ municipios }: { municipios: Municipio[] }) {
           name="municipio_id"
           required
           defaultValue=""
-          className="w-full rounded-lg border border-borda bg-superficie px-3.5 py-2.5 text-base"
+          className="w-full rounded-2xl border border-borda bg-superficie-alta px-4 py-3 text-[15px]"
         >
           <option value="" disabled>Escolha…</option>
           {municipios.map((m) => (
@@ -58,7 +58,7 @@ export function FormularioSite({ municipios }: { municipios: Municipio[] }) {
         </select>
       </label>
 
-      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-borda bg-fundo p-4">
+      <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-borda bg-superficie-alta p-5">
         <input type="checkbox" name="aceite" required className="mt-0.5 size-5 accent-[var(--acento)]" />
         <span className="text-sm">
           Autorizo receber contato pelo WhatsApp com material da campanha.

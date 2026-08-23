@@ -1,80 +1,168 @@
 @import "tailwindcss";
 
 /*
- * Paleta do painel.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Sistema visual do painel
+ * ─────────────────────────────────────────────────────────────────────────────
  *
- * A tela do atendente é usada 30 vezes por dia, por pessoas que não são
- * técnicas, muitas vezes num notebook barato com brilho baixo. As escolhas
- * seguem disso: contraste alto, alvos grandes, uma cor de destaque só, e nada
- * de decoração que dispute atenção com o botão que importa.
+ * Duas superfícies com propósitos diferentes, e por isso tratamento diferente:
+ *
+ * INTERNO (/painel, /gestor) — sempre escuro. É local de trabalho: o atendente
+ * passa o dia inteiro nele, muitas vezes num notebook barato com brilho baixo.
+ * Escuro cansa menos e faz o botão que importa saltar.
+ *
+ * PÚBLICO (/kit, /site, /m, /privacidade) — acompanha a preferência do
+ * aparelho. Quem abre é o eleitor, no celular dele, quase sempre em modo claro.
+ * Página clara também lê como documento oficial, que é o que a gente quer que
+ * pareça.
  */
+
 :root {
-  --fundo:        #f7f7f8;
-  --superficie:   #ffffff;
-  --borda:        #e4e4e7;
-  --texto:        #18181b;
-  --texto-suave:  #71717a;
+  /* ── Escuro: o padrão do painel ────────────────────────────────────────── */
+  --fundo:          #08090b;
+  --fundo-fundo:    #050607;   /* atrás do conteúdo, para dar profundidade */
+  --superficie:     #121316;
+  --superficie-alta:#191b1f;   /* hover, itens levantados */
+  --vidro:          rgba(255, 255, 255, 0.045);
+  --borda:          rgba(255, 255, 255, 0.075);
+  --borda-forte:    rgba(255, 255, 255, 0.14);
+  --texto:          #f5f5f6;
+  --suave:          #8a8d95;
+  --tenue:          #5c5f68;
 
-  --acento:       #1d4ed8;   /* ação principal */
-  --acento-forte: #1e40af;
+  /* Lima é o acento E o sinal positivo. Nas referências é a mesma cor, e
+     duplicar em dois verdes só criaria ruído. */
+  --acento:         #c6f24e;
+  --acento-alto:    #d5fa6e;
+  --tinta-acento:   #0a0c07;   /* texto sobre lima */
+  --ok:             #c6f24e;
 
-  --ok:           #15803d;
-  --alerta:       #b45309;
-  --perigo:       #b91c1c;
+  --alerta:         #f5b83d;
+  --perigo:         #ff6b81;
 
-  --quente:       #c2410c;   /* fila quente */
-  --frio:         #4f46e5;   /* fila fria  */
+  --quente:         #fb923c;   /* fila quente */
+  --frio:           #7dd3fc;   /* fila fria  */
+
+  --brilho:         0 1px 0 0 rgba(255, 255, 255, 0.06) inset;
+  --sombra:         0 1px 2px -1px rgb(0 0 0 / 0.7), 0 12px 32px -16px rgb(0 0 0 / 0.9);
+  --sombra-alta:    0 2px 4px -2px rgb(0 0 0 / 0.7), 0 24px 56px -24px rgb(0 0 0 / 0.95);
+  --r:              1.25rem;   /* raio dos blocos */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --fundo:        #09090b;
-    --superficie:   #18181b;
-    --borda:        #27272a;
-    --texto:        #fafafa;
-    --texto-suave:  #a1a1aa;
+/* ── Claro: só nas páginas públicas, e só se o aparelho pedir ───────────── */
+.publico {
+  color-scheme: light dark;
+  /* Repinta o próprio clarão com os tokens já trocados: sem isto o brilho do
+     painel escuro apareceria por trás de uma página clara. */
+  background:
+    radial-gradient(60rem 40rem at 82% -10%, color-mix(in oklab, var(--acento) 7%, transparent), transparent 60%),
+    var(--fundo);
+}
 
-    --acento:       #3b82f6;
-    --acento-forte: #60a5fa;
+@media (prefers-color-scheme: light) {
+  .publico {
+    --fundo:          #f4f4f3;
+    --fundo-fundo:    #ececeb;
+    --superficie:     #ffffff;
+    --superficie-alta:#f8f8f7;
+    --vidro:          rgba(255, 255, 255, 0.72);
+    --borda:          rgba(9, 9, 11, 0.09);
+    --borda-forte:    rgba(9, 9, 11, 0.18);
+    --texto:          #14151a;
+    --suave:          #63666f;
+    --tenue:          #8f939c;
 
-    --ok:           #4ade80;
-    --alerta:       #fbbf24;
-    --perigo:       #f87171;
+    /* Lima pura sobre branco não tem contraste. No claro o acento escurece. */
+    --acento:         #4d7c0f;
+    --acento-alto:    #3f6212;
+    --tinta-acento:   #ffffff;
+    --ok:             #4d7c0f;
 
-    --quente:       #fb923c;
-    --frio:         #a5b4fc;
+    --alerta:         #b45309;
+    --perigo:         #be123c;
+    --quente:         #c2410c;
+    --frio:           #0369a1;
+
+    --brilho:         0 1px 0 0 rgba(255, 255, 255, 0.9) inset;
+    --sombra:         0 1px 2px -1px rgb(9 9 11 / 0.08), 0 12px 28px -18px rgb(9 9 11 / 0.22);
+    --sombra-alta:    0 2px 6px -2px rgb(9 9 11 / 0.1), 0 24px 48px -24px rgb(9 9 11 / 0.28);
   }
 }
 
 @theme inline {
-  --color-fundo:       var(--fundo);
-  --color-superficie:  var(--superficie);
-  --color-borda:       var(--borda);
-  --color-texto:       var(--texto);
-  --color-suave:       var(--texto-suave);
-  --color-acento:      var(--acento);
-  --color-acento-forte:var(--acento-forte);
-  --color-ok:          var(--ok);
-  --color-alerta:      var(--alerta);
-  --color-perigo:      var(--perigo);
-  --color-quente:      var(--quente);
-  --color-frio:        var(--frio);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-fundo:        var(--fundo);
+  --color-fundo-fundo:  var(--fundo-fundo);
+  --color-superficie:   var(--superficie);
+  --color-superficie-alta: var(--superficie-alta);
+  --color-vidro:        var(--vidro);
+  --color-borda:        var(--borda);
+  --color-borda-forte:  var(--borda-forte);
+  --color-texto:        var(--texto);
+  --color-suave:        var(--suave);
+  --color-tenue:        var(--tenue);
+  --color-acento:       var(--acento);
+  --color-acento-alto:  var(--acento-alto);
+  --color-tinta-acento: var(--tinta-acento);
+  --color-ok:           var(--ok);
+  --color-alerta:       var(--alerta);
+  --color-perigo:       var(--perigo);
+  --color-quente:       var(--quente);
+  --color-frio:         var(--frio);
+
+  --font-sans:    var(--fonte-ui);
+  --font-display: var(--fonte-display);
+
+  --radius-bloco: var(--r);
 }
+
+html { color-scheme: dark; }
+.publico { color-scheme: light dark; }
 
 body {
   background: var(--fundo);
   color: var(--texto);
+  font-family: var(--fonte-ui), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+/*
+ * Clarão de fundo. Dá profundidade sem custar imagem nem elemento: o conteúdo
+ * parece flutuar sobre algo, em vez de estar colado num retângulo chapado.
+ */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(60rem 40rem at 78% -8%, color-mix(in oklab, var(--acento) 9%, transparent), transparent 62%),
+    radial-gradient(48rem 34rem at 8% 4%, color-mix(in oklab, var(--frio) 7%, transparent), transparent 58%),
+    var(--fundo-fundo);
+}
+
+/* Números de métrica precisam alinhar coluna a coluna e não “dançar” ao mudar. */
+.tabular { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 
 /* Foco sempre visível: parte da operação é feita no teclado. */
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
   outline: 2px solid var(--acento);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
+::selection { background: color-mix(in oklab, var(--acento) 35%, transparent); }
+
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
 }
+
+/* Entrada suave do conteúdo. Um só momento coreografado vale mais que
+   micro-animação espalhada por toda parte. */
+@keyframes surgir {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.surgir { animation: surgir .38s cubic-bezier(.22,.68,.36,1) both; }

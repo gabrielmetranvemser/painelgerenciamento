@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Titulo } from '@/components/ui';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import type { Config, DiaBloqueado, Destino } from '@/lib/tipos-banco';
 import { FormularioConfig } from './formulario';
@@ -16,10 +17,7 @@ export default async function PaginaConfig() {
 
   return (
     <>
-      <h1 className="mb-1 text-xl font-semibold">Configuração</h1>
-      <p className="mb-5 text-sm text-suave">
-        Vale para todo mundo. Mudanças passam a valer na próxima vez que o atendente pedir um contato.
-      </p>
+      <Titulo sub="Vale para todo mundo. Mudanças passam a valer na próxima vez que o atendente pedir um contato.">Configuração</Titulo>
       <FormularioConfig
         config={config as Config}
         dias={(dias ?? []) as DiaBloqueado[]}

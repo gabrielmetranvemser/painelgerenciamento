@@ -1,15 +1,21 @@
+import { Headphones, LogOut } from 'lucide-react';
 import Link from 'next/link';
+import {
+  FileBarChart, Gauge, MessageSquareText, Settings, Smartphone, Upload, Users,
+} from 'lucide-react';
 import { exigirGestor } from '@/lib/sessao';
 import { sair } from '@/app/entrar/acoes';
+import { Avatar } from '@/components/ui';
+import { BarraNav } from '@/components/barra-nav';
 
 const ABAS = [
-  { href: '/gestor', rotulo: 'Visão geral' },
-  { href: '/gestor/importar', rotulo: 'Importar lista' },
-  { href: '/gestor/atendentes', rotulo: 'Atendentes' },
-  { href: '/gestor/chips', rotulo: 'Números' },
-  { href: '/gestor/mensagens', rotulo: 'Mensagens' },
-  { href: '/gestor/relatorios', rotulo: 'Relatórios' },
-  { href: '/gestor/configuracao', rotulo: 'Configuração' },
+  { href: '/gestor', rotulo: 'Visão geral', icone: <Gauge size={15} /> },
+  { href: '/gestor/importar', rotulo: 'Importar', icone: <Upload size={15} /> },
+  { href: '/gestor/atendentes', rotulo: 'Atendentes', icone: <Users size={15} /> },
+  { href: '/gestor/chips', rotulo: 'Números', icone: <Smartphone size={15} /> },
+  { href: '/gestor/mensagens', rotulo: 'Mensagens', icone: <MessageSquareText size={15} /> },
+  { href: '/gestor/relatorios', rotulo: 'Relatórios', icone: <FileBarChart size={15} /> },
+  { href: '/gestor/configuracao', rotulo: 'Configuração', icone: <Settings size={15} /> },
 ];
 
 export default async function LayoutGestor({ children }: { children: React.ReactNode }) {
@@ -17,28 +23,30 @@ export default async function LayoutGestor({ children }: { children: React.React
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-borda bg-superficie">
-        <div className="mx-auto flex w-full max-w-7xl items-center gap-5 px-5 py-3">
-          <Link href="/gestor" className="text-sm font-semibold">Gestor</Link>
-          <Link href="/painel" className="text-sm text-suave hover:text-texto">Atender</Link>
-          <form action={sair} className="ml-auto flex items-center gap-4">
-            <span className="text-sm text-suave">{gestor.primeiro_nome}</span>
-            <button className="text-sm text-suave hover:text-texto">Sair</button>
-          </form>
-        </div>
-        <nav className="mx-auto flex w-full max-w-7xl gap-1 overflow-x-auto px-3 pb-2">
-          {ABAS.map((a) => (
+      <header className="sticky top-0 z-30 border-b border-borda bg-vidro backdrop-blur-2xl backdrop-saturate-150">
+        <div className="mx-auto flex w-full max-w-7xl items-center gap-4 px-4 py-3 sm:px-6">
+          <BarraNav abas={ABAS} />
+          <div className="ml-auto flex items-center gap-2">
             <Link
-              key={a.href}
-              href={a.href}
-              className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-suave hover:bg-fundo hover:text-texto"
+              href="/painel"
+              title="Ir para o atendimento"
+              className="grid size-8 place-items-center rounded-full text-suave transition-colors hover:bg-superficie-alta hover:text-texto"
             >
-              {a.rotulo}
+              <Headphones size={15} />
             </Link>
-          ))}
-        </nav>
+            <Avatar nome={gestor.primeiro_nome} fotoUrl={gestor.foto_url} tamanho="p" />
+            <form action={sair}>
+              <button
+                title="Sair"
+                className="grid size-8 place-items-center rounded-full text-suave transition-colors hover:bg-superficie-alta hover:text-texto"
+              >
+                <LogOut size={15} />
+              </button>
+            </form>
+          </div>
+        </div>
       </header>
-      <main className="mx-auto w-full max-w-7xl flex-1 p-5">{children}</main>
+      <main className="surgir mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">{children}</main>
     </div>
   );
 }

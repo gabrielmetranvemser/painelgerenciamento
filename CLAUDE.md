@@ -84,6 +84,34 @@ Nunca `now()` cru para decidir se está dentro do horário.
 O token de `/r/{token}` é aleatório e aponta para o contato no banco. Telefone,
 nome e município nunca vão para a query string.
 
+## Sistema visual
+
+Tokens em `src/app/globals.css`, componentes em `src/components/ui.tsx`.
+Ícones: **lucide-react**. Fontes: **Bricolage Grotesque** (display, títulos e
+números grandes) e **Manrope** (interface).
+
+**Duas superfícies, tratamento diferente — não unifique:**
+
+- **Interno** (`/painel`, `/gestor`): sempre escuro. É local de trabalho, o dia
+  inteiro, muitas vezes num notebook barato com brilho baixo.
+- **Público** (`/kit`, `/site`, `/m`, `/privacidade`): acompanha a preferência
+  do aparelho, via a classe `publico` do layout `src/app/(publico)/`. Quem abre
+  é o eleitor, quase sempre em modo claro, e página clara lê como documento
+  oficial.
+
+**Regras que o sistema pressupõe:**
+
+- Lima (`--acento`) é acento E sinal positivo. Não crie um segundo verde.
+  No tema claro ela vira oliva sozinha — lima pura sobre branco não tem
+  contraste.
+- Quente é âmbar, fria é azul-gelo. A cor faz parte da regra de negócio: as
+  duas filas nunca se misturam na tela.
+- Vidro fosco (`<Vidro>`) só onde existe conteúdo passando por trás — barra
+  superior e sobreposições. Vidro em todo card é a versão genérica do efeito.
+- Nada de classe Tailwind montada por interpolação (`text-${cor}`): a varredura
+  do Tailwind só enxerga nomes literais, e a classe não chega a existir no CSS.
+  Use mapa estático.
+
 ## Convenções
 
 - Código, comentários, nomes de tabela e UI em **português**.

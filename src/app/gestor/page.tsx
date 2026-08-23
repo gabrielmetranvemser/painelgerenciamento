@@ -1,7 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import {
+  ArrowUpRight, BellRing, Flame, MousePointerClick, Smartphone, Snowflake,
+  ThumbsUp, TriangleAlert, UsersRound, UserX,
+} from 'lucide-react';
 import { criarClienteServidor } from '@/lib/supabase/server';
-import { Cartao, Farol, Metrica, Vazio } from '@/components/ui';
+import { Avatar, Cartao, Farol, Metrica, Titulo, Vazio } from '@/components/ui';
 import type { Alerta, DesempenhoAtendente, Resumo, SaudeChip } from '@/lib/tipos-banco';
 
 export const metadata: Metadata = { title: 'Visão geral' };
@@ -15,7 +19,8 @@ export default async function PainelGestor() {
       supabase.from('v_resumo').select('*').single(),
       supabase.from('v_saude_chip').select('*').order('rotulo'),
       supabase.from('v_desempenho_atendente').select('*').order('hoje', { ascending: false }),
-      supabase.from('alertas').select('*').is('resolvido_em', null).order('criado_em', { ascending: false }).limit(10),
+      supabase.from('alertas').select('*').is('resolvido_em', null)
+        .order('criado_em', { ascending: false }).limit(8),
     ]);
 
   const r = resumo as Resumo | null;
@@ -24,117 +29,148 @@ export default async function PainelGestor() {
 
   return (
     <>
-      <h1 className="mb-5 text-xl font-semibold">Visão geral</h1>
+      <Titulo sub="Como a operação está agora. Os números atualizam a cada carga da página.">
+        Visão geral
+      </Titulo>
 
       {vermelhos.length > 0 && (
-        <Cartao className="mb-5 border-perigo/40 bg-perigo/5 p-4">
-          <p className="text-sm font-medium text-perigo">
-            {vermelhos.length === 1 ? 'Um número precisa' : `${vermelhos.length} números precisam`} sair de circulação
-          </p>
-          <p className="mt-1 text-xs text-suave">
-            {vermelhos.map((c) => `${c.rotulo} (${c.atendente ?? 'sem dono'})`).join(', ')} —
-            pause 24 a 48h e troque pelo reserva antes que o WhatsApp derrube.
-          </p>
+        <Cartao className="mb-6 border-perigo/30 bg-perigo/[0.06] p-5">
+          <div className="flex gap-3">
+            <TriangleAlert size={18} className="mt-0.5 shrink-0 text-perigo" />
+            <div>
+              <p className="font-semibold text-perigo">
+                {vermelhos.length === 1 ? 'Um número precisa' : `${vermelhos.length} números precisam`} sair de circulação
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-suave">
+                {vermelhos.map((c) => `${c.rotulo} (${c.atendente ?? 'sem dono'})`).join(', ')} — pause
+                24 a 48h e troque pelo reserva antes que o WhatsApp derrube.
+              </p>
+            </div>
+          </div>
         </Cartao>
       )}
 
-      <section className="mb-6">
-        <h2 className="mb-2 text-sm font-medium text-suave">Fila</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Metrica rotulo="Fila quente" valor={r?.fila_quente ?? 0} tom="text-quente"
-                   detalhe="pediram contato — atender primeiro" />
-          <Metrica rotulo="Fila fria" valor={r?.fila_fria ?? 0} tom="text-frio" />
+      <Secao titulo="Fila">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Metrica rotulo="Fila quente" valor={r?.fila_quente ?? 0} tom="quente"
+                   icone={<Flame size={14} />} detalhe="Pediram contato. Atender primeiro." />
+          <Metrica rotulo="Fila fria" valor={r?.fila_fria ?? 0} tom="frio" icone={<Snowflake size={14} />} />
           <Metrica rotulo="Em atendimento" valor={r?.em_atendimento ?? 0} />
           <Metrica rotulo="Abordados hoje" valor={r?.abordados_hoje ?? 0} />
         </div>
-      </section>
+      </Secao>
 
-      <section className="mb-6">
-        <h2 className="mb-2 text-sm font-medium text-suave">Resultado</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Metrica rotulo="Cliques no link" valor={r?.cliques_reais ?? 0} tom="text-ok"
-                   detalhe="a métrica mais confiável" />
-          <Metrica rotulo="Autorizaram" valor={r?.autorizou ?? 0} />
-          <Metrica rotulo="Pediram saída" valor={r?.pediu_saida ?? 0} tom="text-alerta" />
+      <Secao titulo="Resultado">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <Metrica rotulo="Cliques no link" valor={r?.cliques_reais ?? 0} tom="acento"
+                   icone={<MousePointerClick size={14} />} detalhe="A métrica mais confiável." />
+          <Metrica rotulo="Autorizaram" valor={r?.autorizou ?? 0} icone={<ThumbsUp size={14} />} />
+          <Metrica rotulo="Pediram saída" valor={r?.pediu_saida ?? 0} tom="alerta" icone={<UserX size={14} />} />
           <Metrica rotulo="Sem resposta" valor={r?.sem_resposta ?? 0} />
-          <Metrica rotulo="Perdidos" valor={r?.perdidos ?? 0} detalhe="chip caiu junto" />
+          <Metrica rotulo="Perdidos" valor={r?.perdidos ?? 0} detalhe="O número caiu junto." />
         </div>
-        <p className="mt-2 text-xs text-suave">
-          O clique é o único dado que o sistema controla de verdade: a conversa acontece no
-          WhatsApp do atendente e some se o número cair. Pré-carregamento do WhatsApp não conta.
+        <p className="mt-3 max-w-3xl text-xs leading-relaxed text-suave">
+          O clique é o único dado que o sistema controla de verdade: a conversa acontece no WhatsApp
+          do atendente e some se o número cair. O pré-carregamento do WhatsApp não entra na conta.
         </p>
-      </section>
+      </Secao>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section>
-          <div className="mb-2 flex items-baseline justify-between">
-            <h2 className="text-sm font-medium text-suave">Saúde dos números</h2>
-            <Link href="/gestor/chips" className="text-xs text-acento hover:underline">gerenciar</Link>
-          </div>
+        <Secao titulo="Saúde dos números" link={{ href: '/gestor/chips', rotulo: 'gerenciar' }}>
           {listaChips.length === 0 ? (
-            <Vazio>Nenhum número cadastrado.</Vazio>
+            <Vazio icone={<Smartphone size={26} />}>Nenhum número cadastrado ainda.</Vazio>
           ) : (
-            <Cartao className="divide-y divide-borda">
+            <Cartao className="divide-y divide-borda overflow-hidden">
               {listaChips.map((c) => (
-                <div key={c.chip_id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                  <div className="mr-auto">
-                    <p className="text-sm font-medium">{c.rotulo}</p>
-                    <p className="text-xs text-suave">
+                <div key={c.chip_id} className="flex flex-wrap items-center gap-3 px-5 py-4">
+                  <Avatar nome={c.atendente} tamanho="p" />
+                  <div className="mr-auto min-w-0">
+                    <p className="truncate text-sm font-semibold">{c.rotulo}</p>
+                    <p className="truncate text-xs text-suave">
                       {c.atendente ?? 'sem dono'}
                       {c.ultimas_abordagens > 0 && ` · ${c.ultimas_abordagens} abordagens recentes`}
                     </p>
                   </div>
                   {c.pct_saida !== null && (
-                    <span className="text-xs text-suave">{c.pct_saida}% saída</span>
+                    <span className="tabular text-xs text-suave">{c.pct_saida}% saída</span>
                   )}
                   <Farol estado={c.farol} />
                 </div>
               ))}
             </Cartao>
           )}
-        </section>
+        </Secao>
 
-        <section>
-          <div className="mb-2 flex items-baseline justify-between">
-            <h2 className="text-sm font-medium text-suave">Atendentes hoje</h2>
-            <Link href="/gestor/atendentes" className="text-xs text-acento hover:underline">gerenciar</Link>
-          </div>
+        <Secao titulo="Atendentes hoje" link={{ href: '/gestor/atendentes', rotulo: 'gerenciar' }}>
           {(atendentes ?? []).length === 0 ? (
-            <Vazio>Nenhum atendente cadastrado.</Vazio>
+            <Vazio icone={<UsersRound size={26} />}>
+              Nenhum atendente cadastrado. Crie as contas para a fila começar a andar.
+            </Vazio>
           ) : (
-            <Cartao className="divide-y divide-borda">
+            <Cartao className="divide-y divide-borda overflow-hidden">
               {((atendentes ?? []) as DesempenhoAtendente[]).map((a) => (
-                <div key={a.atendente_id} className="flex items-center gap-3 px-4 py-3">
-                  <p className="mr-auto text-sm font-medium">
+                <div key={a.atendente_id} className="flex items-center gap-3 px-5 py-4">
+                  <Avatar nome={a.atendente} tamanho="p" />
+                  <p className="mr-auto min-w-0 truncate text-sm font-semibold">
                     {a.atendente}
-                    {!a.ativo && <span className="ml-2 text-xs text-suave">(inativo)</span>}
+                    {!a.ativo && <span className="ml-2 text-xs font-normal text-tenue">(inativo)</span>}
                   </p>
-                  <span className="text-sm tabular-nums">{a.hoje} hoje</span>
-                  <span className="text-xs text-suave">{a.autorizou} autorizaram</span>
-                  <span className="text-xs text-ok">{a.cliques_reais} cliques</span>
+                  <span className="tabular text-sm font-semibold">{a.hoje}</span>
+                  <span className="text-xs text-suave">hoje</span>
+                  <span className="tabular ml-3 text-sm font-semibold text-acento">{a.cliques_reais}</span>
+                  <span className="text-xs text-suave">cliques</span>
                 </div>
               ))}
             </Cartao>
           )}
-        </section>
+        </Secao>
       </div>
 
       {(alertas ?? []).length > 0 && (
-        <section className="mt-6">
-          <h2 className="mb-2 text-sm font-medium text-suave">Avisos</h2>
-          <Cartao className="divide-y divide-borda">
+        <Secao titulo="Avisos" className="mt-6">
+          <Cartao className="divide-y divide-borda overflow-hidden">
             {((alertas ?? []) as Alerta[]).map((a) => (
-              <div key={a.id} className="px-4 py-3">
-                <p className="text-sm font-medium">{rotuloAlerta(a.tipo)}</p>
-                <p className="text-xs text-suave">
-                  {a.detalhe} · {new Date(a.criado_em).toLocaleString('pt-BR')}
-                </p>
+              <div key={a.id} className="flex gap-3 px-5 py-4">
+                <BellRing size={16} className="mt-0.5 shrink-0 text-alerta" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{rotuloAlerta(a.tipo)}</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-suave">
+                    {a.detalhe && `${a.detalhe} · `}
+                    {new Date(a.criado_em).toLocaleString('pt-BR')}
+                  </p>
+                </div>
               </div>
             ))}
           </Cartao>
-        </section>
+        </Secao>
       )}
     </>
+  );
+}
+
+function Secao({
+  titulo, link, children, className,
+}: {
+  titulo: string;
+  link?: { href: string; rotulo: string };
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`mb-7 ${className ?? ''}`}>
+      <div className="mb-3 flex items-baseline gap-3">
+        <h2 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-suave">{titulo}</h2>
+        {link && (
+          <Link
+            href={link.href}
+            className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-acento hover:underline"
+          >
+            {link.rotulo} <ArrowUpRight size={13} />
+          </Link>
+        )}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -142,6 +178,7 @@ function rotuloAlerta(tipo: string) {
   return {
     whatsapp_estranho: 'Um atendente avisou que o WhatsApp está estranho',
     chip_morto: 'Número marcado como morto',
-    bloqueio_removido_por_optin: 'Bloqueio removido: pessoa pediu kit com aceite explícito',
+    bloqueio_removido_por_optin: 'Bloqueio removido: a pessoa se cadastrou de novo, com aceite',
+    saida_corrigida: 'Um "Pediu saída" foi corrigido e o bloqueio removido',
   }[tipo] ?? tipo;
 }

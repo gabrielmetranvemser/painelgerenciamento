@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { usuarioAtual } from '@/lib/sessao';
-import { Cartao } from '@/components/ui';
+import { Cartao, Titulo } from '@/components/ui';
 import { FormularioTermo } from './formulario';
 
 export const metadata: Metadata = { title: 'Termo de uso' };
@@ -16,14 +16,13 @@ export default async function Termo() {
   const { data: cfg } = await supabase.from('config').select('termo_texto').eq('id', 1).single();
 
   return (
-    <main className="mx-auto w-full max-w-2xl flex-1 p-6">
-      <h1 className="mb-1 text-2xl font-semibold">Termo de uso</h1>
-      <p className="mb-6 text-sm text-suave">
-        {usuario.primeiro_nome}, leia antes de começar. Fica gravado com data e hora.
-      </p>
+    <main className="surgir mx-auto w-full max-w-2xl flex-1 px-4 py-10 sm:px-6">
+      <Titulo sub={`${usuario.primeiro_nome}, leia antes de começar. Fica gravado com data e hora.`}>
+        Termo de uso
+      </Titulo>
 
-      <Cartao className="mb-6 p-6">
-        <div className="whitespace-pre-line text-sm leading-relaxed">
+      <Cartao className="mb-6 p-7">
+        <div className="whitespace-pre-line text-[15px] leading-[1.75]">
           {cfg?.termo_texto || 'O gestor ainda não cadastrou o texto do termo.'}
         </div>
       </Cartao>

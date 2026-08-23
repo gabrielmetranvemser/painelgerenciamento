@@ -2,7 +2,8 @@
 
 import { useActionState, useState, useTransition } from 'react';
 import { useFormStatus } from 'react-dom';
-import { Aviso, Botao, Campo, Cartao } from '@/components/ui';
+import { KeyRound, Power, UserPlus } from 'lucide-react';
+import { Avatar, Aviso, Botao, Campo, Cartao, Pilula, Selecao } from '@/components/ui';
 import type { Usuario } from '@/lib/tipos-banco';
 import { alternarAtivo, criarAtendente, redefinirSenha } from './acoes';
 
@@ -43,8 +44,8 @@ export function GerenciarAtendentes({ usuarios }: { usuarios: Usuario[] }) {
   return (
     <div className="grid gap-5 lg:grid-cols-[380px_1fr]">
       <div className="space-y-4">
-        <Cartao className="p-5">
-          <h2 className="mb-1 font-semibold">Nova conta</h2>
+        <Cartao className="p-6">
+          <h2 className="mb-1 flex items-center gap-2 font-semibold"><UserPlus size={16} className="text-suave" /> Nova conta</h2>
           <p className="mb-4 text-xs text-suave">
             Ninguém se cadastra sozinho. Você cria a conta e entrega a senha.
           </p>
@@ -52,14 +53,10 @@ export function GerenciarAtendentes({ usuarios }: { usuarios: Usuario[] }) {
             <Campo rotulo="Primeiro nome" name="primeiro_nome" required placeholder="Lucas"
                    dica="É o nome que aparece na mensagem que a pessoa recebe." />
             <Campo rotulo="E-mail" name="email" type="email" required placeholder="lucas@exemplo.com" />
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium">Papel</span>
-              <select name="papel" defaultValue="atendente"
-                      className="w-full rounded-lg border border-borda bg-superficie px-3 py-2.5 text-sm">
-                <option value="atendente">Atendente</option>
-                <option value="gestor">Gestor</option>
-              </select>
-            </label>
+            <Selecao rotulo="Papel" name="papel" defaultValue="atendente">
+              <option value="atendente">Atendente</option>
+              <option value="gestor">Gestor</option>
+            </Selecao>
             <BotaoCriar />
           </form>
         </Cartao>
@@ -74,16 +71,15 @@ export function GerenciarAtendentes({ usuarios }: { usuarios: Usuario[] }) {
         )}
       </div>
 
-      <Cartao className="divide-y divide-borda">
+      <Cartao className="divide-y divide-borda overflow-hidden">
         {usuarios.length === 0 && <p className="p-8 text-center text-sm text-suave">Ninguém cadastrado ainda.</p>}
         {usuarios.map((u) => (
-          <div key={u.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-            <div className="mr-auto">
-              <p className="text-sm font-medium">
+          <div key={u.id} className="flex flex-wrap items-center gap-3 px-5 py-4">
+            <Avatar nome={u.primeiro_nome} fotoUrl={u.foto_url} tamanho="m" />
+            <div className="mr-auto min-w-0">
+              <p className="flex items-center gap-2 text-sm font-semibold">
                 {u.primeiro_nome}
-                {u.papel === 'gestor' && (
-                  <span className="ml-2 rounded bg-acento/10 px-1.5 py-0.5 text-[10px] text-acento">gestor</span>
-                )}
+                {u.papel === 'gestor' && <Pilula cor="acento">gestor</Pilula>}
               </p>
               <p className="text-xs text-suave">
                 {u.termo_aceito_em
@@ -97,12 +93,12 @@ export function GerenciarAtendentes({ usuarios }: { usuarios: Usuario[] }) {
                 const r = await redefinirSenha(u.id);
                 if (r.ok && r.senha) setNovaSenha({ nome: u.primeiro_nome, senha: r.senha });
               })}>
-              Nova senha
+              <KeyRound size={12} /> Nova senha
             </Botao>
 
             <Botao variante={u.ativo ? 'neutro' : 'principal'} tamanho="p" disabled={ocupado}
               onClick={() => iniciar(async () => { await alternarAtivo(u.id, !u.ativo); })}>
-              {u.ativo ? 'Desativar' : 'Reativar'}
+              <Power size={12} /> {u.ativo ? 'Desativar' : 'Reativar'}
             </Botao>
           </div>
         ))}

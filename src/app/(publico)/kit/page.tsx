@@ -35,19 +35,19 @@ export default async function PaginaKit() {
   if (!cfg?.kit_ativo) notFound();
 
   return (
-    <main className="mx-auto w-full max-w-lg flex-1 p-6">
+    <main className="mx-auto w-full max-w-lg flex-1 px-4 py-10 sm:px-6">
       <header className="mb-6 text-center">
         <p className="text-sm text-suave">
           {cfg.cargo} {cfg.numero && `· nº ${cfg.numero}`}
         </p>
-        <h1 className="mt-1 text-2xl font-semibold">{cfg.candidato}</h1>
+        <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight">{cfg.candidato}</h1>
         <p className="mt-3 text-[15px] text-suave">
           Peça seu santinho, adesivo de carro ou camiseta. É de graça e a gente combina a entrega
           pelo WhatsApp.
         </p>
       </header>
 
-      <Cartao className="p-6">
+      <Cartao className="p-7" elevado>
         <FormularioKit municipios={(municipios ?? []) as Municipio[]} />
       </Cartao>
 

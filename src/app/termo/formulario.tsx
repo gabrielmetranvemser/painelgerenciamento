@@ -11,7 +11,7 @@ export function FormularioTermo() {
 
   return (
     <div className="space-y-4">
-      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-borda bg-fundo p-4">
+      <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-borda bg-superficie-alta p-5 transition-colors hover:border-borda-forte">
         <input
           type="checkbox"
           checked={marcado}

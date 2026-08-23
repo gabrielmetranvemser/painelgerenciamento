@@ -2,7 +2,10 @@
 
 import Link from 'next/link';
 import { useEffect, useState, useTransition } from 'react';
-import { Aviso, Botao, Cartao, EtiquetaOrigem } from '@/components/ui';
+import {
+  ArrowLeft, Check, Gift, History, MessageSquarePlus, MousePointerClick, Send,
+} from 'lucide-react';
+import { Avatar, Aviso, Botao, Cartao, EtiquetaOrigem, Pilula, Selecao, AreaTexto, cx } from '@/components/ui';
 import { formatarExibicao } from '@/lib/telefone';
 import {
   RESULTADOS, type Chip, type Contato, type EtapaMsg, type Municipio, type Resultado,
@@ -114,30 +117,31 @@ export function Perfil({
 
   return (
     <div className="space-y-5">
-      <Link href="/painel/meus-contatos" className="text-sm text-suave hover:text-texto">
-        ← Meus contatos
+      <Link href="/painel/meus-contatos"
+            className="inline-flex items-center gap-1.5 text-sm text-suave transition-colors hover:text-texto">
+        <ArrowLeft size={15} /> Meus contatos
       </Link>
 
-      <Cartao className="p-5">
-        <div className="flex flex-wrap items-start gap-3">
-          <div className="mr-auto">
-            <h1 className="text-xl font-semibold">
-              {contato.nome ?? contato.primeiro_nome ?? <span className="text-suave">(dados apagados)</span>}
+      <Cartao className="p-6" elevado>
+        <div className="flex flex-wrap items-center gap-4">
+          <Avatar nome={contato.nome ?? contato.primeiro_nome} tamanho="g" />
+          <div className="mr-auto min-w-0">
+            <h1 className="font-display text-2xl font-semibold tracking-tight">
+              {contato.nome ?? contato.primeiro_nome ?? <span className="text-tenue">(dados apagados)</span>}
             </h1>
-            <p className="text-sm text-suave">
+            <p className="mt-0.5 truncate text-sm text-suave">
               {contato.telefone_e164 ? formatarExibicao(contato.telefone_e164) : '—'}
               {contato.municipio_id &&
                 ` · ${municipios.find((m) => m.id === contato.municipio_id)?.nome ?? ''}`}
             </p>
           </div>
           <EtiquetaOrigem origem={contato.origem} />
-          <span className="rounded-full border border-borda px-2.5 py-1 text-xs">
-            {ROTULO_STATUS[status] ?? status}
-          </span>
+          <Pilula>{ROTULO_STATUS[status] ?? status}</Pilula>
         </div>
 
         {clicou && (
-          <p className="mt-3 rounded-lg bg-ok/10 px-3 py-2 text-sm text-ok">
+          <p className="mt-4 flex items-center gap-2 rounded-2xl border border-ok/25 bg-ok/10 px-4 py-3 text-sm text-ok">
+            <MousePointerClick size={16} className="shrink-0" />
             Abriu o link que você mandou. É o sinal mais confiável de que a pessoa está interessada.
           </p>
         )}
@@ -153,23 +157,23 @@ export function Perfil({
         </Aviso>
       ) : (
         <>
-          <Cartao className="p-5">
-            <h2 className="mb-1 font-semibold">Mudar o resultado</h2>
+          <Cartao className="p-6">
+            <h2 className="mb-1 flex items-center gap-2 font-semibold"><Check size={16} className="text-suave" /> Mudar o resultado</h2>
             <p className="mb-3 text-xs text-suave">
               Serve para quando a pessoa responde dias depois, ou quando você clicou no botão errado.
             </p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
               {RESULTADOS.map((r) => (
                 <Botao key={r} variante={r === status ? 'principal' : r === 'pediu_saida' ? 'perigo' : 'neutro'}
-                       disabled={ocupado} onClick={() => marcar(r)}>
+                       disabled={ocupado} onClick={() => marcar(r)} className="!rounded-2xl py-3">
                   {ROTULO_RESULTADO[r]}
                 </Botao>
               ))}
             </div>
           </Cartao>
 
-          <Cartao className="p-5">
-            <h2 className="mb-1 font-semibold">Mandar outra mensagem</h2>
+          <Cartao className="p-6">
+            <h2 className="mb-1 flex items-center gap-2 font-semibold"><MessageSquarePlus size={16} className="text-suave" /> Mandar outra mensagem</h2>
             <p className="mb-3 text-xs text-suave">
               O texto sai pronto, com o link rastreado quando a mensagem tem link.
             </p>
@@ -177,9 +181,12 @@ export function Perfil({
               {MENSAGENS.map((m) => (
                 <button key={m.etapa} type="button" disabled={ocupado}
                         onClick={() => preparar(m.etapa)}
-                        className={`rounded-lg border p-3 text-left disabled:opacity-50 ${
-                          mensagem?.etapa === m.etapa ? 'border-acento bg-acento/5' : 'border-borda hover:bg-fundo'
-                        }`}>
+                        className={cx(
+                          'rounded-2xl border p-3.5 text-left transition-colors disabled:opacity-50',
+                          mensagem?.etapa === m.etapa
+                            ? 'border-acento/50 bg-acento/10'
+                            : 'border-borda hover:border-borda-forte hover:bg-superficie-alta',
+                        )}>
                   <span className="block text-sm font-medium">{m.rotulo}</span>
                   <span className="block text-xs text-suave">{m.dica}</span>
                 </button>
@@ -188,11 +195,11 @@ export function Perfil({
 
             {mensagem && (
               <div className="mt-4 border-t border-borda pt-4">
-                <div className="whitespace-pre-wrap rounded-lg border border-borda bg-fundo p-4 text-[15px] leading-relaxed">
+                <div className="whitespace-pre-wrap rounded-2xl rounded-tl-md border border-borda bg-superficie-alta p-5 text-[15px] leading-[1.7]">
                   {mensagem.texto}
                 </div>
-                <Botao tamanho="g" className="mt-3 w-full" onClick={abrir} disabled={ocupado}>
-                  Abrir conversa no WhatsApp
+                <Botao tamanho="g" className="mt-4 w-full" onClick={abrir} disabled={ocupado}>
+                  <Send size={17} /> Abrir conversa no WhatsApp
                 </Botao>
               </div>
             )}
@@ -211,8 +218,8 @@ export function Perfil({
         </>
       )}
 
-      <Cartao className="p-5">
-        <h2 className="mb-3 font-semibold">Histórico</h2>
+      <Cartao className="p-6">
+        <h2 className="mb-4 flex items-center gap-2 font-semibold"><History size={16} className="text-suave" /> Histórico</h2>
         {!historico ? (
           <p className="text-sm text-suave">carregando…</p>
         ) : !historico.ok ? (
@@ -222,7 +229,7 @@ export function Perfil({
         ) : (
           <ol className="space-y-3">
             {historico.interacoes.map((i, k) => (
-              <li key={k} className="border-l-2 border-borda pl-3">
+              <li key={k} className="border-l-2 border-borda pl-4">
                 <p className="text-sm font-medium">
                   Você mandou: {MENSAGENS.find((m) => m.etapa === i.etapa)?.rotulo ?? i.etapa}
                 </p>
@@ -235,8 +242,8 @@ export function Perfil({
               </li>
             ))}
             {historico.cliques.map((c, k) => (
-              <li key={`c${k}`} className="border-l-2 border-ok pl-3">
-                <p className="text-sm font-medium text-ok">
+              <li key={`c${k}`} className="border-l-2 border-acento pl-4">
+                <p className="text-sm font-semibold text-acento">
                   A pessoa abriu o link {c.destino === 'canal' ? 'do canal' : 'do material'}
                 </p>
                 <p className="text-xs text-suave">{new Date(c.quando).toLocaleString('pt-BR')}</p>
@@ -279,8 +286,8 @@ function PedidoKit({
   }
 
   return (
-    <Cartao className="p-5">
-      <h2 className="mb-1 font-semibold">Pedido de kit</h2>
+    <Cartao className="p-6">
+      <h2 className="mb-1 flex items-center gap-2 font-semibold"><Gift size={16} className="text-suave" /> Pedido de kit</h2>
       <p className="mb-4 text-xs text-suave">
         Se a pessoa pediu santinho, adesivo ou camiseta, anote aqui. Vai direto para o relatório
         que a equipe de entrega usa.
@@ -288,29 +295,29 @@ function PedidoKit({
 
       <div className="space-y-2">
         {ITENS_KIT.map((i) => (
-          <label key={i.valor} className="flex cursor-pointer items-center gap-3 rounded-lg border border-borda p-3">
+          <label key={i.valor}
+                 className={cx('flex cursor-pointer items-center gap-3 rounded-2xl border p-3.5 transition-colors',
+                   itens.includes(i.valor) ? 'border-acento/45 bg-acento/10' : 'border-borda hover:border-borda-forte')}>
             <input type="checkbox" checked={itens.includes(i.valor)} onChange={() => alternar(i.valor)}
                    className="size-5 accent-[var(--acento)]" />
-            <span className="text-sm">{i.rotulo}</span>
+            <span className="text-sm font-medium">{i.rotulo}</span>
           </label>
         ))}
       </div>
 
-      <label className="mt-4 block">
-        <span className="mb-1.5 block text-sm font-medium">Endereço para entrega</span>
-        <textarea value={endereco} onChange={(e) => { setEndereco(e.target.value); setSalvo(false); }}
-                  rows={2} placeholder="Rua, número, bairro, ponto de referência — e o tamanho da camiseta"
-                  className="w-full resize-y rounded-lg border border-borda bg-superficie p-3 text-sm" />
-      </label>
+      <div className="mt-4">
+        <AreaTexto rotulo="Endereço para entrega" value={endereco} rows={2}
+                   onChange={(e) => { setEndereco(e.target.value); setSalvo(false); }}
+                   placeholder="Rua, número, bairro, ponto de referência — e o tamanho da camiseta" />
+      </div>
 
-      <label className="mt-3 block">
-        <span className="mb-1.5 block text-sm font-medium">Cidade</span>
-        <select value={cidade} onChange={(e) => { setCidade(e.target.value ? Number(e.target.value) : ''); setSalvo(false); }}
-                className="w-full rounded-lg border border-borda bg-superficie px-3 py-2.5 text-sm">
+      <div className="mt-4">
+        <Selecao rotulo="Cidade" value={cidade}
+                 onChange={(e) => { setCidade(e.target.value ? Number(e.target.value) : ''); setSalvo(false); }}>
           <option value="">Não informou</option>
           {municipios.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
-        </select>
-      </label>
+        </Selecao>
+      </div>
 
       {erro && <Aviso tom="erro" className="mt-3">{erro}</Aviso>}
 
