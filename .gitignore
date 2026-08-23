@@ -46,7 +46,5 @@ next-env.d.ts
 # senhas iniciais entregues aos atendentes
 .credenciais-iniciais.txt
 
-# pacote da extensão: gerado no build, nunca versionado
-
-# pacote da extensão (o nome vem da chave do painel)
+# pacote da extensão: montado na hora pela rota /{chave}/extensao
 /public/*-ext.zip

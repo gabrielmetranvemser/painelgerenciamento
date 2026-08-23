@@ -51,7 +51,7 @@ export default async function PaginaInstalar({
             É ela que coloca o painel na lateral do navegador, encostado no WhatsApp Web. O
             arquivo já vem configurado — você não precisa editar nada.
           </p>
-          <BotaoLink href={`/${entrada}-ext.zip`} prefetch={false} tamanho="g" className="mt-5">
+          <BotaoLink href={`/${entrada}/extensao`} prefetch={false} tamanho="g" className="mt-5">
             <Download size={17} /> Baixar a extensão
           </BotaoLink>
           <p className="mt-4 text-xs">

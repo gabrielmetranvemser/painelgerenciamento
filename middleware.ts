@@ -21,23 +21,15 @@ export async function middleware(request: NextRequest) {
   const entrar = `/${chave}/entrar`;
   const interna = caminho.startsWith(`/${chave}/`);
 
-  // O pacote da extensão leva dentro o endereço do painel, com a chave.
-  //
-  // A proteção que vale é o NOME do arquivo, que deriva da própria chave: achar
-  // o zip é tão difícil quanto achar o painel, e quem já tem a chave não ganha
-  // nada baixando o arquivo.
-  //
-  // Esta checagem é a segunda camada, e ela NÃO é confiável em
-  // desenvolvimento: o servidor de dev entrega arquivo de `public/` antes de
-  // passar por aqui. Em produção ela pega. Não conte com ela como se fosse a
-  // tranca.
-  const pacote = caminho === `/${chave}-ext.zip`;
-
   // Endereço público — a página de um candidato, por exemplo. Não há sessão
   // para renovar e `getUser()` é uma ida ao Supabase por visita. A página de
   // candidato é a mais acessada do sistema e é aberta por gente que nunca vai
   // ter conta: pagar autenticação nela seria pagar por nada.
-  if (!interna && !pacote) return NextResponse.next({ request });
+  //
+  // O pacote da extensão não é exceção aqui: ele deixou de ser arquivo em
+  // `public/` e virou a rota `/{chave}/extensao`, que já cai em `interna` e
+  // ainda confere a sessão por conta própria.
+  if (!interna) return NextResponse.next({ request });
 
   let resposta = NextResponse.next({ request });
 

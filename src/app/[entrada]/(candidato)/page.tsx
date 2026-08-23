@@ -13,7 +13,8 @@ type CandidatoPublico = {
   id: string; slug: string; nome_urna: string; cargo: CargoEleitoral; numero: string;
   partido_sigla: string | null; coligacao: string | null; cnpj_campanha: string | null;
   responsavel_material: string | null; slogan: string | null; chamada: string | null;
-  cor_tema: string | null; cor_fundo: string | null; foto_url: string | null;
+  cor_tema: string | null; cor_fundo: string | null; cor_superficie: string | null;
+  foto_url: string | null; fundo_url: string | null;
   tema: 'auto' | 'claro' | 'escuro';
   ativo: boolean;
 };
@@ -24,7 +25,8 @@ async function buscar(slug: string) {
     .from('candidatos')
     .select(
       'id, slug, nome_urna, cargo, numero, partido_sigla, coligacao, cnpj_campanha, ' +
-      'responsavel_material, slogan, chamada, cor_tema, cor_fundo, foto_url, tema, ativo',
+      'responsavel_material, slogan, chamada, cor_tema, cor_fundo, cor_superficie, ' +
+      'foto_url, fundo_url, tema, ativo',
     )
     .eq('slug', slug)
     .maybeSingle();
@@ -149,12 +151,58 @@ export default async function PaginaDoCandidato({
  */
 function estiloDoCandidato(c: CandidatoPublico): React.CSSProperties {
   const estilo: Record<string, string> = {};
+
   if (c.cor_tema) {
     estilo['--acento'] = c.cor_tema;
     estilo['--acento-alto'] = c.cor_tema;
     estilo['--tinta-acento'] = contrasta(c.cor_tema);
   }
-  if (c.cor_fundo) estilo['--fundo'] = c.cor_fundo;
+
+  if (c.cor_fundo) {
+    estilo['--fundo'] = c.cor_fundo;
+    // O gradiente de acento do sistema por cima de uma cor escolhida pela
+    // campanha embaralha as duas. Quem escolheu o fundo quer aquele fundo.
+    estilo.backgroundImage = 'none';
+    estilo.backgroundColor = c.cor_fundo;
+  }
+
+  // A cor fica por baixo da imagem: é o que a pessoa vê enquanto ela carrega, e
+  // é o que sobra se a imagem falhar.
+  //
+  // O enquadramento vai INLINE, não em classe do Tailwind. A regra `.publico`
+  // usa o atalho `background:`, que zera tamanho e repetição, e por estar fora
+  // de `@layer` ela vence qualquer utilitário — o resultado era a imagem
+  // repetida em ladrilho no tamanho original.
+  if (c.fundo_url) {
+    // Véu por cima da imagem.
+    //
+    // O texto do cabeçalho fica direto sobre a foto, e foto é imprevisível: um
+    // céu claro no lugar errado apaga a linha do cargo e do número. O véu sai
+    // da cor de fundo escolhida, então continua parecendo a identidade da
+    // campanha — só que legível em qualquer imagem.
+    const veu = comAlfa(c.cor_fundo ?? (c.tema === 'claro' ? '#f4f4f3' : '#08090b'), 0.55);
+    estilo.backgroundImage = `linear-gradient(${veu}, ${veu}), url(${c.fundo_url})`;
+    estilo.backgroundSize = 'cover';
+    estilo.backgroundPosition = 'center';
+    estilo.backgroundRepeat = 'no-repeat';
+    estilo.backgroundAttachment = 'scroll';
+  }
+
+  if (c.cor_superficie) {
+    const s = c.cor_superficie;
+    const texto = contrasta(s);
+    estilo['--superficie'] = s;
+    // O campo é o cartão com UM passo de contraste, derivado — não um segundo
+    // seletor. Duas cores que precisam combinar, escolhidas à mão, combinam
+    // até alguém mexer numa só.
+    estilo['--superficie-alta'] = degrau(s);
+    estilo['--borda'] = mistura(texto, s, 0.14);
+    estilo['--borda-forte'] = mistura(texto, s, 0.28);
+    estilo['--texto'] = texto;
+    estilo['--suave'] = mistura(texto, s, 0.45);
+    estilo['--tenue'] = mistura(texto, s, 0.3);
+  }
+
   return estilo as React.CSSProperties;
 }
 
@@ -165,7 +213,36 @@ function estiloDoCandidato(c: CandidatoPublico): React.CSSProperties {
  * que o azul, e a média escolheria branco sobre amarelo — botão ilegível.
  */
 function contrasta(hex: string): string {
+  return luminancia(hex) > 0.42 ? '#111111' : '#ffffff';
+}
+
+function luminancia(hex: string): number {
+  const c = canais(hex).map((v) => {
+    const n = v / 255;
+    return n <= 0.03928 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+}
+
+function canais(hex: string): number[] {
   const n = parseInt(hex.slice(1), 16);
-  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 150 ? '#111111' : '#ffffff';
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Mistura duas cores. `p` é quanto de `a` entra. */
+function mistura(a: string, b: string, p: number): string {
+  const [x, y] = [canais(a), canais(b)];
+  const n = x.map((v, i) => Math.round(v * p + y[i] * (1 - p)));
+  return `#${n.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** A mesma cor, com transparência. */
+function comAlfa(hex: string, alfa: number): string {
+  const [r, g, b] = canais(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alfa})`;
+}
+
+/** Um passo de contraste: clareia cor escura, escurece cor clara. */
+function degrau(hex: string): string {
+  return mistura(luminancia(hex) > 0.42 ? '#000000' : '#ffffff', hex, 0.06);
 }

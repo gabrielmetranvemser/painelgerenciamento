@@ -229,6 +229,10 @@ export type Candidato = {
   cor_tema: string | null;
   /** Fundo da página pública. Nulo = o padrão do sistema. */
   cor_fundo: string | null;
+  /** Cartão e campos do formulário na página pública. */
+  cor_superficie: string | null;
+  /** Imagem de fundo, em WebP, no armazenamento do projeto. */
+  fundo_url: string | null;
   /** Como a página pública se apresenta: seguir o aparelho, clara ou escura. */
   tema: 'auto' | 'claro' | 'escuro';
   foto_url: string | null;

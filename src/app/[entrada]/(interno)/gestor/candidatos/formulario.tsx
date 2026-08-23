@@ -6,6 +6,7 @@ import { AlertTriangle, Link2 } from 'lucide-react';
 import { Aviso, Botao, Campo, Cartao, AreaTexto, Selecao, cx } from '@/components/ui';
 import { DIGITOS_DO_CARGO, ROTULO_CARGO, type Candidato, type CargoEleitoral } from '@/lib/tipos-banco';
 import { criarCandidato, salvarCandidato, type Resultado } from './acoes';
+import { EnvioImagem } from './[id]/envio-imagem';
 
 const CARGOS = Object.keys(ROTULO_CARGO) as CargoEleitoral[];
 
@@ -21,52 +22,78 @@ type Tema = 'auto' | 'claro' | 'escuro';
  * enxerga nome literal na varredura.
  */
 function PreviaLink({
-  corTema, corFundo, tema, foto, nome,
+  corTema, corFundo, corSuperficie, tema, foto, fundoImagem, nome,
 }: {
-  corTema: string; corFundo: string | null; tema: Tema; foto: string; nome: string;
+  corTema: string; corFundo: string | null; corSuperficie: string | null;
+  tema: Tema; foto: string | null; fundoImagem: string | null; nome: string;
 }) {
-  const escuro = tema === 'escuro' || (tema === 'auto' && true);
-  const fundo = corFundo ?? (escuro ? '#0b0d0c' : '#f7f7f5');
-  const texto = escuro ? '#f2f4f1' : '#16181a';
-  const suave = escuro ? '#9aa3a0' : '#5b6360';
+  const escuro = tema !== 'claro';
+  const fundo = corFundo ?? (escuro ? '#08090b' : '#f4f4f3');
+  const cartao = corSuperficie ?? (escuro ? '#121316' : '#ffffff');
+  // O campo é o cartão com UM passo de contraste. Dois seletores para duas
+  // cores que precisam combinar é pedir para alguém escolher errado.
+  const campo = degrau(cartao);
+  const texto = contrasta(cartao);
+  const suave = mistura(texto, cartao, 0.45);
+  const borda = mistura(texto, cartao, 0.14);
 
   return (
     <div className="mt-5">
       <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-suave">
         Prévia {tema === 'auto' && '(no aparelho em modo escuro)'}
       </p>
-      <div className="rounded-2xl border border-borda p-6 text-center" style={{ background: fundo }}>
-        {foto
+
+      <div
+        className="overflow-hidden rounded-2xl border border-borda p-6 text-center"
+        style={{
+          background: fundo,
+          ...(fundoImagem
+            ? { backgroundImage: `url(${fundoImagem})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+            : {}),
+        }}
+      >
+        {foto && (
           // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={foto} alt="" className="mx-auto mb-3 h-12 w-auto object-contain"
-                 onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-          : null}
-        <p className="text-xs" style={{ color: suave }}>Deputado federal · nº 0000</p>
-        <p className="font-display text-xl font-semibold" style={{ color: texto }}>{nome}</p>
-        <div className="mx-auto mt-4 max-w-xs space-y-2">
-          <div className="h-9 rounded-xl" style={{ background: escuro ? '#1a1d1c' : '#ffffff', border: `1px solid ${escuro ? '#2a2f2d' : '#e2e3e0'}` }} />
-          <div className="h-9 rounded-xl" style={{ background: escuro ? '#1a1d1c' : '#ffffff', border: `1px solid ${escuro ? '#2a2f2d' : '#e2e3e0'}` }} />
-          <div className="grid h-10 place-items-center rounded-full text-sm font-semibold"
-               style={{ background: corTema, color: contrasta(corTema) }}>
-            Quero receber o material
+          <img src={foto} alt="" className="mx-auto mb-3 h-12 w-auto object-contain"
+               onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+        )}
+
+        <div className="mx-auto max-w-xs rounded-2xl p-5"
+             style={{ background: cartao, border: `1px solid ${borda}` }}>
+          <p className="text-xs" style={{ color: suave }}>Deputado federal · nº 0000</p>
+          <p className="font-display text-lg font-semibold" style={{ color: texto }}>{nome}</p>
+          <div className="mt-4 space-y-2">
+            <div className="h-9 rounded-xl" style={{ background: campo, border: `1px solid ${borda}` }} />
+            <div className="h-9 rounded-xl" style={{ background: campo, border: `1px solid ${borda}` }} />
+            <div className="grid h-10 place-items-center rounded-full text-sm font-semibold"
+                 style={{ background: corTema, color: contrasta(corTema) }}>
+              Quero receber o material
+            </div>
           </div>
         </div>
       </div>
 
-      {/* O botão sumindo no fundo é o defeito mais fácil de cometer aqui: cor
-          escura da campanha num tema escuro, e o único botão da página vira um
-          retângulo invisível. */}
-      {razao(corTema, fundo) < 3 && (
-        <p className="mt-2 flex items-start gap-2 rounded-2xl border border-alerta/25 bg-alerta/10 px-4 py-3 text-xs leading-relaxed text-alerta">
-          <AlertTriangle size={14} className="mt-px shrink-0" />
-          <span>
-            O botão quase some no fundo desta página — o contraste é de{' '}
-            {razao(corTema, fundo).toFixed(1)}:1 e o mínimo confortável é 3:1.
-            Clareie a cor, ou mude o tema da página para claro.
-          </span>
-        </p>
-      )}
+      {/* Os dois defeitos fáceis de cometer aqui, e que só aparecem depois de
+          publicado: o botão sumindo no cartão, e o texto sumindo no cartão. */}
+      <Contraste rotulo="o botão quase some no formulário" a={corTema} b={cartao} />
+      <Contraste rotulo="o texto quase some no formulário" a={texto} b={campo} minimo={4.5} />
     </div>
+  );
+}
+
+function Contraste({ rotulo, a, b, minimo = 3 }: {
+  rotulo: string; a: string; b: string; minimo?: number;
+}) {
+  const r = razao(a, b);
+  if (r >= minimo) return null;
+  return (
+    <p className="mt-2 flex items-start gap-2 rounded-2xl border border-alerta/25 bg-alerta/10 px-4 py-3 text-xs leading-relaxed text-alerta">
+      <AlertTriangle size={14} className="mt-px shrink-0" />
+      <span>
+        Atenção: {rotulo} — o contraste é de {r.toFixed(1)}:1 e o mínimo confortável
+        é {minimo}:1. Clareie ou escureça uma das duas cores.
+      </span>
+    </p>
   );
 }
 
@@ -97,6 +124,30 @@ function razao(a: string, b: string): number {
   return (x + 0.05) / (y + 0.05);
 }
 
+function canais(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function paraHex([r, g, b]: number[]): string {
+  return `#${[r, g, b].map((c) => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** Mistura duas cores. `p` é quanto de `a` entra. */
+function mistura(a: string, b: string, p: number): string {
+  const [ar, ag, ab] = canais(a);
+  const [br, bg, bb] = canais(b);
+  return paraHex([ar * p + br * (1 - p), ag * p + bg * (1 - p), ab * p + bb * (1 - p)]);
+}
+
+/**
+ * Um passo de contraste a partir de uma cor: clareia se ela é escura, escurece
+ * se é clara. É como o campo se separa do cartão sem um segundo seletor.
+ */
+function degrau(hex: string): string {
+  return mistura(luminancia(hex) > 0.42 ? '#000000' : '#ffffff', hex, 0.06);
+}
+
 /** Sugere o endereço a partir do nome, mas só enquanto o gestor não mexeu nele. */
 function paraSlug(nome: string) {
   return nome
@@ -122,7 +173,10 @@ export function FormularioCandidato({
   const [fundoProprio, setFundoProprio] = useState(Boolean(candidato?.cor_fundo));
   const [corFundo, setCorFundo] = useState(candidato?.cor_fundo ?? '#0b0d0c');
   const [tema, setTema] = useState<Tema>(candidato?.tema ?? 'auto');
-  const [foto, setFoto] = useState(candidato?.foto_url ?? '');
+  const [foto, setFoto] = useState<string | null>(candidato?.foto_url ?? null);
+  const [fundoImagem, setFundoImagem] = useState<string | null>(candidato?.fundo_url ?? null);
+  const [superficiePropria, setSuperficiePropria] = useState(Boolean(candidato?.cor_superficie));
+  const [corSuperficie, setCorSuperficie] = useState(candidato?.cor_superficie ?? '#151a20');
   const [estado, setEstado] = useState<Resultado | null>(null);
   const [ocupado, iniciar] = useTransition();
   const router = useRouter();
@@ -219,17 +273,9 @@ export function FormularioCandidato({
         </p>
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <Campo rotulo="Cor do botão" name="cor_tema" type="color"
-                 defaultValue={candidato?.cor_tema ?? '#1d4ed8'} className="h-12 p-1"
-                 onChange={(e) => setCorTema(e.target.value)} value={corTema} />
-          <div className="sm:col-span-2">
-            <Campo rotulo="Logo ou foto (URL)" name="foto_url" value={foto}
-                   onChange={(e) => setFoto(e.target.value)} placeholder="https://…"
-                   dica="Aparece no alto da página. Fundo transparente (PNG ou SVG) fica melhor." />
-          </div>
-        </div>
+          <Campo rotulo="Cor do botão" name="cor_tema" type="color" className="h-12 p-1"
+                 value={corTema} onChange={(e) => setCorTema(e.target.value)} />
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <Selecao rotulo="Tema da página" name="tema" value={tema}
                    onChange={(e) => setTema(e.target.value as Tema)}>
             <option value="auto">Segue o aparelho</option>
@@ -237,24 +283,61 @@ export function FormularioCandidato({
             <option value="escuro">Sempre escuro</option>
           </Selecao>
 
-          <div className="sm:col-span-2">
+          <div>
             <label className="mb-2 flex items-center gap-2">
               <input type="checkbox" name="usar_cor_fundo" checked={fundoProprio}
                      onChange={(e) => setFundoProprio(e.target.checked)}
                      className="size-4 accent-[var(--acento)]" />
-              <span className="text-[13px] font-semibold">Fundo próprio</span>
+              <span className="text-[13px] font-semibold">Cor de fundo</span>
             </label>
             <input type="color" name="cor_fundo" value={corFundo} disabled={!fundoProprio}
                    onChange={(e) => setCorFundo(e.target.value)}
                    className="h-12 w-full rounded-2xl border border-borda bg-superficie-alta p-1 disabled:opacity-40" />
-            <p className="mt-2 text-xs leading-relaxed text-suave">
-              Sem isto a página usa o fundo padrão, que já acompanha o tema escolhido.
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <label className="mb-2 flex items-center gap-2">
+            <input type="checkbox" name="usar_cor_superficie" checked={superficiePropria}
+                   onChange={(e) => setSuperficiePropria(e.target.checked)}
+                   className="size-4 accent-[var(--acento)]" />
+            <span className="text-[13px] font-semibold">Cor do formulário</span>
+          </label>
+          <div className="flex items-center gap-3">
+            <input type="color" name="cor_superficie" value={corSuperficie} disabled={!superficiePropria}
+                   onChange={(e) => setCorSuperficie(e.target.value)}
+                   className="h-12 w-24 shrink-0 rounded-2xl border border-borda bg-superficie-alta p-1 disabled:opacity-40" />
+            <p className="text-xs leading-relaxed text-suave">
+              Pinta o cartão e os campos. Os campos saem um tom acima ou abaixo desta cor,
+              sozinhos — dois seletores para duas cores que precisam combinar é pedir para
+              alguém escolher errado.
             </p>
           </div>
         </div>
 
+        {editando ? (
+          <div className="mt-5 grid gap-5 border-t border-borda pt-5 sm:grid-cols-2">
+            <EnvioImagem
+              candidatoId={candidato!.id} tipo="logo" rotulo="Logo" ladoMaximo={800}
+              urlAtual={foto} aoMudar={setFoto}
+              dica="Aparece no alto da página. PNG ou SVG com fundo transparente fica melhor. Vira WebP no envio."
+            />
+            <EnvioImagem
+              candidatoId={candidato!.id} tipo="fundo" rotulo="Imagem de fundo" ladoMaximo={1920}
+              urlAtual={fundoImagem} aoMudar={setFundoImagem}
+              dica="Cobre a tela inteira. A cor de fundo fica por baixo e é o que a pessoa vê enquanto a imagem carrega. Vira WebP no envio."
+            />
+          </div>
+        ) : (
+          <p className="mt-5 border-t border-borda pt-5 text-xs leading-relaxed text-suave">
+            Logo e imagem de fundo entram depois de salvar — o arquivo precisa de um candidato
+            para pertencer.
+          </p>
+        )}
+
         <PreviaLink corTema={corTema} corFundo={fundoProprio ? corFundo : null} tema={tema}
-                    foto={foto} nome={nome || 'Nome de urna'} />
+                    corSuperficie={superficiePropria ? corSuperficie : null}
+                    foto={foto} fundoImagem={fundoImagem} nome={nome || 'Nome de urna'} />
 
         <div className="mt-4">
           <Campo rotulo="Slogan" name="slogan" defaultValue={candidato?.slogan ?? ''} maxLength={120} />

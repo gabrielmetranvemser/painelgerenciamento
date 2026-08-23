@@ -10,6 +10,7 @@ export function rotas(entrada: string) {
     entrar: `${raiz}/entrar`,
     termo: `${raiz}/termo`,
     instalar: `${raiz}/instalar`,
+    extensao: `${raiz}/extensao`,
     painel: `${raiz}/painel`,
     meusContatos: `${raiz}/painel/meus-contatos`,
     contato: (id: string) => `${raiz}/painel/contatos/${id}`,

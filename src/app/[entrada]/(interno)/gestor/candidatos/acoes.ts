@@ -38,8 +38,8 @@ const Candidato = z.object({
   responsavel_material: z.string().trim().max(200).optional().or(z.literal('')),
   cor_tema: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional().or(z.literal('')),
   cor_fundo: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional().or(z.literal('')),
+  cor_superficie: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional().or(z.literal('')),
   tema: z.enum(['auto', 'claro', 'escuro']),
-  foto_url: z.string().trim().max(500).optional().or(z.literal('')),
   slogan: z.string().trim().max(120).optional().or(z.literal('')),
   chamada: z.string().trim().max(300).optional().or(z.literal('')),
   propostas: z.string().trim().max(4000).optional().or(z.literal('')),
@@ -66,8 +66,8 @@ function ler(form: FormData) {
     responsavel_material: form.get('responsavel_material') ?? '',
     cor_tema: form.get('cor_tema') ?? '',
     cor_fundo: form.get('usar_cor_fundo') === 'on' ? (form.get('cor_fundo') ?? '') : '',
+    cor_superficie: form.get('usar_cor_superficie') === 'on' ? (form.get('cor_superficie') ?? '') : '',
     tema: form.get('tema') ?? 'auto',
-    foto_url: form.get('foto_url') ?? '',
     slogan: form.get('slogan') ?? '',
     chamada: form.get('chamada') ?? '',
     propostas: form.get('propostas') ?? '',
@@ -112,8 +112,8 @@ function paraBanco(d: z.infer<typeof Candidato>) {
     responsavel_material: limpar(d.responsavel_material),
     cor_tema: limpar(d.cor_tema),
     cor_fundo: limpar(d.cor_fundo),
+    cor_superficie: limpar(d.cor_superficie),
     tema: d.tema,
-    foto_url: limpar(d.foto_url),
     slogan: limpar(d.slogan),
     chamada: limpar(d.chamada),
     propostas: limpar(d.propostas),
@@ -224,6 +224,82 @@ export async function removerMaterial(id: string): Promise<Resultado> {
   }
 
   const { error } = await supabase.from('materiais').delete().eq('id', id);
+  if (error) return { ok: false, erro: error.message };
+  return { ok: true };
+}
+
+// ── Imagens ─────────────────────────────────────────────────────────────────
+
+export type TipoImagem = 'logo' | 'fundo';
+
+const COLUNA: Record<TipoImagem, 'foto_url' | 'fundo_url'> = {
+  logo: 'foto_url',
+  fundo: 'fundo_url',
+};
+
+/**
+ * Guarda a imagem já convertida em WebP pelo navegador.
+ *
+ * O servidor não converte: ele CONFERE. O que chega tem de ser WebP e caber no
+ * teto — o cliente pode ser burlado pelo DevTools, e um balde público que
+ * aceita qualquer coisa vira hospedagem de arquivo alheio.
+ *
+ * O caminho é fixo por candidato e tipo, com upsert: trocar a logo substitui o
+ * arquivo em vez de deixar rastro de todas as versões anteriores no balde. Por
+ * isso a URL leva `?v=`, senão o navegador e a CDN continuariam servindo a
+ * imagem antiga.
+ */
+export async function enviarImagem(
+  candidatoId: string,
+  tipo: TipoImagem,
+  form: FormData,
+): Promise<{ ok: true; url: string } | { ok: false; erro: string }> {
+  await exigirGestorOuFalhar();
+
+  const arquivo = form.get('arquivo');
+  if (!(arquivo instanceof File)) return { ok: false, erro: 'Nenhum arquivo recebido.' };
+  if (arquivo.type !== 'image/webp') {
+    return { ok: false, erro: 'O arquivo precisa ser WebP. A conversão acontece no navegador.' };
+  }
+  if (arquivo.size > 2 * 1024 * 1024) {
+    return { ok: false, erro: 'A imagem passou de 2 MB depois de convertida.' };
+  }
+  if (arquivo.size === 0) return { ok: false, erro: 'O arquivo chegou vazio.' };
+
+  const supabase = criarClienteAdmin();
+  const caminho = `${candidatoId}/${tipo}.webp`;
+
+  const { error: erroUp } = await supabase.storage
+    .from('candidatos')
+    .upload(caminho, arquivo, { contentType: 'image/webp', upsert: true });
+  if (erroUp) return { ok: false, erro: `Não consegui guardar a imagem: ${erroUp.message}` };
+
+  const { data: publica } = supabase.storage.from('candidatos').getPublicUrl(caminho);
+  const url = `${publica.publicUrl}?v=${Date.now()}`;
+
+  const { error } = await supabase
+    .from('candidatos')
+    .update({ [COLUNA[tipo]]: url })
+    .eq('id', candidatoId);
+  if (error) return { ok: false, erro: error.message };
+
+  return { ok: true, url };
+}
+
+/** Tira a imagem da página E do balde: arquivo órfão em balde público é lixo. */
+export async function removerImagem(
+  candidatoId: string,
+  tipo: TipoImagem,
+): Promise<{ ok: true } | { ok: false; erro: string }> {
+  await exigirGestorOuFalhar();
+  const supabase = criarClienteAdmin();
+
+  await supabase.storage.from('candidatos').remove([`${candidatoId}/${tipo}.webp`]);
+
+  const { error } = await supabase
+    .from('candidatos')
+    .update({ [COLUNA[tipo]]: null })
+    .eq('id', candidatoId);
   if (error) return { ok: false, erro: error.message };
   return { ok: true };
 }

@@ -142,7 +142,31 @@ begin
   else raise warning '  ❌ 8. cancelamento não limpou a entrega'; v_falhas := v_falhas + 1;
   end if;
 
-  if v_falhas = 0 then raise notice 'PULAR E ENTREGAS: ✅ as 8 passaram';
+  -- ── 9. O balde das imagens do candidato ─────────────────────────────────
+  -- Balde público que aceita qualquer tipo vira hospedagem de arquivo alheio.
+  -- O que protege é a configuração, e ela precisa sobreviver a um deploy novo.
+  if exists (
+    select 1 from storage.buckets
+     where id = 'candidatos' and public
+       and file_size_limit = 2097152
+       and allowed_mime_types = array['image/webp']
+  ) then
+    raise notice '  ✅ 9. balde de imagens: público para ler, só WebP, teto de 2 MB';
+  else raise warning '  ❌ 9. balde de imagens mal configurado'; v_falhas := v_falhas + 1;
+  end if;
+
+  -- ── 10. Ninguém escreve no balde a não ser o servidor ────────────────────
+  if not exists (
+    select 1 from pg_policies
+     where schemaname = 'storage' and tablename = 'objects'
+       and cmd in ('INSERT', 'UPDATE', 'DELETE', 'ALL')
+       and qual like '%candidatos%'
+  ) then
+    raise notice '  ✅ 10. nenhuma policy de escrita no balde — só o service_role grava';
+  else raise warning '  ❌ 10. existe policy de escrita no balde'; v_falhas := v_falhas + 1;
+  end if;
+
+  if v_falhas = 0 then raise notice 'PULAR E ENTREGAS: ✅ as 10 passaram';
   else raise exception 'PULAR E ENTREGAS: ❌ % falharam', v_falhas;
   end if;
 end $$;

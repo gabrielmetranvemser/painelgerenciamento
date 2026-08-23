@@ -15,6 +15,14 @@ const nextConfig: NextConfig = {
   // os caminhos /_next/static continuam entregando isso — mas não custa nada.
   poweredByHeader: false,
 
+  // A rota que monta o pacote lê a pasta `extensao/` em tempo de execução, e o
+  // rastreador do Next não tem como adivinhar isso sozinho: ele segue `import`,
+  // e aqui a leitura é por caminho. Sem esta linha a pasta não é empacotada com
+  // a função e o download quebra em produção — exatamente onde não dá para ver.
+  outputFileTracingIncludes: {
+    '/[entrada]/extensao': ['./extensao/**/*'],
+  },
+
   async headers() {
     return [
       {
