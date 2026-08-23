@@ -1,26 +1,80 @@
 @import "tailwindcss";
 
+/*
+ * Paleta do painel.
+ *
+ * A tela do atendente é usada 30 vezes por dia, por pessoas que não são
+ * técnicas, muitas vezes num notebook barato com brilho baixo. As escolhas
+ * seguem disso: contraste alto, alvos grandes, uma cor de destaque só, e nada
+ * de decoração que dispute atenção com o botão que importa.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --fundo:        #f7f7f8;
+  --superficie:   #ffffff;
+  --borda:        #e4e4e7;
+  --texto:        #18181b;
+  --texto-suave:  #71717a;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --acento:       #1d4ed8;   /* ação principal */
+  --acento-forte: #1e40af;
+
+  --ok:           #15803d;
+  --alerta:       #b45309;
+  --perigo:       #b91c1c;
+
+  --quente:       #c2410c;   /* fila quente */
+  --frio:         #4f46e5;   /* fila fria  */
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --fundo:        #09090b;
+    --superficie:   #18181b;
+    --borda:        #27272a;
+    --texto:        #fafafa;
+    --texto-suave:  #a1a1aa;
+
+    --acento:       #3b82f6;
+    --acento-forte: #60a5fa;
+
+    --ok:           #4ade80;
+    --alerta:       #fbbf24;
+    --perigo:       #f87171;
+
+    --quente:       #fb923c;
+    --frio:         #a5b4fc;
   }
 }
 
+@theme inline {
+  --color-fundo:       var(--fundo);
+  --color-superficie:  var(--superficie);
+  --color-borda:       var(--borda);
+  --color-texto:       var(--texto);
+  --color-suave:       var(--texto-suave);
+  --color-acento:      var(--acento);
+  --color-acento-forte:var(--acento-forte);
+  --color-ok:          var(--ok);
+  --color-alerta:      var(--alerta);
+  --color-perigo:      var(--perigo);
+  --color-quente:      var(--quente);
+  --color-frio:        var(--frio);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--fundo);
+  color: var(--texto);
+}
+
+/* Foco sempre visível: parte da operação é feita no teclado. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

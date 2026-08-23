@@ -1,10 +1,47 @@
--- Travas de servidor. Roda inteiro dentro de uma transação e dá ROLLBACK no
--- final: não deixa resíduo no banco.
+-- Travas de servidor.
 --
--- Cada uma destas travas existe porque burlá-la custa dinheiro ou processo:
--- teto e intervalo matam o chip, horário e dia bloqueado são regra eleitoral,
--- e mandar mensagem para quem pediu saída é multa POR MENSAGEM.
+-- AUTOSSUFICIENTE: cria os próprios dados dentro da transação e dá ROLLBACK no
+-- final. Pode rodar a qualquer momento, inclusive com a base em produção, sem
+-- deixar resíduo e sem depender de fixture externo.
+--
+-- Cada trava aqui existe porque burlá-la custa dinheiro ou processo: teto e
+-- intervalo matam o chip, horário e dia bloqueado são regra eleitoral, e mandar
+-- mensagem para quem pediu saída é multa POR MENSAGEM.
+--
+--   psql -f supabase/tests/02_travas.sql
 begin;
+
+-- ── Fixtures (revertidos pelo rollback) ─────────────────────────────────────
+do $$
+declare i int; v_uid uuid;
+begin
+  for i in 1..2 loop
+    v_uid := gen_random_uuid();
+    insert into auth.users (
+      instance_id, id, aud, role, email, encrypted_password,
+      email_confirmed_at, created_at, updated_at,
+      raw_app_meta_data, raw_user_meta_data, is_super_admin,
+      confirmation_token, recovery_token, email_change_token_new, email_change
+    ) values (
+      '00000000-0000-0000-0000-000000000000', v_uid, 'authenticated', 'authenticated',
+      'trava-' || i || '@painel.local',
+      extensions.crypt('x', extensions.gen_salt('bf')), now(), now(), now(),
+      '{"provider":"email","providers":["email"]}', '{}', false, '', '', '', ''
+    );
+    insert into public.usuarios (id, papel, primeiro_nome, ativo, termo_aceito_em, termo_versao)
+    values (v_uid, 'atendente', 'Trava' || i, true, now(), 1);
+    insert into public.chips (atendente_id, rotulo, papel, status)
+    values (v_uid, 'Chip Trava ' || i, 'ativo', 'ativo');
+  end loop;
+end $$;
+
+insert into public.contatos (origem, nome, primeiro_nome, telefone_e164, chave_dedup, telefone_hmac, status, criado_em)
+select 'lista_fria', 'Trava Contato ' || g, 'Trava',
+       '55690' || lpad(g::text, 8, '0'),
+       '690' || lpad(g::text, 8, '0'),
+       'hmac-trava-' || lpad(g::text, 4, '0'),
+       'na_fila', now() + make_interval(secs => g)
+from generate_series(1, 6) g;
 
 do $$
 declare
@@ -19,24 +56,15 @@ declare
   v_cfg_teto int;
   v_cfg_fim  int;
 
-  procedure_checa text;
 begin
   select u.id, c.id into v_uid, v_chip
     from public.usuarios u join public.chips c on c.atendente_id = u.id
-   where c.rotulo = 'Chip Teste 1';
+   where c.rotulo = 'Chip Trava 1';
   select u.id, c.id into v_uid2, v_chip2
     from public.usuarios u join public.chips c on c.atendente_id = u.id
-   where c.rotulo = 'Chip Teste 2';
+   where c.rotulo = 'Chip Trava 2';
 
   select teto_diario, hora_fim into v_cfg_teto, v_cfg_fim from public.config where id = 1;
-
-  -- devolve tudo para a fila
-  update public.contatos
-     set status='na_fila', atendente_id=null, chip_id=null, claimed_at=null,
-         claim_expira_em=null, resultado_em=null
-   where nome like 'Contato Teste %';
-  delete from public.interacoes where contato_id in (select id from public.contatos where nome like 'Contato Teste %');
-  delete from public.bloqueios where telefone_hmac like 'hmac-teste-%';
 
   perform set_config('request.jwt.claims', json_build_object('sub', v_uid, 'role','authenticated')::text, true);
 
@@ -64,10 +92,29 @@ begin
   end if;
 
   -- ── 4. idempotência: duplo clique não conta duas vezes ───────────────────
-  v_r := public.registrar_abertura(v_contato, v_chip, 'permissao', 'texto de teste');
+  v_r := public.registrar_abertura(v_contato, v_chip, 'permissao', 'segundo clique');
   if (v_r->>'ja_registrado')::boolean and (v_r->'fila'->>'enviados_hoje')::int = 1 then
     raise notice '  ✅ 4. duplo clique em "Abrir conversa" não inflou o teto';
   else raise warning '  ❌ 4. duplo clique contou de novo: %', v_r; v_falhas := v_falhas + 1;
+  end if;
+
+  -- ── 4b. o texto enviado fica no log, e o duplo clique não o reescreve ────
+  -- É a prova de o que exatamente foi mandado para cada pessoa.
+  if (select texto_enviado from public.interacoes
+       where contato_id = v_contato and etapa = 'permissao') = 'texto de teste' then
+    raise notice '  ✅ 4b. texto enviado preservado no log de auditoria';
+  else raise warning '  ❌ 4b. texto perdido ou sobrescrito: %',
+       (select texto_enviado from public.interacoes where contato_id = v_contato and etapa = 'permissao');
+    v_falhas := v_falhas + 1;
+  end if;
+
+  -- ── 4c. preparar_mensagem cria a interação antes; a 1ª abertura de OUTRA
+  --        etapa não pode se declarar repetida por causa disso ──────────────
+  perform public.preparar_mensagem(v_contato, v_chip, 'material');
+  v_r := public.registrar_abertura(v_contato, v_chip, 'material', 'material 1');
+  if not (v_r->>'ja_registrado')::boolean then
+    raise notice '  ✅ 4c. primeira abertura não é confundida com repetição';
+  else raise warning '  ❌ 4c. primeira abertura veio marcada como repetida: %', v_r; v_falhas := v_falhas + 1;
   end if;
 
   -- ── 5. intervalo mínimo entre conversas ──────────────────────────────────
@@ -146,10 +193,12 @@ begin
 
   -- ── 13. bloqueado nunca mais é entregue pela fila ────────────────────────
   select id into v_outro from public.contatos
-   where nome like 'Contato Teste %' and status = 'na_fila' limit 1;
-  -- deixa só ele na fila e bloqueia
+   where nome like 'Trava Contato %' and status = 'na_fila' limit 1;
+  -- Esvazia a fila INTEIRA menos ele. Sem o "menos ele" o teste passaria por
+  -- fila vazia em vez de por bloqueio, e sem esvaziar tudo qualquer contato
+  -- pré-existente na base faria o teste medir outra coisa. O rollback desfaz.
   update public.contatos set status = 'sem_resposta'
-   where nome like 'Contato Teste %' and status = 'na_fila' and id <> v_outro;
+   where status = 'na_fila' and id <> v_outro;
   insert into public.bloqueios (telefone_hmac, motivo, apagar_em)
   select telefone_hmac, 'teste', now() + interval '48 hours'
     from public.contatos where id = v_outro;
@@ -173,7 +222,7 @@ begin
   if v_falhas > 0 then
     raise exception 'RESULTADO: ❌ % trava(s) falharam', v_falhas;
   end if;
-  raise notice 'RESULTADO: ✅ as 14 travas passaram';
+  raise notice 'RESULTADO: ✅ todas as travas passaram';
 end $$;
 
 rollback;

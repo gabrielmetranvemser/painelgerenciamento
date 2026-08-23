@@ -42,3 +42,6 @@ next-env.d.ts
 
 # manter o exemplo versionado
 !.env.example
+
+# senhas iniciais entregues aos atendentes
+.credenciais-iniciais.txt
