@@ -14,12 +14,13 @@ function BotaoEntrar() {
   );
 }
 
-export function FormularioEntrar({ proximo }: { proximo: string }) {
+export function FormularioEntrar({ proximo, entrada }: { proximo: string; entrada: string }) {
   const [erro, acao] = useActionState(entrar, null);
 
   return (
     <form action={acao} className="space-y-4">
       <input type="hidden" name="proximo" value={proximo} />
+      <input type="hidden" name="entrada" value={entrada} />
       <Campo
         rotulo="E-mail"
         name="email"

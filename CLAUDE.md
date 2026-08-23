@@ -79,7 +79,32 @@ O Postgres roda em UTC; a operação é em `America/Porto_Velho` (**UTC−4**).
 Toda conta de hora, saudação e "dia operacional" usa `config.timezone`.
 Nunca `now()` cru para decidir se está dentro do horário.
 
-### 7. Nada de dado pessoal em URL
+### 7. O painel vive sob um segmento secreto
+
+Tudo que é interno responde em `/{PAINEL_CHAVE}/…`. Fora dele, 404 — a MESMA
+resposta de qualquer endereço inexistente. Nada pode distinguir "endereço
+errado" de "endereço certo com chave errada": nem status, nem redirecionamento,
+nem texto.
+
+⚠️ **Isso é obscuridade, não segurança.** A tranca continua sendo a
+autenticação e o RLS. Nunca trate a chave como se fosse proteção.
+
+Regras que caem disso:
+
+- **A chave NUNCA vai para o pacote JavaScript.** Links internos são montados a
+  partir do segmento que já está na URL (`params.entrada` → `rotas(entrada)` em
+  `src/lib/links-internos.ts`). Não crie `NEXT_PUBLIC_PAINEL_CHAVE`.
+- **Metadado padrão é neutro.** O layout raiz não tem descrição e o título
+  padrão é genérico; quem põe "· Painel" é o layout interno. Assim, uma página
+  pública que esqueça de sobrescrever não vaza nada — foi exatamente o defeito
+  que /privacidade teve.
+- **`robots.txt` bloqueia tudo e não lista caminho.** Dizer "não indexe /xyz" é
+  anunciar que /xyz existe. Sem sitemap.
+- **A raiz `/` devolve 404.** Só respondem os endereços de candidato e o painel.
+- O zip da extensão tem o nome derivado da chave, porque carrega o endereço do
+  painel dentro dele.
+
+### 8. Nada de dado pessoal em URL
 
 O token de `/r/{token}` é aleatório e aponta para o contato no banco. Telefone,
 nome e município nunca vão para a query string.

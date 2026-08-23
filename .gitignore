@@ -47,4 +47,6 @@ next-env.d.ts
 .credenciais-iniciais.txt
 
 # pacote da extensão: gerado no build, nunca versionado
-/public/painel-extensao.zip
+
+# pacote da extensão (o nome vem da chave do painel)
+/public/*-ext.zip

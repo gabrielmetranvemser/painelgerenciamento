@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { BotaoLink, Cartao, Vazio, Titulo } from '@/components/ui';
+import { rotas } from '@/lib/links-internos';
 import type { DesempenhoAtendente, FunilMunicipio, Lista } from '@/lib/tipos-banco';
 
 export const metadata: Metadata = { title: 'Relatórios' };
@@ -13,7 +14,9 @@ const EXPORTS = [
   ['atendentes', 'Por atendente', 'Volume e resultado de cada pessoa.'],
 ] as const;
 
-export default async function PaginaRelatorios() {
+export default async function PaginaRelatorios({ params }: { params: Promise<{ entrada: string }> }) {
+  const { entrada } = await params;
+  const rt = rotas(entrada);
   const supabase = await criarClienteServidor();
 
   const [{ data: municipios }, { data: atendentes }, { data: listas }] = await Promise.all([
@@ -33,7 +36,7 @@ export default async function PaginaRelatorios() {
             <Cartao key={chave} className="flex flex-col p-4">
               <p className="text-sm font-medium">{titulo}</p>
               <p className="mb-3 mt-0.5 flex-1 text-xs text-suave">{dica}</p>
-              <BotaoLink href={`/api/export/${chave}`} variante="neutro" tamanho="p" prefetch={false}>
+              <BotaoLink href={rt.exportar(chave)} variante="neutro" tamanho="p" prefetch={false}>
                 Baixar CSV
               </BotaoLink>
             </Cartao>

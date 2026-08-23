@@ -6,10 +6,12 @@ import { FormularioEntrar } from './formulario';
 export const metadata: Metadata = { title: 'Entrar' };
 
 export default async function Entrar({
-  searchParams,
+  params, searchParams,
 }: {
+  params: Promise<{ entrada: string }>;
   searchParams: Promise<{ proximo?: string; erro?: string }>;
 }) {
+  const { entrada } = await params;
   const { proximo, erro } = await searchParams;
 
   return (
@@ -29,7 +31,7 @@ export default async function Entrar({
               Sua conta está inativa. Fale com o gestor.
             </Aviso>
           )}
-          <FormularioEntrar proximo={proximo ?? '/painel'} />
+          <FormularioEntrar proximo={proximo ?? ''} entrada={entrada} />
         </Cartao>
 
         <p className="mt-6 text-center text-xs text-suave">

@@ -1,6 +1,7 @@
 import 'server-only';
 import { redirect } from 'next/navigation';
 import { criarClienteServidor } from '@/lib/supabase/server';
+import { rotas } from '@/lib/links-internos';
 import type { Usuario } from '@/lib/tipos-banco';
 
 /**
@@ -24,20 +25,29 @@ export async function usuarioAtual(): Promise<Usuario | null> {
   return (data as Usuario | null) ?? null;
 }
 
-/** Exige sessão ativa, termo aceito e conta ativa. Redireciona quando falta. */
-export async function exigirAtendente(): Promise<Usuario> {
+/**
+ * Exige sessão ativa, termo aceito e conta ativa.
+ *
+ * Recebe `entrada` — o segmento secreto da URL atual — porque todo endereço
+ * interno vive embaixo dele. Ler a chave de variável de ambiente aqui também
+ * funcionaria, mas usar o que já está na URL mantém a chave fora de qualquer
+ * caminho que possa acabar no pacote do navegador.
+ */
+export async function exigirAtendente(entrada: string): Promise<Usuario> {
+  const r = rotas(entrada);
   const u = await usuarioAtual();
-  if (!u) redirect('/entrar');
-  if (!u.ativo) redirect('/entrar?erro=inativo');
-  if (!u.termo_aceito_em) redirect('/termo');
+  if (!u) redirect(r.entrar);
+  if (!u.ativo) redirect(`${r.entrar}?erro=inativo`);
+  if (!u.termo_aceito_em) redirect(r.termo);
   return u;
 }
 
 /** Exige papel de gestor. */
-export async function exigirGestor(): Promise<Usuario> {
+export async function exigirGestor(entrada: string): Promise<Usuario> {
+  const r = rotas(entrada);
   const u = await usuarioAtual();
-  if (!u) redirect('/entrar');
-  if (!u.ativo) redirect('/entrar?erro=inativo');
-  if (u.papel !== 'gestor') redirect('/painel');
+  if (!u) redirect(r.entrar);
+  if (!u.ativo) redirect(`${r.entrar}?erro=inativo`);
+  if (u.papel !== 'gestor') redirect(r.painel);
   return u;
 }

@@ -21,9 +21,12 @@ regras de volume, horário e privacidade.
 
 ```bash
 npm install
-cp .env.example .env.local   # preencher
+cp .env.example .env.local   # preencher, inclusive PAINEL_CHAVE
 npm run dev
 ```
+
+O painel responde em `http://localhost:3000/{PAINEL_CHAVE}/painel`. A raiz e
+qualquer outro endereço devolvem 404 — inclusive `/painel`.
 
 ## Comandos
 

@@ -8,9 +8,13 @@ import { Perfil } from './perfil';
 export const metadata: Metadata = { title: 'Contato' };
 export const dynamic = 'force-dynamic';
 
-export default async function PaginaContato({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const usuario = await exigirAtendente();
+export default async function PaginaContato({
+  params,
+}: {
+  params: Promise<{ id: string; entrada: string }>;
+}) {
+  const { id, entrada } = await params;
+  const usuario = await exigirAtendente(entrada);
   const supabase = await criarClienteServidor();
 
   // O RLS já limita a leitura aos próprios contatos: se não for dele, vem vazio.
@@ -28,6 +32,7 @@ export default async function PaginaContato({ params }: { params: Promise<{ id: 
       chips={(chips ?? []) as Chip[]}
       municipios={(municipios ?? []) as Municipio[]}
       atendente={usuario.primeiro_nome}
+      entrada={entrada}
     />
   );
 }

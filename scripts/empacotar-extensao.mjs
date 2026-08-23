@@ -18,7 +18,21 @@ import { config as carregarEnv } from 'dotenv';
 carregarEnv({ path: '.env.local', quiet: true });
 
 const ORIGEM = 'extensao';
-const DESTINO = 'public/painel-extensao.zip';
+/**
+ * O nome do arquivo vem da CHAVE do painel, não é fixo.
+ *
+ * O zip carrega dentro o config.js com o endereço do painel — inclusive o
+ * segmento secreto. Num caminho previsível como /painel-extensao.zip, baixar o
+ * arquivo entregaria o endereço para qualquer um. Assim, achar o zip é tão
+ * difícil quanto achar o painel — e quem já tem a chave não ganha nada
+ * baixando o arquivo.
+ */
+const CHAVE = process.env.PAINEL_CHAVE;
+if (!CHAVE || CHAVE.length < 8) {
+  console.error('❌ PAINEL_CHAVE ausente ou curta demais: sem ela o painel não tem endereço.');
+  process.exit(1);
+}
+const DESTINO = `public/${CHAVE}-ext.zip`;
 
 /**
  * De onde sai a URL, em ordem de preferência:
@@ -48,7 +62,7 @@ if (!base) {
   console.error('❌ não sei o endereço do painel: defina PAINEL_URL ou LINK_BASE_URL.');
   process.exit(1);
 }
-const painelUrl = base.endsWith('/painel') ? base : `${base}/painel`;
+const painelUrl = `${base.replace(/\/[^/]*\/painel$/, '')}/${CHAVE}/painel`;
 
 async function arquivos(dir) {
   const saida = [];

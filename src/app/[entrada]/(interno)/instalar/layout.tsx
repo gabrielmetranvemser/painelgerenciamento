@@ -8,8 +8,14 @@ import { usuarioAtual } from '@/lib/sessao';
  * preparar a máquina primeiro. Barrar aqui por causa do termo criaria um nó —
  * o termo é sobre conduta no atendimento, não sobre instalar extensão.
  */
-export default async function LayoutInstalar({ children }: { children: React.ReactNode }) {
+export default async function LayoutInstalar({
+  children, params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ entrada: string }>;
+}) {
+  const { entrada } = await params;
   const usuario = await usuarioAtual();
-  if (!usuario) redirect('/entrar?proximo=/instalar');
+  if (!usuario) redirect(`/${entrada}/entrar?proximo=/${entrada}/instalar`);
   return <div className="surgir flex min-h-full flex-col">{children}</div>;
 }

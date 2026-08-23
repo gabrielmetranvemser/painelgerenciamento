@@ -6,8 +6,9 @@ import { Atendimento } from './atendimento';
 
 export const metadata: Metadata = { title: 'Atender' };
 
-export default async function PaginaPainel() {
-  const usuario = await exigirAtendente();
+export default async function PaginaPainel({ params }: { params: Promise<{ entrada: string }> }) {
+  const { entrada } = await params;
+  const usuario = await exigirAtendente(entrada);
   const supabase = await criarClienteServidor();
 
   const [{ data: chips }, { data: municipios }] = await Promise.all([

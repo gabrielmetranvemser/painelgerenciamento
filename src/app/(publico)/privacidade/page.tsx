@@ -7,7 +7,10 @@ export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Privacidade',
-  robots: { index: true, follow: true },
+  description: 'Como seus dados são usados e como pedir para sair da lista.',
+  // Nada é indexável (ver src/app/robots.ts). Esta página é alcançada pelo
+  // link que a própria pessoa recebeu.
+  robots: { index: false, follow: false },
 };
 
 export default async function Privacidade() {

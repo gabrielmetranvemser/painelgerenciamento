@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ChevronRight, Inbox } from 'lucide-react';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { exigirAtendente } from '@/lib/sessao';
+import { rotas } from '@/lib/links-internos';
 import { Avatar, Cartao, EtiquetaOrigem, Pilula, Titulo, Vazio } from '@/components/ui';
 import { formatarExibicao } from '@/lib/telefone';
 import type { Contato, StatusContato } from '@/lib/tipos-banco';
@@ -25,8 +26,9 @@ const ROTULO: Partial<Record<StatusContato, { texto: string; cor: 'neutro' | 'ac
  * Caso 12 de docs/03-OPERACAO.md §6: a pessoa responde dias depois. O atendente
  * precisa achar quem já abordou sem mexer na fila.
  */
-export default async function MeusContatos() {
-  const usuario = await exigirAtendente();
+export default async function MeusContatos({ params }: { params: Promise<{ entrada: string }> }) {
+  const { entrada } = await params;
+  const usuario = await exigirAtendente(entrada);
   const supabase = await criarClienteServidor();
 
   const { data } = await supabase
@@ -56,7 +58,7 @@ export default async function MeusContatos() {
             return (
               <Link
                 key={c.id}
-                href={`/painel/contatos/${c.id}`}
+                href={rotas(entrada).contato(c.id)}
                 className="flex flex-wrap items-center gap-4 px-5 py-4 transition-colors hover:bg-superficie-alta"
               >
                 <Avatar nome={c.nome ?? c.primeiro_nome} tamanho="m" />

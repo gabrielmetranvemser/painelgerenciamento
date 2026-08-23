@@ -7,14 +7,15 @@ import { GerenciarAtendentes } from './lista';
 export const metadata: Metadata = { title: 'Atendentes' };
 export const dynamic = 'force-dynamic';
 
-export default async function PaginaAtendentes() {
+export default async function PaginaAtendentes({ params }: { params: Promise<{ entrada: string }> }) {
+  const { entrada } = await params;
   const supabase = await criarClienteServidor();
   const { data } = await supabase.from('usuarios').select('*').order('papel').order('primeiro_nome');
 
   return (
     <>
       <Titulo sub="Quem desativar perde o acesso na hora e some da fila. Os contatos que estavam com a pessoa voltam para a fila quando o prazo de 20 minutos vencer.">Atendentes</Titulo>
-      <GerenciarAtendentes usuarios={(data ?? []) as Usuario[]} />
+      <GerenciarAtendentes usuarios={(data ?? []) as Usuario[]} entrada={entrada} />
     </>
   );
 }

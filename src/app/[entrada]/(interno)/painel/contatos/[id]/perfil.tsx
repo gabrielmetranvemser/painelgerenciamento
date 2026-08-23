@@ -13,7 +13,7 @@ import {
 import {
   definirMunicipio, prepararMensagem, registrarAbertura, registrarResultado,
   type MensagemPronta,
-} from '@/app/painel/acoes';
+} from '@/app/[entrada]/(interno)/painel/acoes';
 import { carregarHistorico, registrarPedidoKit, type Historico } from './acoes';
 
 const JANELA_WA = 'whatsapp-atendimento';
@@ -60,9 +60,9 @@ const MOTIVO: Record<string, string> = {
 };
 
 export function Perfil({
-  contato, chips, municipios, atendente,
+  contato, chips, municipios, atendente, entrada,
 }: {
-  contato: Contato; chips: Chip[]; municipios: Municipio[]; atendente: string;
+  contato: Contato; chips: Chip[]; municipios: Municipio[]; atendente: string; entrada: string;
 }) {
   const [historico, setHistorico] = useState<Historico | null>(null);
   const [status, setStatus] = useState(contato.status);
@@ -117,7 +117,7 @@ export function Perfil({
 
   return (
     <div className="space-y-5">
-      <Link href="/painel/meus-contatos"
+      <Link href={`/${entrada}/painel/meus-contatos`}
             className="inline-flex items-center gap-1.5 text-sm text-suave transition-colors hover:text-texto">
         <ArrowLeft size={15} /> Meus contatos
       </Link>

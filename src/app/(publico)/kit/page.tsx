@@ -13,7 +13,9 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'Peça seu kit',
   description: 'Peça santinho, adesivo e camiseta da campanha.',
-  robots: { index: true, follow: true },
+  // Alcançada por link direto, do site do candidato. Não precisa de busca,
+  // e não indexar é mais seguro.
+  robots: { index: false, follow: false },
 };
 
 /**

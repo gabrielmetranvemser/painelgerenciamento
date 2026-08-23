@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { aceitarTermo } from './acoes';
 import { Aviso, Botao } from '@/components/ui';
 
-export function FormularioTermo() {
+export function FormularioTermo({ entrada }: { entrada: string }) {
   const [marcado, setMarcado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, iniciar] = useTransition();
@@ -30,7 +30,7 @@ export function FormularioTermo() {
         tamanho="g"
         className="w-full"
         disabled={!marcado || enviando}
-        onClick={() => iniciar(async () => setErro(await aceitarTermo()))}
+        onClick={() => iniciar(async () => setErro(await aceitarTermo(entrada)))}
       >
         {enviando ? 'Gravando…' : 'Aceitar e começar'}
       </Botao>

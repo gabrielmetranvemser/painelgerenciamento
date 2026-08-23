@@ -6,7 +6,8 @@ import { criarClienteServidor } from '@/lib/supabase/server';
 export async function entrar(_anterior: string | null, form: FormData): Promise<string | null> {
   const email = String(form.get('email') ?? '').trim().toLowerCase();
   const senha = String(form.get('senha') ?? '');
-  const proximo = String(form.get('proximo') ?? '/painel');
+  const entrada = String(form.get('entrada') ?? '');
+  const proximo = String(form.get('proximo') ?? '') || `/${entrada}/painel`;
 
   if (!email || !senha) return 'Preencha e-mail e senha.';
 
@@ -17,11 +18,15 @@ export async function entrar(_anterior: string | null, form: FormData): Promise<
   // lista de atendentes para quem estiver tentando adivinhar.
   if (error) return 'E-mail ou senha incorretos.';
 
-  redirect(proximo.startsWith('/') ? proximo : '/painel');
+  // Só aceita destino interno, e só embaixo da própria entrada: um `proximo`
+  // vindo da URL não pode virar redirecionamento para fora.
+  const seguro = proximo.startsWith(`/${entrada}/`) ? proximo : `/${entrada}/painel`;
+  redirect(seguro);
 }
 
-export async function sair() {
+export async function sair(form: FormData) {
+  const entrada = String(form.get('entrada') ?? '');
   const supabase = await criarClienteServidor();
   await supabase.auth.signOut();
-  redirect('/entrar');
+  redirect(entrada ? `/${entrada}/entrar` : '/');
 }

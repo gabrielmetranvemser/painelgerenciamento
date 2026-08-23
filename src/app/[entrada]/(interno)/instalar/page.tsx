@@ -11,7 +11,12 @@ import type { Chip } from '@/lib/tipos-banco';
 export const metadata: Metadata = { title: 'Preparar sua máquina' };
 export const dynamic = 'force-dynamic';
 
-export default async function PaginaInstalar() {
+export default async function PaginaInstalar({
+  params,
+}: {
+  params: Promise<{ entrada: string }>;
+}) {
+  const { entrada } = await params;
   const usuario = await usuarioAtual();
   const supabase = await criarClienteServidor();
 
@@ -46,7 +51,7 @@ export default async function PaginaInstalar() {
             É ela que coloca o painel na lateral do navegador, encostado no WhatsApp Web. O
             arquivo já vem configurado — você não precisa editar nada.
           </p>
-          <BotaoLink href="/painel-extensao.zip" prefetch={false} tamanho="g" className="mt-5">
+          <BotaoLink href={`/${entrada}-ext.zip`} prefetch={false} tamanho="g" className="mt-5">
             <Download size={17} /> Baixar a extensão
           </BotaoLink>
           <p className="mt-4 text-xs">
@@ -130,7 +135,7 @@ export default async function PaginaInstalar() {
             O painel abre a conversa no WhatsApp já com o texto pronto. Você revisa, ajusta se
             quiser e envia. Depois volta ao painel e marca o resultado.
           </p>
-          <BotaoLink href="/painel" tamanho="g" className="mt-5">
+          <BotaoLink href={`/${entrada}/painel`} tamanho="g" className="mt-5">
             Ir para o painel <ArrowRight size={17} />
           </BotaoLink>
         </Passo>
@@ -148,7 +153,7 @@ export default async function PaginaInstalar() {
 
       <p className="mt-6 text-center text-xs text-suave">
         Travou em algum passo? Fale com o gestor antes de continuar.{' '}
-        <Link href="/painel" className="underline underline-offset-4">Voltar ao painel</Link>
+        <Link href={`/${entrada}/painel`} className="underline underline-offset-4">Voltar ao painel</Link>
       </p>
     </main>
   );

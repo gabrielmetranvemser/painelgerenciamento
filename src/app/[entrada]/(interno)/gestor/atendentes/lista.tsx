@@ -12,7 +12,7 @@ function BotaoCriar() {
   return <Botao type="submit" disabled={pending}>{pending ? 'Criando…' : 'Criar conta'}</Botao>;
 }
 
-function Senha({ email, senha }: { email: string; senha: string }) {
+function Senha({ email, senha, entrada }: { email: string; senha: string; entrada: string }) {
   const [copiado, setCopiado] = useState(false);
 
   // Sai pronto para colar no WhatsApp do atendente: acesso e o passo a passo de
@@ -24,7 +24,7 @@ function Senha({ email, senha }: { email: string; senha: string }) {
     `Senha: ${senha}`,
     '',
     'Antes de começar, siga os 5 passos para preparar seu computador:',
-    typeof window === 'undefined' ? '/instalar' : `${window.location.origin}/instalar`,
+    typeof window === 'undefined' ? '' : `${window.location.origin}/${entrada}/instalar`,
   ].join('\n');
 
   return (
@@ -50,7 +50,7 @@ function Senha({ email, senha }: { email: string; senha: string }) {
   );
 }
 
-export function GerenciarAtendentes({ usuarios }: { usuarios: Usuario[] }) {
+export function GerenciarAtendentes({ usuarios, entrada }: { usuarios: Usuario[]; entrada: string }) {
   const [estado, acao] = useActionState(criarAtendente, null);
   const [ocupado, iniciar] = useTransition();
   const [novaSenha, setNovaSenha] = useState<{ nome: string; senha: string } | null>(null);
@@ -75,7 +75,7 @@ export function GerenciarAtendentes({ usuarios }: { usuarios: Usuario[] }) {
           </form>
         </Cartao>
 
-        {estado?.ok && <Senha email={estado.email} senha={estado.senha} />}
+        {estado?.ok && <Senha email={estado.email} senha={estado.senha} entrada={entrada} />}
         {estado && !estado.ok && <Aviso tom="erro">{estado.erro}</Aviso>}
         {novaSenha && (
           <Aviso tom="ok">

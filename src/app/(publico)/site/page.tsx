@@ -11,7 +11,9 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'Receba o material da campanha',
   description: 'Cadastre-se para receber o material da campanha pelo WhatsApp.',
-  robots: { index: true, follow: true },
+  // Alcançada por link direto, do site do candidato. Não precisa de busca,
+  // e não indexar é mais seguro.
+  robots: { index: false, follow: false },
 };
 
 /**

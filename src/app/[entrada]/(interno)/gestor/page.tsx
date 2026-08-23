@@ -6,12 +6,15 @@ import {
 } from 'lucide-react';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { Avatar, Cartao, Farol, Metrica, Titulo, Vazio } from '@/components/ui';
+import { rotas } from '@/lib/links-internos';
 import type { Alerta, DesempenhoAtendente, Resumo, SaudeChip } from '@/lib/tipos-banco';
 
 export const metadata: Metadata = { title: 'Visão geral' };
 export const dynamic = 'force-dynamic';
 
-export default async function PainelGestor() {
+export default async function PainelGestor({ params }: { params: Promise<{ entrada: string }> }) {
+  const { entrada } = await params;
+  const rt = rotas(entrada);
   const supabase = await criarClienteServidor();
 
   const [{ data: resumo }, { data: chips }, { data: atendentes }, { data: alertas }] =
@@ -76,7 +79,7 @@ export default async function PainelGestor() {
       </Secao>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Secao titulo="Saúde dos números" link={{ href: '/gestor/chips', rotulo: 'gerenciar' }}>
+        <Secao titulo="Saúde dos números" link={{ href: rt.gestorChips, rotulo: 'gerenciar' }}>
           {listaChips.length === 0 ? (
             <Vazio icone={<Smartphone size={26} />}>Nenhum número cadastrado ainda.</Vazio>
           ) : (
@@ -101,7 +104,7 @@ export default async function PainelGestor() {
           )}
         </Secao>
 
-        <Secao titulo="Atendentes hoje" link={{ href: '/gestor/atendentes', rotulo: 'gerenciar' }}>
+        <Secao titulo="Atendentes hoje" link={{ href: rt.gestorAtendentes, rotulo: 'gerenciar' }}>
           {(atendentes ?? []).length === 0 ? (
             <Vazio icone={<UsersRound size={26} />}>
               Nenhum atendente cadastrado. Crie as contas para a fila começar a andar.

@@ -7,10 +7,11 @@ import { FormularioTermo } from './formulario';
 
 export const metadata: Metadata = { title: 'Termo de uso' };
 
-export default async function Termo() {
+export default async function Termo({ params }: { params: Promise<{ entrada: string }> }) {
+  const { entrada } = await params;
   const usuario = await usuarioAtual();
-  if (!usuario) redirect('/entrar');
-  if (usuario.termo_aceito_em) redirect('/painel');
+  if (!usuario) redirect(`/${entrada}/entrar`);
+  if (usuario.termo_aceito_em) redirect(`/${entrada}/painel`);
 
   const supabase = await criarClienteServidor();
   const { data: cfg } = await supabase.from('config').select('termo_texto').eq('id', 1).single();
@@ -27,7 +28,7 @@ export default async function Termo() {
         </div>
       </Cartao>
 
-      <FormularioTermo />
+      <FormularioTermo entrada={entrada} />
     </main>
   );
 }

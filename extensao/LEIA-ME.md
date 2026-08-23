@@ -36,13 +36,16 @@ abre em branco em todas as máquinas.
 Se algum dia precisar trocar a chave, defina `EXTENSAO_ID` nas variáveis de
 ambiente da Vercel com o ID novo.
 
-## Antes de distribuir
+## Não pegue esta pasta direto do repositório
 
-Edite **um único arquivo**, `config.js`, com o endereço do painel:
+Baixe o zip pela página **Preparar sua máquina** do painel. Ele é montado no
+build com o endereço real já dentro do `config.js` — inclusive o segmento
+secreto do painel, que não fica versionado aqui.
 
-```js
-globalThis.PAINEL_URL = 'https://painel.SEUDOMINIO.com.br/painel';
-```
+O nome do arquivo do zip também vem da chave do painel, e o download exige
+sessão. Os dois cuidados existem pelo mesmo motivo: o zip carrega o endereço do
+painel dentro dele, e num caminho previsível baixar o arquivo entregaria o
+endereço para qualquer um.
 
 ## Instalar em cada máquina
 

@@ -20,10 +20,19 @@ const ui = Manrope({
   display: 'swap',
 });
 
+/**
+ * O padrão da raiz é DELIBERADAMENTE vazio de identidade.
+ *
+ * Antes daqui saía "Painel interno de atendimento" como descrição, e qualquer
+ * página pública que esquecesse de sobrescrever herdava isso — foi o que
+ * aconteceu com /privacidade. Com o padrão neutro, esquecer não vaza nada: o
+ * "· Painel" no título passou a ser posto pelo layout interno, que só responde
+ * embaixo do segmento secreto.
+ *
+ * Nada é indexável em lugar nenhum (ver também src/app/robots.ts).
+ */
 export const metadata: Metadata = {
-  title: { default: 'Painel', template: '%s · Painel' },
-  description: 'Painel interno de atendimento.',
-  // O painel não pode ser indexado. As páginas públicas sobrescrevem.
+  title: { default: 'Página', template: '%s' },
   robots: { index: false, follow: false, nocache: true },
 };
 
