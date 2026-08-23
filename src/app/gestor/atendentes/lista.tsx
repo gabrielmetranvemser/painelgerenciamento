@@ -14,23 +14,37 @@ function BotaoCriar() {
 
 function Senha({ email, senha }: { email: string; senha: string }) {
   const [copiado, setCopiado] = useState(false);
+
+  // Sai pronto para colar no WhatsApp do atendente: acesso e o passo a passo de
+  // preparar a máquina, junto. Mandar só a senha garante a pergunta seguinte.
+  const recado = [
+    'Seu acesso ao painel:',
+    '',
+    `E-mail: ${email}`,
+    `Senha: ${senha}`,
+    '',
+    'Antes de começar, siga os 5 passos para preparar seu computador:',
+    typeof window === 'undefined' ? '/instalar' : `${window.location.origin}/instalar`,
+  ].join('\n');
+
   return (
     <Aviso tom="ok">
-      <p className="font-medium">Conta criada. Anote a senha agora.</p>
-      <p className="mt-2 font-mono text-sm">{email}</p>
+      <p className="font-semibold">Conta criada. Anote a senha agora.</p>
+      <p className="mt-3 font-mono text-sm">{email}</p>
       <p className="font-mono text-lg font-semibold">{senha}</p>
       <button
         type="button"
-        className="mt-2 text-xs underline"
+        className="mt-3 rounded-full border border-ok/30 px-3 py-1.5 text-xs font-semibold"
         onClick={async () => {
-          await navigator.clipboard.writeText(`${email}\n${senha}`);
+          await navigator.clipboard.writeText(recado);
           setCopiado(true);
         }}
       >
-        {copiado ? 'copiado ✓' : 'copiar e-mail e senha'}
+        {copiado ? 'copiado ✓' : 'copiar recado pronto para o WhatsApp'}
       </button>
-      <p className="mt-2 text-xs">
-        Não guardamos senha em lugar nenhum. Se perder, gere outra pelo botão da lista.
+      <p className="mt-3 text-xs leading-relaxed">
+        O recado já inclui o link do passo a passo de instalação. Não guardamos senha em lugar
+        nenhum: se perder, gere outra pelo botão da lista.
       </p>
     </Aviso>
   );

@@ -31,7 +31,8 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const caminho = request.nextUrl.pathname;
-  const interna = caminho.startsWith('/painel') || caminho.startsWith('/gestor') || caminho === '/termo';
+  const interna = caminho.startsWith('/painel') || caminho.startsWith('/gestor')
+    || caminho === '/termo' || caminho === '/instalar';
 
   if (interna && !user) {
     const url = request.nextUrl.clone();

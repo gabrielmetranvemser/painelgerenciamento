@@ -16,7 +16,9 @@
     "test:banco": "set -a && . ./.env.local && set +a && ./supabase/tests/rodar.sh",
     "test:tudo": "npm run typecheck && npm test && npm run tipos && npm run test:banco",
     "limpar:teste": "tsx scripts/limpar-teste.mts",
-    "extensao:pacote": "cd extensao && zip -r ../painel-extensao.zip . -x \".*\" && echo \"painel-extensao.zip pronto\""
+    "extensao:pacote": "node scripts/empacotar-extensao.mjs",
+    "prebuild": "node scripts/empacotar-extensao.mjs",
+    "predev": "node scripts/empacotar-extensao.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
@@ -40,6 +42,7 @@
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.2",
+    "jszip": "^3.10.1",
     "pg": "^8.23.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.12",

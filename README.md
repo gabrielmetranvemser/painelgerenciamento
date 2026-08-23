@@ -48,7 +48,8 @@ npm run lint
 | 6 · Links + captação | ✅ /r/[token] com filtro de bot, /m/[token], /kit, /site, /privacidade |
 | 7 · Painel do gestor | ✅ visão geral, atendentes, números, mensagens, config, relatórios |
 | 8 · Automações | ✅ lease, 72h, purga LGPD |
-| 9 · Extensão Chrome | ✅ painel lateral Nível 0 — ver [extensao/LEIA-ME.md](extensao/LEIA-ME.md) |
+| 9 · Extensão Chrome | ✅ painel lateral Nível 0, instalação local — ver [extensao/LEIA-ME.md](extensao/LEIA-ME.md) |
+| 10 · Onboarding | ✅ `/instalar` — 5 passos guiados + download da extensão já configurada |
 
 ## Testes
 
