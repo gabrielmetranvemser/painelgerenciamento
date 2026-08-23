@@ -45,3 +45,6 @@ next-env.d.ts
 
 # senhas iniciais entregues aos atendentes
 .credenciais-iniciais.txt
+
+# pacote da extensão, gerado por npm run extensao:pacote
+painel-extensao.zip
