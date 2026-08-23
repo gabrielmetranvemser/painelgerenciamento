@@ -126,6 +126,8 @@ export type Interacao = {
   atendente_id: string;
   chip_id: string;
   etapa: EtapaMsg;
+  /** Qual candidato, nas etapas de candidato. Nulo na permissão e na saída. */
+  candidato_id: string | null;
   variacao_id: string | null;
   texto_enviado: string | null;
   aberto_wa_em: string | null;

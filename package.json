@@ -14,11 +14,12 @@
     "semear": "tsx scripts/semear-teste.mts",
     "importar:teste": "tsx scripts/testar-importacao.mts",
     "test:banco": "set -a && . ./.env.local && set +a && ./supabase/tests/rodar.sh",
-    "test:tudo": "npm run typecheck && npm test && npm run tipos && npm run test:banco",
+    "test:tudo": "npm run typecheck && npm test && npm run tipos && npm run textos && npm run test:banco",
     "limpar:teste": "tsx scripts/limpar-teste.mts",
     "extensao:pacote": "node scripts/empacotar-extensao.mjs",
     "prebuild": "node scripts/empacotar-extensao.mjs",
-    "predev": "node scripts/empacotar-extensao.mjs"
+    "predev": "node scripts/empacotar-extensao.mjs",
+    "textos": "tsx scripts/conferir-textos.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

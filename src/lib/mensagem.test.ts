@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   horaLocal,
+  listarChapa,
   montarTexto,
   podeSalvar,
   primeiroNomeDe,
@@ -13,13 +14,24 @@ import {
 
 const RONDONIA = 'America/Porto_Velho'; // UTC−4
 
+const CHAPA = [
+  { nome: 'Fulano de Tal', cargo: 'deputado_federal', numero: '1234' },
+  { nome: 'Beltrana Souza', cargo: 'governador', numero: '12' },
+];
+
 const CTX: ContextoMensagem = {
   primeiroNome: 'João',
   nomeAtendente: 'Lucas',
+  chapa: CHAPA,
   candidato: 'Fulano de Tal',
-  cargo: 'deputado federal',
-  numero: '12345',
-  link: 'https://lnk.exemplo.br/r/abc123',
+  cargo: 'deputado_federal',
+  numero: '1234',
+  partido: 'PXX',
+  cnpj: '12.345.678/0001-90',
+  materiais: [
+    { titulo: 'Santinho', url: 'https://lnk.exemplo.br/r/abc123' },
+    { titulo: 'Propostas', url: 'https://lnk.exemplo.br/r/def456' },
+  ],
   linkGrupo: 'https://whatsapp.com/channel/xyz',
   municipio: 'Porto Velho',
   agora: new Date('2026-08-24T13:00:00Z'), // 09:00 em Porto Velho
@@ -30,15 +42,17 @@ const CTX: ContextoMensagem = {
 // validação, ou o documento ou o validador está errado — os dois precisam
 // concordar, senão o gestor não consegue salvar os textos oficiais.
 const PERMISSOES = [
-  '{{saudacao}}, {{primeiro_nome}}! Tudo bem? Aqui é {{nome}}. Tô ajudando o(a) {{candidato}} nessa eleição pra {{cargo}}, e um apoiador dele(a) me passou seu contato. Posso te mandar o material aqui? Se não quiser, me fala que eu paro por aqui e apago seu número, tranquilo.',
-  'Oi, {{primeiro_nome}}, {{saudacao}}! Sou {{nome}}. Tô com o(a) {{candidato}} nessa eleição, ele(a) tá concorrendo a {{cargo}}. Um apoiador dele(a) me passou seu contato. Tudo bem se eu te mandar as propostas? Se preferir não receber, é só me dizer que apago seu contato.',
-  '{{saudacao}}, {{primeiro_nome}}, tudo certo? {{nome}} aqui. Tô dando uma força pro(a) {{candidato}}, candidato(a) a {{cargo}}, e um apoiador dele(a) me indicou seu contato. Posso te mostrar o material por aqui? Se não quiser, sem problema, me avisa que apago seu número.',
-  '{{saudacao}}, {{primeiro_nome}}! Aqui é {{nome}}. Tô ajudando o(a) {{candidato}} ({{cargo}}) e um apoiador me passou seu contato. Te mando o material? Se não quiser, me fala que apago seu número e não te chamo mais.',
-  'Oi, {{primeiro_nome}}, {{saudacao}}, tudo bem por aí? Eu sou {{nome}}, tô nessa eleição ajudando o(a) {{candidato}} pra {{cargo}}. Um apoiador dele(a) me passou seu contato. Posso te mandar as propostas aqui no WhatsApp? Se preferir que não, me fala que apago seu contato, de boa.',
+  '{{saudacao}}, {{primeiro_nome}}! Tudo bem? Aqui é {{nome}}. Tô ajudando {{candidatos}} nessa eleição, e um apoiador me passou seu contato. Posso te mandar o material aqui? Se não quiser, me fala que eu paro por aqui e apago seu número, tranquilo.',
+  'Oi, {{primeiro_nome}}, {{saudacao}}! Sou {{nome}}. Tô nessa eleição com {{candidatos}}. Um apoiador me passou seu contato. Tudo bem se eu te mandar as propostas? Se preferir não receber, é só me dizer que apago seu contato.',
+  '{{saudacao}}, {{primeiro_nome}}, tudo certo? {{nome}} aqui. Tô dando uma força pra {{candidatos}}, e um apoiador me indicou seu contato. Posso te mostrar o material por aqui? Se não quiser, sem problema, me avisa que apago seu número.',
+  '{{saudacao}}, {{primeiro_nome}}! Aqui é {{nome}}. Tô ajudando {{candidatos}} e um apoiador me passou seu contato. Te mando o material? Se não quiser, me fala que apago seu número e não te chamo mais.',
+  'Oi, {{primeiro_nome}}, {{saudacao}}, tudo bem por aí? Eu sou {{nome}}, tô nessa eleição ajudando {{candidatos}}. Um apoiador me passou seu contato. Posso te mandar as propostas aqui no WhatsApp? Se preferir que não, me fala que apago seu contato, de boa.',
 ];
 
-const MATERIAL =
-  'Que bom, {{primeiro_nome}}! Esse é o material do(a) {{candidato}} – {{cargo}} – nº {{numero}}: {{link}}. Só pra eu te mandar as coisas da sua região: você é de qual cidade? Se quiser acompanhar de perto, tem o canal da campanha, entra só se quiser: {{link_grupo}}. E se um dia não quiser mais receber, me avisa que apago seu contato.';
+const MATERIAL = `Que bom, {{primeiro_nome}}! Esse é o material de {{candidato}}, {{cargo}}, número {{numero}}:
+{{materiais}}
+Se um dia não quiser mais receber, me avisa que apago seu contato.
+Propaganda de {{candidato}} — CNPJ {{cnpj}}`;
 
 describe('horaLocal / saudacao — precisa respeitar o fuso de Rondônia', () => {
   it('converte UTC para a hora de Porto Velho (UTC−4)', () => {
@@ -96,19 +110,22 @@ describe('primeiroNomeDe — planilha de campanha vem suja', () => {
 });
 
 describe('montarTexto', () => {
-  it('substitui todas as variáveis', () => {
+  it('a Permissão declara a chapa inteira', () => {
     const texto = montarTexto(PERMISSOES[0], CTX);
     expect(texto).toContain('Bom dia, João!');
     expect(texto).toContain('Aqui é Lucas.');
-    expect(texto).toContain('Fulano de Tal');
-    expect(texto).toContain('deputado federal');
+    // É isto que torna o consentimento específico: a pessoa lê de quem vai
+    // receber material ANTES de dizer "pode".
+    expect(texto).toContain('Fulano de Tal (deputado federal) e Beltrana Souza (governador)');
     expect(texto).not.toMatch(/\{\{|\}\}/);
   });
 
-  it('monta o Material com o link rastreado', () => {
+  it('o Material se identifica sozinho e lista as peças', () => {
     const texto = montarTexto(MATERIAL, CTX);
-    expect(texto).toContain('https://lnk.exemplo.br/r/abc123');
-    expect(texto).toContain('nº 12345');
+    expect(texto).toContain('Fulano de Tal, deputado federal, número 1234');
+    expect(texto).toContain('Santinho: https://lnk.exemplo.br/r/abc123');
+    expect(texto).toContain('Propostas: https://lnk.exemplo.br/r/def456');
+    expect(texto).toContain('CNPJ 12.345.678/0001-90');
     expect(texto).not.toMatch(/\{\{|\}\}/);
   });
 
@@ -163,15 +180,43 @@ describe('validarModelo — os textos oficiais do documento precisam passar', ()
     expect(podeSalvar(validarModelo('material', MATERIAL))).toBe(true);
   });
 
-  it('Material só avisa (sem bloquear) que não repete a origem do contato', () => {
-    const p = validarModelo('material', MATERIAL);
-    expect(p.map((x) => x.codigo)).toContain('falta_mencao_apoiador');
-    expect(p.find((x) => x.codigo === 'falta_mencao_apoiador')?.bloqueia).toBe(false);
+  it('o Material oficial traz o CNPJ, então não gera o aviso', () => {
+    expect(validarModelo('material', MATERIAL).map((x) => x.codigo)).not.toContain('falta_cnpj');
+  });
+
+  it('Material sem CNPJ avisa, mas não impede salvar', () => {
+    const semCnpj = MATERIAL.replace(' — CNPJ {{cnpj}}', '');
+    const p = validarModelo('material', semCnpj);
+    expect(p.map((x) => x.codigo)).toContain('falta_cnpj');
+    expect(p.find((x) => x.codigo === 'falta_cnpj')?.bloqueia).toBe(false);
+    expect(podeSalvar(p)).toBe(true);
   });
 
   it('etapas simples não exigem os blocos travados', () => {
     expect(podeSalvar(validarModelo('saida', 'Tranquilo, {{primeiro_nome}}. Já tirei seu número da lista.'))).toBe(true);
     expect(podeSalvar(validarModelo('quer_ajudar', 'Que ótimo, {{primeiro_nome}}!'))).toBe(true);
+  });
+});
+
+describe('listarChapa — é o que faz o consentimento ser específico', () => {
+  it.each([
+    [[{ nome: 'A', cargo: 'deputado_federal' }], 'A (deputado federal)'],
+    [[{ nome: 'A', cargo: 'deputado_federal' }, { nome: 'B', cargo: 'governador' }],
+     'A (deputado federal) e B (governador)'],
+    [[{ nome: 'A', cargo: 'deputado_federal' }, { nome: 'B', cargo: 'governador' },
+      { nome: 'C', cargo: 'senador' }],
+     'A (deputado federal), B (governador) e C (senador)'],
+  ])('%j → %s', (chapa, esperado) => {
+    expect(listarChapa(chapa)).toBe(esperado);
+  });
+
+  it('chapa vazia não produz texto solto', () => {
+    expect(listarChapa([])).toBe('');
+  });
+
+  it('não usa artigo antes do nome — o sistema não guarda o gênero', () => {
+    const texto = listarChapa([{ nome: 'Maria', cargo: 'governador' }]);
+    expect(texto).not.toMatch(/^[oa] /);
   });
 });
 
@@ -184,40 +229,58 @@ describe('validarModelo — travas que impedem salvar', () => {
     expect(codigos('permissao', '   ')).toEqual(['vazio']);
   });
 
-  it('Permissão sem candidato e cargo', () => {
-    expect(codigos('permissao', 'Oi {{primeiro_nome}}, um apoiador me passou seu contato. Posso mandar? Se não quiser eu apago.')).toContain('falta_candidato_cargo');
-  });
-
-  it('candidato e cargo em frases separadas', () => {
-    const texto = 'Oi {{primeiro_nome}}. Tô com {{candidato}}. Ele concorre a {{cargo}}. Um apoiador me passou seu contato. Se não quiser, apago.';
-    expect(codigos('permissao', texto)).toContain('candidato_cargo_separados');
+  // A trava central do multi-candidato: sem declarar a chapa, a pessoa
+  // autorizaria conhecendo um e receberia de vários.
+  it('Permissão sem declarar a chapa', () => {
+    const texto = 'Oi {{primeiro_nome}}, um apoiador me passou seu contato. Posso mandar? Se não quiser eu apago.';
+    expect(codigos('permissao', texto)).toContain('falta_chapa');
   });
 
   it('Permissão sem a menção de como chegamos no contato', () => {
-    const texto = 'Oi {{primeiro_nome}}, tô com {{candidato}} pra {{cargo}}. Posso mandar o material? Se não quiser, apago seu número.';
+    const texto = 'Oi {{primeiro_nome}}, tô com {{candidatos}}. Posso mandar o material? Se não quiser, apago seu número.';
     expect(codigos('permissao', texto)).toContain('falta_mencao_apoiador');
   });
 
   it('Permissão sem a frase de parar e apagar', () => {
-    const texto = 'Oi {{primeiro_nome}}, tô com {{candidato}} pra {{cargo}} e um apoiador me passou seu contato. Posso mandar o material?';
+    const texto = 'Oi {{primeiro_nome}}, tô com {{candidatos}} e um apoiador me passou seu contato. Posso mandar o material?';
     expect(codigos('permissao', texto)).toContain('falta_frase_parar');
   });
 
   it('Permissão com link', () => {
-    const comVariavel = 'Oi {{primeiro_nome}}, {{candidato}} pra {{cargo}}, um apoiador me passou seu contato: {{link}}. Se não quiser, apago.';
-    const comUrl = 'Oi {{primeiro_nome}}, {{candidato}} pra {{cargo}}, um apoiador me passou seu contato: https://x.br. Se não quiser, apago.';
-    expect(codigos('permissao', comVariavel)).toContain('link_na_permissao');
-    expect(codigos('permissao', comUrl)).toContain('link_na_permissao');
+    const base = 'Oi {{primeiro_nome}}, {{candidatos}}, um apoiador me passou seu contato';
+    expect(codigos('permissao', `${base}: {{link}}. Se não quiser, apago.`)).toContain('link_na_permissao');
+    expect(codigos('permissao', `${base}: {{materiais}}. Se não quiser, apago.`)).toContain('link_na_permissao');
+    expect(codigos('permissao', `${base}: https://x.br. Se não quiser, apago.`)).toContain('link_na_permissao');
   });
 
   it('Permissão com emoji', () => {
-    const texto = 'Oi {{primeiro_nome}} 😊, tô com {{candidato}} pra {{cargo}} e um apoiador me passou seu contato. Se não quiser, apago.';
+    const texto = 'Oi {{primeiro_nome}} 😊, tô com {{candidatos}} e um apoiador me passou seu contato. Se não quiser, apago.';
     expect(codigos('permissao', texto)).toContain('emoji_na_permissao');
   });
 
-  it('Material sem o link rastreado', () => {
-    const texto = 'Que bom! Material do {{candidato}} pra {{cargo}}. Se não quiser mais, apago seu contato.';
+  it('Material sem candidato e cargo — cada peça precisa se identificar', () => {
+    const texto = 'Que bom! Olha o material, número {{numero}}: {{materiais}}. Se não quiser mais, apago seu contato.';
+    expect(codigos('material', texto)).toContain('falta_candidato_cargo');
+  });
+
+  it('Material com candidato e cargo em frases separadas', () => {
+    const texto = 'Material de {{candidato}}. Ele concorre a {{cargo}}, número {{numero}}: {{materiais}}. Se não quiser, apago.';
+    expect(codigos('material', texto)).toContain('candidato_cargo_separados');
+  });
+
+  it('Material sem o número de urna', () => {
+    const texto = 'Material de {{candidato}}, {{cargo}}: {{materiais}}. Se não quiser mais, apago seu contato.';
+    expect(codigos('material', texto)).toContain('falta_numero');
+  });
+
+  it('Material sem link rastreado', () => {
+    const texto = 'Material de {{candidato}}, {{cargo}}, número {{numero}}. Se não quiser mais, apago seu contato.';
     expect(codigos('material', texto)).toContain('falta_link');
+  });
+
+  it('Material aceita {{link}} no lugar de {{materiais}}', () => {
+    const texto = 'Material de {{candidato}}, {{cargo}}, número {{numero}}: {{link}}. Se não quiser, apago.';
+    expect(codigos('material', texto)).not.toContain('falta_link');
   });
 
   it('variável inventada', () => {

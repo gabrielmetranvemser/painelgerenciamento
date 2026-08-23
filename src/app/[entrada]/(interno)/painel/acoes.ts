@@ -1,10 +1,11 @@
 'use server';
 
 import { criarClienteServidor } from '@/lib/supabase/server';
-import { montarTexto, primeiroNomeDe, type EtapaMensagem } from '@/lib/mensagem-etapas';
+import { montarTexto, primeiroNomeDe } from '@/lib/mensagem-etapas';
 import { urlWhatsApp } from '@/lib/telefone';
 import type {
-  EtapaMsg, FilaStatus, RespostaAbertura, RespostaFila, RespostaResultado, Resultado,
+  CargoEleitoral, EtapaMsg, FilaStatus, RespostaAbertura, RespostaFila,
+  RespostaResultado, Resultado,
 } from '@/lib/tipos-banco';
 
 export type MensagemPronta = {
@@ -13,8 +14,19 @@ export type MensagemPronta = {
   variacaoId: string;
   texto: string;
   urlWhatsApp: string;
+  /** O candidato desta mensagem, quando ela é de um só. */
+  candidato: { id: string; nome: string; cargo: string } | null;
 };
 export type MensagemErro = { ok: false; motivo: string };
+
+export type CandidatoDaChapa = {
+  id: string;
+  nome: string;
+  cargo: CargoEleitoral;
+  numero: string;
+  partido: string | null;
+  principal: boolean;
+};
 
 /** Pede o próximo contato. Todas as travas são revalidadas no servidor. */
 export async function pegarProximo(chipId: string): Promise<RespostaFila> {
@@ -31,46 +43,66 @@ export async function consultarFila(chipId: string): Promise<FilaStatus> {
   return data as FilaStatus;
 }
 
+type RespostaPreparar = {
+  ok: boolean;
+  motivo?: string;
+  modelo: string;
+  variacao_id: string;
+  contato: { primeiro_nome: string | null; nome: string | null; telefone_e164: string };
+  atendente_nome: string;
+  timezone: string;
+  municipio: string | null;
+  chapa: CandidatoDaChapa[];
+  candidato: {
+    id: string; nome: string; cargo: string; numero: string;
+    partido: string | null; cnpj: string | null;
+  } | null;
+  materiais: { titulo: string; tipo: string; token: string }[];
+};
+
 /**
- * Monta o texto de uma etapa para um contato.
+ * Monta o texto de uma etapa.
  *
  * O banco devolve o MODELO com as variáveis; a substituição acontece aqui, com
  * a mesma função que src/lib/mensagem.test.ts cobre. O texto nunca é montado no
  * navegador: o cliente não deve conseguir alterar o que o sistema considera
  * "a mensagem oficial" antes de ela ir para o log de auditoria.
+ *
+ * `candidatoId` é obrigatório nas etapas de candidato (material e convite). O
+ * servidor recusa se aquele candidato não foi declarado na permissão daquele
+ * contato — é a trava do escopo do consentimento.
  */
 export async function prepararMensagem(
   contatoId: string,
   chipId: string,
   etapa: EtapaMsg,
+  candidatoId?: string | null,
 ): Promise<MensagemPronta | MensagemErro> {
   const supabase = await criarClienteServidor();
   const { data, error } = await supabase.rpc('preparar_mensagem', {
     p_contato_id: contatoId,
     p_chip_id: chipId,
     p_etapa: etapa,
+    p_candidato_id: candidatoId ?? null,
   });
   if (error) throw new Error(error.message);
 
-  const r = data as {
-    ok: boolean; motivo?: string; modelo: string; variacao_id: string;
-    contato: { primeiro_nome: string | null; nome: string | null; telefone_e164: string };
-    atendente_nome: string; candidato: string; cargo: string; numero: string;
-    timezone: string; municipio: string | null;
-    token_material: string | null; token_canal: string | null;
-  };
-
+  const r = data as RespostaPreparar;
   if (!r.ok) return { ok: false, motivo: r.motivo ?? 'erro' };
 
   const base = process.env.LINK_BASE_URL ?? '';
   const texto = montarTexto(r.modelo, {
     primeiroNome: r.contato.primeiro_nome ?? primeiroNomeDe(r.contato.nome),
     nomeAtendente: r.atendente_nome,
-    candidato: r.candidato,
-    cargo: r.cargo,
-    numero: r.numero,
-    link: r.token_material ? `${base}/r/${r.token_material}` : null,
-    linkGrupo: r.token_canal ? `${base}/r/${r.token_canal}` : null,
+    chapa: r.chapa.map((c) => ({
+      nome: c.nome, cargo: c.cargo, numero: c.numero, partido: c.partido,
+    })),
+    candidato: r.candidato?.nome ?? null,
+    cargo: r.candidato?.cargo ?? null,
+    numero: r.candidato?.numero ?? null,
+    partido: r.candidato?.partido ?? null,
+    cnpj: r.candidato?.cnpj ?? null,
+    materiais: r.materiais.map((m) => ({ titulo: m.titulo, url: `${base}/r/${m.token}` })),
     municipio: r.municipio,
     agora: new Date(),
     timezone: r.timezone,
@@ -78,11 +110,32 @@ export async function prepararMensagem(
 
   return {
     ok: true,
-    etapa: etapa as EtapaMensagem,
+    etapa,
     variacaoId: r.variacao_id,
     texto,
     urlWhatsApp: urlWhatsApp(r.contato.telefone_e164, texto),
+    candidato: r.candidato
+      ? { id: r.candidato.id, nome: r.candidato.nome, cargo: r.candidato.cargo }
+      : null,
   };
+}
+
+/** A chapa do atendente, para a tela oferecer um botão de material por candidato. */
+export async function carregarChapa(): Promise<CandidatoDaChapa[]> {
+  const supabase = await criarClienteServidor();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase.rpc('chapa_do_atendente', { p_atendente: user.id });
+  if (error) throw new Error(error.message);
+
+  return ((data ?? []) as {
+    candidato_id: string; nome_urna: string; cargo: CargoEleitoral;
+    numero: string; partido_sigla: string | null; principal: boolean;
+  }[]).map((c) => ({
+    id: c.candidato_id, nome: c.nome_urna, cargo: c.cargo,
+    numero: c.numero, partido: c.partido_sigla, principal: c.principal,
+  }));
 }
 
 /** Marca que a conversa foi aberta. Idempotente: duplo clique não conta 2x. */
@@ -92,6 +145,7 @@ export async function registrarAbertura(
   etapa: EtapaMsg,
   texto: string,
   variacaoId: string,
+  candidatoId?: string | null,
 ): Promise<RespostaAbertura> {
   const supabase = await criarClienteServidor();
   const { data, error } = await supabase.rpc('registrar_abertura', {
@@ -100,6 +154,7 @@ export async function registrarAbertura(
     p_etapa: etapa,
     p_texto: texto,
     p_variacao_id: variacaoId,
+    p_candidato_id: candidatoId ?? null,
   });
   if (error) throw new Error(error.message);
   return data as RespostaAbertura;

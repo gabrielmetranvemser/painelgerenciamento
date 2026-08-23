@@ -110,8 +110,10 @@ begin
 
   -- ── 4c. preparar_mensagem cria a interação antes; a 1ª abertura de OUTRA
   --        etapa não pode se declarar repetida por causa disso ──────────────
-  perform public.preparar_mensagem(v_contato, v_chip, 'material');
-  v_r := public.registrar_abertura(v_contato, v_chip, 'material', 'material 1');
+  -- Usa 'quem_passou' porque as etapas de candidato (material e convite) exigem
+  -- candidato declarado, e aqui o que se mede é a idempotência, não isso.
+  perform public.preparar_mensagem(v_contato, v_chip, 'quem_passou');
+  v_r := public.registrar_abertura(v_contato, v_chip, 'quem_passou', 'quem passou 1');
   if not (v_r->>'ja_registrado')::boolean then
     raise notice '  ✅ 4c. primeira abertura não é confundida com repetição';
   else raise warning '  ❌ 4c. primeira abertura veio marcada como repetida: %', v_r; v_falhas := v_falhas + 1;

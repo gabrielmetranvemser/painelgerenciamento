@@ -11,7 +11,10 @@ cd "$(dirname "$0")/../.."
 
 : "${SUPABASE_DB_URL:?defina SUPABASE_DB_URL (está no .env.local)}"
 export PGCONNECT_TIMEOUT=20
-PSQL=(psql "$SUPABASE_DB_URL" -qX)
+# ⚠️ ON_ERROR_STOP=1 não é opcional: sem ele o psql sai com código 0 mesmo
+# quando uma instrução falha, e este runner reportava TUDO VERDE com teste
+# quebrado. Foi assim que a falha do 02_travas passou despercebida.
+PSQL=(psql "$SUPABASE_DB_URL" -qX -v ON_ERROR_STOP=1)
 
 falhou=0
 
@@ -21,6 +24,10 @@ echo "── Travas de servidor ────────────────
 echo
 echo "── Automações ───────────────────────────────────────────────────────────"
 "${PSQL[@]}" -f supabase/tests/03_automacoes.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
+
+echo
+echo "── Consentimento e roteamento ───────────────────────────────────────────"
+"${PSQL[@]}" -f supabase/tests/06_consentimento.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
 
 echo
 echo "── Candidatos e atribuição ──────────────────────────────────────────────"
