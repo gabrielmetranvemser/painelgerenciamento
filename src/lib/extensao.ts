@@ -50,7 +50,24 @@ export async function pacoteDaExtensao(): Promise<{ nome: string; bytes: Buffer 
   const zip = new JSZip();
   const raiz = join(process.cwd(), ORIGEM);
 
-  for (const caminho of await arquivos(raiz)) {
+  let lista: string[];
+  try {
+    lista = await arquivos(raiz);
+  } catch {
+    // Acontece se a pasta não for empacotada junto com a função. O rastreador
+    // do Next segue `import`, e aqui a leitura é por caminho — quem garante é
+    // o `outputFileTracingIncludes` do next.config.ts. Erro claro, porque o
+    // sintoma seria "o download não funciona" e mais nada.
+    throw new Error(
+      `A pasta ${ORIGEM}/ não chegou ao servidor (${raiz}). ` +
+        'Confira outputFileTracingIncludes em next.config.ts.',
+    );
+  }
+  if (lista.length === 0) {
+    throw new Error(`A pasta ${ORIGEM}/ chegou vazia — não há o que empacotar.`);
+  }
+
+  for (const caminho of lista) {
     const nome = relative(raiz, caminho).split(sep).join('/');
     // config.js e o LEIA-ME são gerados/omitidos abaixo.
     if (nome === 'config.js' || nome === 'LEIA-ME.md') continue;

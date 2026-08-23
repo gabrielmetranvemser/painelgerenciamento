@@ -46,9 +46,14 @@ export async function GET(
       },
     });
   } catch (erro) {
-    return NextResponse.json(
-      { erro: erro instanceof Error ? erro.message : 'falha ao montar o pacote' },
-      { status: 500 },
+    const motivo = erro instanceof Error ? erro.message : 'falha ao montar o pacote';
+    // Vai para o log do servidor: quem clica é o atendente, e a causa é sempre
+    // de configuração — ele não tem o que fazer com a mensagem crua.
+    console.error('[extensao] não consegui montar o pacote:', motivo);
+    return new NextResponse(
+      `Não consegui montar o pacote da extensão.\n\n${motivo}\n\n` +
+        'Avise o gestor — é configuração do servidor, não do seu computador.',
+      { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } },
     );
   }
 }
