@@ -23,6 +23,10 @@ echo "── Automações ──────────────────
 "${PSQL[@]}" -f supabase/tests/03_automacoes.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
 
 echo
+echo "── Candidatos e atribuição ──────────────────────────────────────────────"
+"${PSQL[@]}" -f supabase/tests/05_candidatos.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
+
+echo
 echo "── Perfil do contato ────────────────────────────────────────────────────"
 "${PSQL[@]}" -f supabase/tests/04_perfil.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
 
