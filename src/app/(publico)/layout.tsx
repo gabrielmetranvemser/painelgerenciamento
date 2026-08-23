@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 
 /**
- * Páginas que o eleitor abre: /kit, /site, /m/[token], /privacidade.
+ * Páginas que o eleitor abre: /m/[token] e /privacidade. A página de cada
+ * candidato (/{slug}) tem layout próprio, com o mesmo tratamento.
  *
  * Diferente do painel, elas acompanham a preferência do aparelho. Quem chega
  * aqui está no celular dele, quase sempre em modo claro — e página clara lê

@@ -12,8 +12,12 @@ type Caso = { quando: string; responda?: string; marque?: string };
 const CASOS: Caso[] = [
   { quando: '"Pode" / "manda" / "sim"', responda: undefined, marque: 'Autorizou (o painel entrega o material)' },
   { quando: '"Não" / "não quero" / "para"', marque: 'Pediu saída' },
+  // A resposta certa depende de onde a pessoa veio, e quem sabe isso é o
+  // painel: a etiqueta no alto do cartão diz "Lista fria" ou "Cadastrou no
+  // site". Responder "foi um apoiador" a quem preencheu o formulário é dizer
+  // à dona do dado uma coisa que não aconteceu.
   { quando: '"Quem te passou meu número?"',
-    responda: 'Foi um apoiador que tem seu contato. Se preferir, apago seu número agora e não te chamo mais.',
+    responda: 'Confira a etiqueta do contato. Lista fria: "Foi um apoiador que tem seu contato." Cadastrou no site ou Pediu o kit: "Você mesmo deixou no site, pedindo o material." Nos dois casos: "Se preferir, apago seu número agora."',
     marque: 'Se pedir para sair: Pediu saída' },
   { quando: '"Já voto em outro"',
     responda: 'Tudo bem, respeito. Vou tirar seu contato da lista.',

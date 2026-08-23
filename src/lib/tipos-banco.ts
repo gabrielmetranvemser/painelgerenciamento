@@ -39,17 +39,18 @@ export type Config = {
   hora_fim: number;
   intervalo_seg: number;
   lease_minutos: number;
-  candidato: string;
-  cargo: string;
-  numero: string;
   termo_texto: string;
   termo_versao: number;
-  material_titulo: string;
-  material_texto: string;
-  kit_ativo: boolean;
+  /** Quem responde pelos dados (LGPD). É da operação, não de um candidato. */
   responsavel_dados: string;
   atualizado_em: string;
 };
+
+/**
+ * `config` guarda só o que é da OPERAÇÃO. Nome, cargo, número, material e
+ * página de cada candidatura moram em `candidatos` e `materiais` — cópia aqui
+ * já saiu de sincronia uma vez e a página pública mostrou o candidato errado.
+ */
 
 export type Municipio = { id: number; uf: string; nome: string };
 export type DiaBloqueado = { data: string; motivo: string; criado_em: string };
@@ -139,13 +140,15 @@ export type Interacao = {
 
 export type Modelo = { id: string; etapa: EtapaMsg; nome: string; ativo: boolean; atualizado_em: string };
 export type Variacao = { id: string; modelo_id: string; texto: string; ordem: number; ativa: boolean; criado_em: string };
-export type Destino = { id: string; chave: string; nome: string; url: string; atualizado_em: string };
+/**
+ * Link rastreado. Aponta para exatamente UM alvo:
+ * uma peça (`material_id`) ou a página de material do candidato (`candidato_id`).
+ */
 export type Link = {
   token: string;
   contato_id: string;
-  /** Exatamente um dos dois: um material de candidato, ou um destino global. */
   material_id: string | null;
-  destino_id: string | null;
+  candidato_id: string | null;
   criado_em: string;
 };
 
@@ -168,6 +171,10 @@ export type Captacao = {
   municipio_id: number | null;
   endereco: string | null;
   itens: string[] | null;
+  /** De qual candidatura veio o cadastro. Nulo nas páginas genéricas. */
+  candidato_id: string | null;
+  /** A frase que a pessoa marcou, copiada no ato. É a prova do que foi aceito. */
+  texto_aceite: string | null;
   aceite_em: string;
   ip: string | null;
   user_agent: string | null;
@@ -259,6 +266,26 @@ export type ContatoCandidato = {
   criado_em: string;
 };
 
+/**
+ * O que ainda falta entregar a um contato, candidato por candidato.
+ * Sai de `contato_candidato` — a lista congelada na permissão, não a chapa
+ * atual do atendente.
+ */
+export type EntregaDoContato = {
+  candidato_id: string;
+  nome_urna: string;
+  cargo: CargoEleitoral;
+  numero: string;
+  partido_sigla: string | null;
+  ativo: boolean;
+  principal: boolean;
+  material_enviado_em: string | null;
+  /** Peças ativas. Zero significa mensagem que anuncia material e não traz link. */
+  materiais: number;
+  /** Peças do tipo 'canal'. Zero desabilita o convite. */
+  canais: number;
+};
+
 // ── Views ────────────────────────────────────────────────────────────────────
 
 export type Resumo = {
@@ -281,6 +308,16 @@ export type DesempenhoAtendente = {
   atendente_id: string; atendente: string; ativo: boolean;
   hoje: number; total_abordados: number; autorizou: number; pediu_saida: number;
   invalido: number; quer_ajudar: number; sem_resposta: number; cliques_reais: number;
+};
+
+export type CaptacaoPorCandidato = {
+  candidato_id: string; nome_urna: string; slug: string;
+  cadastros: number; pediram_kit: number; viraram_contato: number;
+  receberam_material: number; ultimo_em: string | null;
+};
+
+export type LeadOrfao = {
+  candidato_id: string; nome_urna: string; slug: string; na_fila: number;
 };
 
 export type FunilMunicipio = {

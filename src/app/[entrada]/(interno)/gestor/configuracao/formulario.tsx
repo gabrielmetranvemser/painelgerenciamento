@@ -2,11 +2,11 @@
 
 import { useActionState, useState, useTransition } from 'react';
 import { useFormStatus } from 'react-dom';
+import Link from 'next/link';
+import { rotas } from '@/lib/links-internos';
 import { Aviso, Botao, Campo, Cartao } from '@/components/ui';
-import type { Config, DiaBloqueado, Destino } from '@/lib/tipos-banco';
-import {
-  adicionarDiaBloqueado, removerDiaBloqueado, salvarConfig, salvarDestino,
-} from './acoes';
+import type { Config, DiaBloqueado } from '@/lib/tipos-banco';
+import { adicionarDiaBloqueado, removerDiaBloqueado, salvarConfig } from './acoes';
 
 function Salvar() {
   const { pending } = useFormStatus();
@@ -23,24 +23,32 @@ function Bloco({ titulo, dica, children }: { titulo: string; dica?: string; chil
   );
 }
 
+/**
+ * Aqui mora só o que vale para TODA a operação.
+ *
+ * Nome, cargo, número, materiais e página de cada candidatura ficam em
+ * Gestor → Candidatos, e em nenhum outro lugar. Já existiu uma cópia disso
+ * nesta tela, e o resultado foi a página pública anunciando um candidato
+ * enquanto o atendente mandava material de outro.
+ */
 export function FormularioConfig({
-  config, dias, destinos,
+  config, dias, entrada,
 }: {
-  config: Config; dias: DiaBloqueado[]; destinos: Destino[];
+  config: Config; dias: DiaBloqueado[]; entrada: string;
 }) {
   const [estado, acao] = useActionState(salvarConfig, null);
 
   return (
     <div className="space-y-5">
-      <form action={acao} className="space-y-5">
-        <Bloco titulo="A campanha" dica="Alimenta as variáveis {{candidato}}, {{cargo}} e {{numero}} das mensagens.">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Campo rotulo="Candidato" name="candidato" defaultValue={config.candidato} placeholder="Nome de urna" />
-            <Campo rotulo="Cargo" name="cargo" defaultValue={config.cargo} placeholder="deputado federal" />
-            <Campo rotulo="Número" name="numero" defaultValue={config.numero} placeholder="12345" />
-          </div>
-        </Bloco>
+      <Aviso tom="info">
+        Candidato, número, materiais e a página pública de cada candidatura ficam em{' '}
+        <Link href={rotas(entrada).gestorCandidatos} className="underline underline-offset-4">
+          Candidatos
+        </Link>
+        . Esta tela é só o que vale para a operação inteira.
+      </Aviso>
 
+      <form action={acao} className="space-y-5">
         <Bloco titulo="Ritmo da operação"
                dica="A rampa de aquecimento pode ser mais restritiva que isto nos primeiros dias de cada número. O sistema sempre usa o limite mais apertado dos dois.">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -62,19 +70,6 @@ export function FormularioConfig({
           </div>
         </Bloco>
 
-        <Bloco titulo="Página do material" dica="É o que a pessoa vê ao abrir o link que recebeu.">
-          <Campo rotulo="Título" name="material_titulo" defaultValue={config.material_titulo} />
-          <label className="mt-4 block">
-            <span className="mb-1.5 block text-sm font-medium">Texto</span>
-            <textarea name="material_texto" rows={6} defaultValue={config.material_texto}
-                      className="w-full resize-y rounded-lg border border-borda bg-superficie p-3 text-sm" />
-          </label>
-          <label className="mt-4 flex items-center gap-2">
-            <input type="checkbox" name="kit_ativo" defaultChecked={config.kit_ativo}
-                   className="size-4 accent-[var(--acento)]" />
-            <span className="text-sm">Página do kit no ar (/kit)</span>
-          </label>
-        </Bloco>
 
         <Bloco titulo="Termo de uso do atendente"
                dica="Cada atendente precisa aceitar antes de entrar na fila. O aceite fica gravado com data e hora.">
@@ -93,7 +88,6 @@ export function FormularioConfig({
       </form>
 
       <DiasBloqueados dias={dias} />
-      <Destinos destinos={destinos} />
     </div>
   );
 }
@@ -146,40 +140,3 @@ function DiasBloqueados({ dias }: { dias: DiaBloqueado[] }) {
   );
 }
 
-function Destinos({ destinos }: { destinos: Destino[] }) {
-  return (
-    <Bloco titulo="Para onde os links levam"
-           dica="Você troca o destino sem invalidar os links já enviados. Use /m/{token} para a nossa página, que tem descadastro e aviso de privacidade.">
-      <div className="space-y-4">
-        {destinos.map((d) => <LinhaDestino key={d.id} destino={d} />)}
-      </div>
-    </Bloco>
-  );
-}
-
-function LinhaDestino({ destino }: { destino: Destino }) {
-  const [url, setUrl] = useState(destino.url);
-  const [erro, setErro] = useState<string | null>(null);
-  const [salvo, setSalvo] = useState(false);
-  const [ocupado, iniciar] = useTransition();
-
-  return (
-    <div>
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-64 flex-1">
-          <Campo rotulo={destino.nome} value={url}
-                 onChange={(e) => { setUrl(e.target.value); setSalvo(false); }} />
-        </div>
-        <Botao disabled={url === destino.url || ocupado}
-          onClick={() => iniciar(async () => {
-            const r = await salvarDestino(destino.chave, url);
-            if (r.ok) { setSalvo(true); setErro(null); } else setErro(r.erro);
-          })}>
-          Salvar
-        </Botao>
-        {salvo && <span className="pb-3 text-xs text-ok">salvo ✓</span>}
-      </div>
-      {erro && <Aviso tom="erro" className="mt-2">{erro}</Aviso>}
-    </div>
-  );
-}

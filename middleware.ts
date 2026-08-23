@@ -13,6 +13,32 @@ import { ajustarCookie } from '@/lib/supabase/cookies';
  * banco — repetir aqui custaria uma ida ao banco por requisição.
  */
 export async function middleware(request: NextRequest) {
+  const chave = process.env.PAINEL_CHAVE ?? '';
+  const caminho = request.nextUrl.pathname;
+
+  if (!chave) return NextResponse.next({ request });
+
+  const entrar = `/${chave}/entrar`;
+  const interna = caminho.startsWith(`/${chave}/`);
+
+  // O pacote da extensão leva dentro o endereço do painel, com a chave.
+  //
+  // A proteção que vale é o NOME do arquivo, que deriva da própria chave: achar
+  // o zip é tão difícil quanto achar o painel, e quem já tem a chave não ganha
+  // nada baixando o arquivo.
+  //
+  // Esta checagem é a segunda camada, e ela NÃO é confiável em
+  // desenvolvimento: o servidor de dev entrega arquivo de `public/` antes de
+  // passar por aqui. Em produção ela pega. Não conte com ela como se fosse a
+  // tranca.
+  const pacote = caminho === `/${chave}-ext.zip`;
+
+  // Endereço público — a página de um candidato, por exemplo. Não há sessão
+  // para renovar e `getUser()` é uma ida ao Supabase por visita. A página de
+  // candidato é a mais acessada do sistema e é aberta por gente que nunca vai
+  // ter conta: pagar autenticação nela seria pagar por nada.
+  if (!interna && !pacote) return NextResponse.next({ request });
+
   let resposta = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -35,27 +61,7 @@ export async function middleware(request: NextRequest) {
   // Não remover: é esta chamada que renova o token antes de expirar.
   const { data: { user } } = await supabase.auth.getUser();
 
-  const chave = process.env.PAINEL_CHAVE ?? '';
-  const caminho = request.nextUrl.pathname;
-
-  if (!chave) return resposta;
-
-  const entrar = `/${chave}/entrar`;
-  const interna = caminho.startsWith(`/${chave}/`);
-
-  // O pacote da extensão leva dentro o endereço do painel, com a chave.
-  //
-  // A proteção que vale é o NOME do arquivo, que deriva da própria chave: achar
-  // o zip é tão difícil quanto achar o painel, e quem já tem a chave não ganha
-  // nada baixando o arquivo.
-  //
-  // Esta checagem é a segunda camada, e ela NÃO é confiável em
-  // desenvolvimento: o servidor de dev entrega arquivo de `public/` antes de
-  // passar por aqui. Em produção ela pega. Não conte com ela como se fosse a
-  // tranca.
-  const pacote = caminho === `/${chave}-ext.zip`;
-
-  if ((interna || pacote) && !user && caminho !== entrar) {
+  if (!user && caminho !== entrar) {
     const url = request.nextUrl.clone();
     url.pathname = entrar;
     url.search = '';

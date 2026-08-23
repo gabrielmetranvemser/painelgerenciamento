@@ -21,6 +21,10 @@ export type DadosCaptacao = {
   municipioId: number;
   endereco?: string | null;
   itens?: string[] | null;
+  /** De qual candidatura veio o cadastro. É o dono do lead. */
+  candidatoId: string | null;
+  /** A frase que a pessoa marcou, copiada no ato. É a prova do que foi aceito. */
+  textoAceite: string;
   ip: string | null;
   userAgent: string | null;
 };
@@ -60,6 +64,8 @@ export async function registrarCaptacao(dados: DadosCaptacao): Promise<Resultado
       municipio_id: dados.municipioId,
       endereco: dados.endereco || null,
       itens: dados.itens?.length ? dados.itens : null,
+      candidato_id: dados.candidatoId,
+      texto_aceite: dados.textoAceite,
       ip: dados.ip,
       user_agent: dados.userAgent,
     })
@@ -83,7 +89,7 @@ export async function registrarCaptacao(dados: DadosCaptacao): Promise<Resultado
     await supabase.from('alertas').insert({
       tipo: 'bloqueio_removido_por_optin',
       detalhe:
-        `Número estava bloqueado e voltou por cadastro em /${dados.origem} com aceite ` +
+        `Número estava bloqueado e voltou por cadastro próprio com aceite ` +
         `explícito (captação ${captacao?.id ?? '?'}, IP ${dados.ip ?? 'desconhecido'}).`,
     });
   }
@@ -105,6 +111,8 @@ export async function registrarCaptacao(dados: DadosCaptacao): Promise<Resultado
     telefone_e164: telefone.e164,
     chave_dedup: telefone.chaveDedup,
     municipio_id: dados.municipioId,
+    // Dono do lead: a fila só entrega este contato a quem atende este candidato.
+    ...(dados.candidatoId ? { candidato_origem_id: dados.candidatoId } : {}),
   };
 
   if (existente) {
@@ -134,6 +142,22 @@ export async function registrarCaptacao(dados: DadosCaptacao): Promise<Resultado
       .from('captacoes')
       .update({ virou_contato: true, contato_id: contatoId })
       .eq('id', captacao.id);
+  }
+
+  // 4. O candidato pedido já entra na lista de quem pode alcançar esta pessoa.
+  //
+  //    Normalmente essa lista nasce quando o atendente manda a permissão. Aqui
+  //    não precisa: a pessoa acabou de pedir o material DESTE candidato, por
+  //    escrito, com data, hora e IP. Isso é consentimento mais forte que o
+  //    "pode?" da conversa — exigir a permissão antes seria pedir de novo o que
+  //    ela já deu.
+  if (contatoId && dados.candidatoId) {
+    await supabase
+      .from('contato_candidato')
+      .upsert(
+        { contato_id: contatoId, candidato_id: dados.candidatoId },
+        { onConflict: 'contato_id,candidato_id', ignoreDuplicates: true },
+      );
   }
 
   return { ok: true, primeiroNome: primeiroNome ?? dados.nome };

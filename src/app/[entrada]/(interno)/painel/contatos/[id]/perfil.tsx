@@ -3,15 +3,17 @@
 import Link from 'next/link';
 import { useEffect, useState, useTransition } from 'react';
 import {
-  ArrowLeft, Check, Gift, History, MessageSquarePlus, MousePointerClick, Send,
+  ArrowLeft, Check, Gift, History, MessageSquarePlus, MousePointerClick, PackageOpen,
+  Radio, Send, Star,
 } from 'lucide-react';
 import { Avatar, Aviso, Botao, Cartao, EtiquetaOrigem, Pilula, Selecao, AreaTexto, cx } from '@/components/ui';
 import { formatarExibicao } from '@/lib/telefone';
 import {
-  RESULTADOS, type Chip, type Contato, type EtapaMsg, type Municipio, type Resultado,
+  RESULTADOS, ROTULO_CARGO,
+  type Chip, type Contato, type EntregaDoContato, type EtapaMsg, type Municipio, type Resultado,
 } from '@/lib/tipos-banco';
 import {
-  definirMunicipio, prepararMensagem, registrarAbertura, registrarResultado,
+  carregarEntregas, definirMunicipio, prepararMensagem, registrarAbertura, registrarResultado,
   type MensagemPronta,
 } from '@/app/[entrada]/(interno)/painel/acoes';
 import { carregarHistorico, registrarPedidoKit, type Historico } from './acoes';
@@ -33,15 +35,29 @@ const ROTULO_STATUS: Record<string, string> = {
   sem_resposta: 'Não respondeu', perdido: 'Perdido (o número caiu)',
 };
 
-/** Mensagens que fazem sentido mandar depois da primeira conversa. */
+/**
+ * Mensagens que valem para a conversa toda, sem dono.
+ *
+ * Material e convite ao canal NÃO estão aqui: são de um candidato específico e
+ * ganham a própria lista, montada a partir de quem foi declarado a esta pessoa.
+ */
 const MENSAGENS: { etapa: EtapaMsg; rotulo: string; dica: string }[] = [
-  { etapa: 'material', rotulo: 'Material', dica: 'link do material e convite ao canal' },
-  { etapa: 'convite_grupo', rotulo: 'Convite ao canal', dica: 'quando a pessoa pede para entrar' },
   { etapa: 'quem_passou', rotulo: 'Quem passou meu número', dica: 'quando ela pergunta de onde veio' },
   { etapa: 'quer_ajudar', rotulo: 'Quer ajudar', dica: 'quando se oferece para ajudar' },
   { etapa: 'encaminhamento', rotulo: 'Encaminhamento', dica: 'quando pede algo que não podemos prometer' },
   { etapa: 'saida', rotulo: 'Saída', dica: 'confirma que o contato saiu da lista' },
 ];
+
+/** Rótulo de cada etapa no histórico, incluindo as que são por candidato. */
+const ROTULO_ETAPA: Record<EtapaMsg, string> = {
+  permissao: 'Pedido de permissão',
+  material: 'Material',
+  convite_grupo: 'Convite ao canal',
+  quem_passou: 'Quem passou meu número',
+  quer_ajudar: 'Quer ajudar',
+  encaminhamento: 'Encaminhamento',
+  saida: 'Saída',
+};
 
 const ITENS_KIT = [
   { valor: 'santinho', rotulo: 'Santinho' },
@@ -52,6 +68,12 @@ const ITENS_KIT = [
 const MOTIVO: Record<string, string> = {
   saida_pedida_pela_pessoa:
     'Não dá. Quem pediu para sair foi a própria pessoa, pelo link. Isso só ela pode desfazer.',
+  candidato_nao_declarado:
+    'Esta pessoa não foi avisada deste candidato, então não dá para mandar o material dele. ' +
+    'Ela só autorizou o que estava escrito na primeira mensagem.',
+  candidato_inativo: 'Este candidato foi desativado pelo gestor.',
+  candidato_obrigatorio: 'Escolha de qual candidato é a mensagem.',
+  contato_bloqueado: 'Esta pessoa pediu para sair. Não dá para mandar mais nada.',
   dados_ja_apagados: 'Os dados desta pessoa já foram apagados. Não há o que corrigir.',
   contato_nao_e_seu: 'Este contato não está com você.',
   conversa_nao_aberta: 'Você ainda não abriu conversa com esta pessoa.',
@@ -65,6 +87,7 @@ export function Perfil({
   contato: Contato; chips: Chip[]; municipios: Municipio[]; atendente: string; entrada: string;
 }) {
   const [historico, setHistorico] = useState<Historico | null>(null);
+  const [entregas, setEntregas] = useState<EntregaDoContato[]>([]);
   const [status, setStatus] = useState(contato.status);
   const [mensagem, setMensagem] = useState<MensagemPronta | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -76,16 +99,18 @@ export function Perfil({
 
   useEffect(() => {
     void carregarHistorico(contato.id).then(setHistorico);
+    void carregarEntregas(contato.id).then(setEntregas);
   }, [contato.id]);
 
   function recarregar() {
     void carregarHistorico(contato.id).then(setHistorico);
+    void carregarEntregas(contato.id).then(setEntregas);
   }
 
-  function preparar(etapa: EtapaMsg) {
+  function preparar(etapa: EtapaMsg, candidatoId?: string) {
     setErro(null); setOk(null); setMensagem(null);
     iniciar(async () => {
-      const m = await prepararMensagem(contato.id, chipId, etapa);
+      const m = await prepararMensagem(contato.id, chipId, etapa, candidatoId ?? null);
       if (!m.ok) { setErro(MOTIVO[m.motivo] ?? `Não consegui montar a mensagem (${m.motivo}).`); return; }
       setMensagem(m);
     });
@@ -94,8 +119,12 @@ export function Perfil({
   function abrir() {
     if (!mensagem) return;
     window.open(mensagem.urlWhatsApp, JANELA_WA);
+    const enviada = mensagem;
     iniciar(async () => {
-      const r = await registrarAbertura(contato.id, chipId, mensagem.etapa, mensagem.texto, mensagem.variacaoId);
+      const r = await registrarAbertura(
+        contato.id, chipId, enviada.etapa, enviada.texto, enviada.variacaoId,
+        enviada.candidato?.id ?? null,
+      );
       if (!r.ok) { setErro(MOTIVO[r.motivo] ?? `O sistema não registrou o envio: ${r.motivo}`); return; }
       setOk('Envio registrado.');
       recarregar();
@@ -172,10 +201,17 @@ export function Perfil({
             </div>
           </Cartao>
 
+          <PorCandidato
+            entregas={entregas} ocupado={ocupado}
+            escolhido={mensagem?.candidato?.id ?? null}
+            etapaEscolhida={mensagem?.candidato ? mensagem.etapa : null}
+            aoPreparar={preparar}
+          />
+
           <Cartao className="p-6">
             <h2 className="mb-1 flex items-center gap-2 font-semibold"><MessageSquarePlus size={16} className="text-suave" /> Mandar outra mensagem</h2>
             <p className="mb-3 text-xs text-suave">
-              O texto sai pronto, com o link rastreado quando a mensagem tem link.
+              Valem para a conversa inteira, sem candidato. O texto sai pronto.
             </p>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {MENSAGENS.map((m) => (
@@ -231,7 +267,8 @@ export function Perfil({
             {historico.interacoes.map((i, k) => (
               <li key={k} className="border-l-2 border-borda pl-4">
                 <p className="text-sm font-medium">
-                  Você mandou: {MENSAGENS.find((m) => m.etapa === i.etapa)?.rotulo ?? i.etapa}
+                  Você mandou: {ROTULO_ETAPA[i.etapa] ?? i.etapa}
+                  {i.candidato && <span className="text-suave"> · {i.candidato}</span>}
                 </p>
                 <p className="text-xs text-suave">
                   {new Date(i.aberto_wa_em).toLocaleString('pt-BR')}
@@ -244,7 +281,8 @@ export function Perfil({
             {historico.cliques.map((c, k) => (
               <li key={`c${k}`} className="border-l-2 border-acento pl-4">
                 <p className="text-sm font-semibold text-acento">
-                  A pessoa abriu o link {c.destino === 'canal' ? 'do canal' : 'do material'}
+                  A pessoa abriu: {c.peca}
+                  {c.candidato && <span className="font-normal text-suave"> · {c.candidato}</span>}
                 </p>
                 <p className="text-xs text-suave">{new Date(c.quando).toLocaleString('pt-BR')}</p>
               </li>
@@ -257,6 +295,82 @@ export function Perfil({
         Atendido por {atendente}. Nunca anote em quem a pessoa vota — nem aqui, nem em lugar nenhum.
       </p>
     </div>
+  );
+}
+
+/* ── Mensagens que pertencem a um candidato ─────────────────────────────── */
+
+/**
+ * A lista sai de `contato_candidato`: quem foi declarado a ESTA pessoa. Não é
+ * a chapa atual do atendente — um candidato que entrou depois não pode alcançar
+ * quem autorizou sem saber dele.
+ */
+function PorCandidato({
+  entregas, ocupado, escolhido, etapaEscolhida, aoPreparar,
+}: {
+  entregas: EntregaDoContato[];
+  ocupado: boolean;
+  escolhido: string | null;
+  etapaEscolhida: EtapaMsg | null;
+  aoPreparar: (etapa: EtapaMsg, candidatoId: string) => void;
+}) {
+  return (
+    <Cartao className="p-6">
+      <h2 className="mb-1 flex items-center gap-2 font-semibold">
+        <PackageOpen size={16} className="text-suave" /> Material por candidato
+      </h2>
+      <p className="mb-3 text-xs text-suave">
+        Só aparecem os candidatos que esta pessoa ouviu na primeira mensagem.
+      </p>
+
+      {entregas.length === 0 ? (
+        <p className="text-sm text-suave">
+          Nenhum candidato liberado para esta pessoa ainda. Libera quando a primeira mensagem
+          — o pedido de permissão — é registrada.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {entregas.map((c) => {
+            const marcado = (etapa: EtapaMsg) => escolhido === c.candidato_id && etapaEscolhida === etapa;
+            return (
+              <div key={c.candidato_id}
+                   className="flex flex-wrap items-center gap-3 rounded-2xl border border-borda p-3.5">
+                <div className="mr-auto min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-semibold">
+                    {c.nome_urna}
+                    {c.principal && (
+                      <span title="Citado na primeira mensagem" className="text-acento">
+                        <Star size={12} fill="currentColor" />
+                      </span>
+                    )}
+                  </p>
+                  <p className="mt-0.5 text-xs text-suave">
+                    {ROTULO_CARGO[c.cargo]} · nº {c.numero}
+                    {c.material_enviado_em &&
+                      ` · material enviado em ${new Date(c.material_enviado_em).toLocaleDateString('pt-BR')}`}
+                  </p>
+                </div>
+
+                {!c.ativo && <Pilula cor="alerta">desativado</Pilula>}
+                {c.ativo && c.materiais === 0 && <Pilula cor="alerta">sem material</Pilula>}
+
+                <Botao variante={marcado('material') ? 'principal' : 'neutro'} tamanho="p"
+                       disabled={ocupado || !c.ativo || c.materiais === 0}
+                       onClick={() => aoPreparar('material', c.candidato_id)}>
+                  Material
+                </Botao>
+                <Botao variante={marcado('convite_grupo') ? 'principal' : 'neutro'} tamanho="p"
+                       disabled={ocupado || !c.ativo || c.canais === 0}
+                       title={c.canais === 0 ? 'Este candidato não tem canal cadastrado' : undefined}
+                       onClick={() => aoPreparar('convite_grupo', c.candidato_id)}>
+                  <Radio size={13} /> Canal
+                </Botao>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Cartao>
   );
 }
 

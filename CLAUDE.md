@@ -119,8 +119,9 @@ números grandes) e **Manrope** (interface).
 
 - **Interno** (`/painel`, `/gestor`): sempre escuro. É local de trabalho, o dia
   inteiro, muitas vezes num notebook barato com brilho baixo.
-- **Público** (`/kit`, `/site`, `/m`, `/privacidade`): acompanha a preferência
-  do aparelho, via a classe `publico` do layout `src/app/(publico)/`. Quem abre
+- **Público** (`/{slug}` do candidato, `/m`, `/privacidade`): acompanha a preferência
+  do aparelho, via a classe `publico` dos layouts `src/app/(publico)/` e
+  `src/app/[entrada]/(candidato)/`. Quem abre
   é o eleitor, quase sempre em modo claro, e página clara lê como documento
   oficial.
 

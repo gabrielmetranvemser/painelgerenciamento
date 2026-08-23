@@ -23,6 +23,8 @@ export const VARIAVEIS_CONHECIDAS = [
   'nome',
   /** A chapa inteira, com cargo de cada um. É o que a Permissão declara. */
   'candidatos',
+  /** Como chegamos até esta pessoa. Muda conforme a origem do contato. */
+  'origem',
   /** Os quatro abaixo são do candidato DAQUELA mensagem, no Material. */
   'candidato',
   'cargo',
@@ -48,9 +50,29 @@ export type CandidatoNaChapa = {
 
 export type MaterialComLink = { titulo: string; url: string };
 
+export type OrigemDoContato = 'site' | 'kit' | 'lista_fria';
+
+/**
+ * Como chegamos até a pessoa — a frase de {{origem}}.
+ *
+ * NÃO é editável pelo gestor de propósito. É uma afirmação de fato sobre a
+ * procedência do dado, e a pessoa tem direito de saber a verdade sobre isso.
+ * Com texto livre, bastava o gestor escrever "um apoiador me passou seu
+ * contato" numa mensagem só e ela sairia também para quem preencheu o
+ * formulário com o próprio dedo — dizendo a essa pessoa uma coisa que não
+ * aconteceu.
+ */
+const FRASE_ORIGEM: Record<OrigemDoContato, string> = {
+  lista_fria: 'um apoiador me passou seu contato',
+  site: 'você deixou seu contato no site pedindo o material',
+  kit: 'você pediu material pelo site',
+};
+
 export type ContextoMensagem = {
   /** primeiro nome do contato, já tratado por `primeiroNomeDe` */
   primeiroNome: string | null;
+  /** De onde veio o contato. Decide a frase de {{origem}}. */
+  origemContato?: OrigemDoContato | null;
   /** primeiro nome do ATENDENTE — a mensagem é assinada por ele, não pela campanha */
   nomeAtendente: string;
   /** A chapa do atendente, na ordem de leitura. Alimenta {{candidatos}}. */
@@ -206,6 +228,7 @@ export function montarTexto(template: string, ctx: ContextoMensagem): string {
     primeiro_nome: ctx.primeiroNome ?? '',
     nome: ctx.nomeAtendente,
     candidatos: listarChapa(ctx.chapa ?? []),
+    origem: FRASE_ORIGEM[ctx.origemContato ?? 'lista_fria'],
     candidato: ctx.candidato ?? '',
     cargo: ctx.cargo ? (ROTULO_CARGO[ctx.cargo] ?? ctx.cargo) : '',
     numero: ctx.numero ?? '',
@@ -234,7 +257,7 @@ export type CodigoProblema =
   | 'falta_candidato_cargo'
   | 'candidato_cargo_separados'
   | 'falta_numero'
-  | 'falta_mencao_apoiador'
+  | 'falta_origem'
   | 'falta_frase_parar'
   | 'falta_link'
   | 'falta_cnpj'
@@ -251,9 +274,6 @@ export type Problema = {
 };
 
 const MAX_LINHAS = 4;
-
-/** Menção de que o contato veio de um apoiador — é como explicamos ter o número. */
-const RE_APOIADOR = /apoiador|apoiadora|apoiante|indicou|me passou seu contato|me indicou/i;
 
 /** Frase que oferece parar e apagar — é o direito de saída, e não é opcional. */
 const RE_PARAR =
@@ -333,11 +353,15 @@ export function validarModelo(etapa: Etapa, texto: string): Problema[] {
           'A pessoa tem que autorizar sabendo de quem vai receber material — é isso que torna o "pode" dela válido.',
       });
     }
-    if (!RE_APOIADOR.test(t)) {
+    if (!t.includes('{{origem}}')) {
       problemas.push({
-        codigo: 'falta_mencao_apoiador',
+        codigo: 'falta_origem',
         bloqueia: true,
-        mensagem: 'A Permissão precisa explicar como você chegou no contato (ex.: "um apoiador me passou seu contato").',
+        mensagem:
+          'A Permissão precisa usar {{origem}}, que explica como você chegou no contato. ' +
+          'É variável e não frase escrita porque a resposta muda: quem veio da lista foi indicado ' +
+          'por um apoiador, quem veio do site pediu o material sozinho. Escrever à mão faria a ' +
+          'mesma frase sair para os dois — e para um deles seria mentira.',
       });
     }
     if (t.includes('{{link}}') || t.includes('{{materiais}}') || t.includes('{{link_grupo}}') || RE_URL.test(t)) {

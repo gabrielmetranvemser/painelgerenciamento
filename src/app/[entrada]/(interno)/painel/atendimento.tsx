@@ -2,28 +2,31 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react';
 import {
-  AlertTriangle, CircleSlash, Clock, Flame, MessageSquare, Send, Siren, Snowflake, SkipForward,
+  AlertTriangle, Check, CircleSlash, Clock, Flame, MessageSquare, PackageOpen, Send, Siren,
+  Snowflake, SkipForward, Star,
 } from 'lucide-react';
-import { Aviso, Avatar, Botao, Cartao, EtiquetaOrigem, Selecao, Vidro, cx } from '@/components/ui';
+import { Aviso, Avatar, Botao, Cartao, EtiquetaOrigem, Pilula, Selecao, Vidro, cx } from '@/components/ui';
 import { ComoAgir } from '@/components/como-agir';
 import { formatarExibicao } from '@/lib/telefone';
 import {
-  RESULTADOS, TEXTO_MOTIVO,
-  type Chip, type ContatoDaFila, type EtapaMsg, type FilaStatus, type Municipio, type Resultado,
+  RESULTADOS, ROTULO_CARGO, TEXTO_MOTIVO,
+  type Chip, type ContatoDaFila, type EntregaDoContato, type EtapaMsg, type FilaStatus,
+  type Municipio, type Resultado,
 } from '@/lib/tipos-banco';
 import {
-  consultarFila, definirMunicipio, pegarProximo, prepararMensagem,
+  carregarEntregas, consultarFila, definirMunicipio, pegarProximo, prepararMensagem,
   registrarAbertura, registrarResultado, sinalizarChip, type MensagemPronta,
 } from './acoes';
 
-type Fase = 'ocioso' | 'permissao' | 'aberta' | 'seguimento';
+type Fase = 'ocioso' | 'permissao' | 'aberta' | 'entrega' | 'seguimento';
 
 /**
  * A mensagem que cada resultado carrega (docs/03-OPERACAO.md §4).
- * "Número inválido" é o único sem seguimento: vai direto para o próximo.
+ *
+ * "Autorizou" NÃO está aqui: ele abre a fase de entrega, que tem uma mensagem
+ * por candidato. "Número inválido" é o único sem seguimento nenhum.
  */
 const SEGUIMENTO: Partial<Record<Resultado, EtapaMsg>> = {
-  autorizou: 'material',
   pediu_saida: 'saida',
   quer_ajudar: 'quer_ajudar',
   encaminhado: 'encaminhamento',
@@ -31,7 +34,6 @@ const SEGUIMENTO: Partial<Record<Resultado, EtapaMsg>> = {
 
 const TITULO_ETAPA: Partial<Record<EtapaMsg, string>> = {
   permissao: 'Primeira mensagem — só o pedido de permissão',
-  material: 'Segunda mensagem — o material',
   saida: 'Confirme que o contato saiu da lista',
   quer_ajudar: 'Resposta para quem quer ajudar',
   encaminhamento: 'Resposta para quem pediu algo que não podemos prometer',
@@ -80,6 +82,7 @@ export function Atendimento({
   const [fila, setFila] = useState<FilaStatus | null>(filaInicial);
   const [contato, setContato] = useState<ContatoDaFila | null>(null);
   const [mensagem, setMensagem] = useState<MensagemPronta | null>(null);
+  const [entregas, setEntregas] = useState<EntregaDoContato[]>([]);
   const [fase, setFase] = useState<Fase>('ocioso');
   const [espera, setEspera] = useState(filaInicial?.segundos_espera ?? 0);
   const [municipioId, setMunicipioId] = useState<number | ''>('');
@@ -141,12 +144,13 @@ export function Atendimento({
       setFila(r.fila);
       setEspera(r.fila.segundos_espera);
       if (!r.ok) {
-        setContato(null); setMensagem(null); setFase('ocioso');
+        setContato(null); setMensagem(null); setEntregas([]); setFase('ocioso');
         return;
       }
       setContato(r.contato);
       setMunicipioId(r.contato.municipio_id ?? '');
       setEncaminhamento('');
+      setEntregas([]);
 
       const m = await prepararMensagem(r.contato.id, chipId, 'permissao');
       if (!m.ok) {
@@ -164,15 +168,32 @@ export function Atendimento({
     // window.open precisa ser síncrono no clique, senão o navegador bloqueia.
     window.open(mensagem.urlWhatsApp, JANELA_WA);
     setErro(null);
+    const enviada = mensagem;
     iniciar(async () => {
-      const r = await registrarAbertura(contato.id, chipId, mensagem.etapa, mensagem.texto, mensagem.variacaoId);
+      const r = await registrarAbertura(
+        contato.id, chipId, enviada.etapa, enviada.texto, enviada.variacaoId,
+        enviada.candidato?.id ?? null,
+      );
       if (!r.ok) {
         setErro(`O sistema não registrou o envio: ${r.motivo}. Não continue — fale com o gestor.`);
         return;
       }
       setFila(r.fila);
       setEspera(r.fila.segundos_espera);
-      if (mensagem.etapa === 'permissao') setFase('aberta');
+
+      if (enviada.etapa === 'permissao') { setFase('aberta'); return; }
+
+      // Material de um candidato: risca aquele da lista e volta para ela, para
+      // o atendente ver o que ainda falta sem perder o contexto.
+      if (enviada.candidato) {
+        const id = enviada.candidato.id;
+        setEntregas((atual) => atual.map((c) =>
+          c.candidato_id === id
+            ? { ...c, material_enviado_em: c.material_enviado_em ?? new Date().toISOString() }
+            : c,
+        ));
+        setMensagem(null);
+      }
     });
   }
 
@@ -186,6 +207,14 @@ export function Atendimento({
     iniciar(async () => {
       const r = await registrarResultado(contato.id, resultado, null, encaminhamento);
       if (!r.ok) { setErro(`Não consegui gravar o resultado: ${r.motivo}`); return; }
+
+      // Autorizou: entra na entrega, uma mensagem por candidato declarado.
+      if (resultado === 'autorizou') {
+        setMensagem(null);
+        setEntregas(await carregarEntregas(contato.id));
+        setFase('entrega');
+        return;
+      }
 
       const etapa = SEGUIMENTO[resultado];
       if (etapa) {
@@ -201,8 +230,19 @@ export function Atendimento({
     });
   }
 
+  function prepararMaterial(candidatoId: string) {
+    if (!contato) return;
+    setErro(null); setMensagem(null);
+    iniciar(async () => {
+      const m = await prepararMensagem(contato.id, chipId, 'material', candidatoId);
+      if (!m.ok) { setErro(MOTIVO_ENTREGA[m.motivo] ?? `Não consegui montar a mensagem (${m.motivo}).`); return; }
+      setMensagem(m);
+      setTimeout(() => botaoAbrir.current?.focus(), 60);
+    });
+  }
+
   function limparEBuscar() {
-    setContato(null); setMensagem(null); setFase('ocioso');
+    setContato(null); setMensagem(null); setEntregas([]); setFase('ocioso');
     buscarProximo();
   }
 
@@ -275,10 +315,11 @@ export function Atendimento({
           </Cartao>
         )}
 
-        {contato && mensagem && fase !== 'ocioso' && (
+        {contato && fase !== 'ocioso' && (
           <CartaoAtendimento
             contato={contato} mensagem={mensagem} fase={fase} ocupado={ocupado}
-            refBotao={botaoAbrir} municipios={municipios} municipioId={municipioId}
+            entregas={entregas} refBotao={botaoAbrir}
+            municipios={municipios} municipioId={municipioId}
             encaminhamento={encaminhamento}
             aoMudarMunicipio={(id) => {
               setMunicipioId(id);
@@ -286,6 +327,7 @@ export function Atendimento({
             }}
             aoMudarEncaminhamento={setEncaminhamento}
             aoAbrir={abrirConversa} aoMarcar={marcar} aoProximo={limparEBuscar}
+            aoPrepararMaterial={prepararMaterial}
           />
         )}
       </div>
@@ -297,6 +339,18 @@ export function Atendimento({
     </div>
   );
 }
+
+/** Motivos que o servidor devolve na entrega, em português de gente. */
+const MOTIVO_ENTREGA: Record<string, string> = {
+  candidato_nao_declarado:
+    'Esta pessoa não foi avisada deste candidato na primeira mensagem, então não dá para mandar o material dele. ' +
+    'Ela só autorizou o que estava escrito lá.',
+  candidato_inativo: 'Este candidato foi desativado pelo gestor.',
+  candidato_obrigatorio: 'Escolha de qual candidato é o material.',
+  contato_bloqueado: 'Esta pessoa pediu para sair. Não dá para mandar mais nada.',
+  modelo_ausente: 'Não existe modelo de material cadastrado. Fale com o gestor.',
+  sem_variacao: 'O modelo de material está sem texto. Fale com o gestor.',
+};
 
 /* ── Barra de contadores ─────────────────────────────────────────────────── */
 
@@ -428,17 +482,22 @@ function Travado({ fila, espera }: { fila: FilaStatus; espera: number }) {
 /* ── Cartão do atendimento ───────────────────────────────────────────────── */
 
 function CartaoAtendimento({
-  contato, mensagem, fase, ocupado, refBotao, municipios, municipioId, encaminhamento,
-  aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoMarcar, aoProximo,
+  contato, mensagem, fase, ocupado, entregas, refBotao, municipios, municipioId, encaminhamento,
+  aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoMarcar, aoProximo, aoPrepararMaterial,
 }: {
-  contato: ContatoDaFila; mensagem: MensagemPronta; fase: Fase; ocupado: boolean;
+  contato: ContatoDaFila; mensagem: MensagemPronta | null; fase: Fase; ocupado: boolean;
+  entregas: EntregaDoContato[];
   refBotao: React.RefObject<HTMLButtonElement | null>;
   municipios: Municipio[]; municipioId: number | ''; encaminhamento: string;
   aoMudarMunicipio: (id: number | '') => void;
   aoMudarEncaminhamento: (v: string) => void;
   aoAbrir: () => void; aoMarcar: (r: Resultado) => void; aoProximo: () => void;
+  aoPrepararMaterial: (candidatoId: string) => void;
 }) {
   const nome = contato.primeiro_nome ?? contato.nome ?? 'Sem nome';
+  const titulo = mensagem?.candidato
+    ? `Material de ${mensagem.candidato.nome}`
+    : (mensagem ? TITULO_ETAPA[mensagem.etapa] ?? 'Mensagem' : '');
 
   return (
     <Cartao className="overflow-hidden" elevado>
@@ -454,24 +513,33 @@ function CartaoAtendimento({
         <EtiquetaOrigem origem={contato.origem} />
       </header>
 
-      <div className="px-6 py-5">
-        <p className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-suave">
-          <MessageSquare size={12} />
-          {TITULO_ETAPA[mensagem.etapa] ?? 'Mensagem'}
-        </p>
-        <div className="rounded-2xl rounded-tl-md border border-borda bg-superficie-alta p-5 text-[15px] leading-[1.7] whitespace-pre-wrap">
-          {mensagem.texto}
-        </div>
-        <p className="mt-2.5 text-xs text-suave">
-          O texto abre já preenchido no WhatsApp. Ajuste ali se quiser antes de enviar.
-        </p>
-      </div>
+      {fase === 'entrega' && (
+        <Entrega entregas={entregas} ocupado={ocupado} escolhido={mensagem?.candidato?.id ?? null}
+                 aoPreparar={aoPrepararMaterial} />
+      )}
 
-      <div className="border-t border-borda px-6 py-5">
-        <Botao ref={refBotao} tamanho="g" className="w-full" onClick={aoAbrir} disabled={ocupado}>
-          <Send size={17} /> Abrir conversa no WhatsApp
-        </Botao>
-      </div>
+      {mensagem && (
+        <>
+          <div className="px-6 py-5">
+            <p className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-suave">
+              <MessageSquare size={12} />
+              {titulo}
+            </p>
+            <div className="rounded-2xl rounded-tl-md border border-borda bg-superficie-alta p-5 text-[15px] leading-[1.7] whitespace-pre-wrap">
+              {mensagem.texto}
+            </div>
+            <p className="mt-2.5 text-xs text-suave">
+              O texto abre já preenchido no WhatsApp. Ajuste ali se quiser antes de enviar.
+            </p>
+          </div>
+
+          <div className="border-t border-borda px-6 py-5">
+            <Botao ref={refBotao} tamanho="g" className="w-full" onClick={aoAbrir} disabled={ocupado}>
+              <Send size={17} /> Abrir conversa no WhatsApp
+            </Botao>
+          </div>
+        </>
+      )}
 
       {fase === 'aberta' && (
         <div className="border-t border-borda px-6 py-5">
@@ -503,21 +571,110 @@ function CartaoAtendimento({
         </div>
       )}
 
-      {fase === 'seguimento' && (
+      {(fase === 'entrega' || fase === 'seguimento') && (
         <div className="space-y-4 border-t border-borda px-6 py-5">
-          <div className={mensagem.etapa === 'material' ? 'block' : 'hidden'}>
+          {fase === 'entrega' && (
             <Selecao rotulo="De qual cidade a pessoa é?" value={municipioId}
                      onChange={(e) => aoMudarMunicipio(e.target.value ? Number(e.target.value) : '')}>
               <option value="">Não informou</option>
               {municipios.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
             </Selecao>
-          </div>
+          )}
           <Botao variante="neutro" tamanho="g" className="w-full" onClick={aoProximo} disabled={ocupado}>
             <SkipForward size={16} /> Próximo contato
           </Botao>
         </div>
       )}
     </Cartao>
+  );
+}
+
+/* ── Entrega do material, um candidato por vez ───────────────────────────── */
+
+/**
+ * A lista sai de `contato_candidato`: os candidatos que ESTA pessoa ouviu na
+ * primeira mensagem. Não é a chapa atual do atendente — quem entrou depois não
+ * aparece, porque ela nunca foi avisada dele.
+ */
+function Entrega({
+  entregas, ocupado, escolhido, aoPreparar,
+}: {
+  entregas: EntregaDoContato[]; ocupado: boolean; escolhido: string | null;
+  aoPreparar: (candidatoId: string) => void;
+}) {
+  if (entregas.length === 0) {
+    return (
+      <div className="px-6 py-5">
+        <Aviso tom="alerta" icone={<AlertTriangle size={16} />}>
+          Não há candidato liberado para esta pessoa. Isso acontece quando a primeira mensagem
+          não chegou a ser registrada, ou quando você ainda não tem candidato atribuído.
+          Fale com o gestor.
+        </Aviso>
+      </div>
+    );
+  }
+
+  const faltam = entregas.filter((c) => !c.material_enviado_em).length;
+
+  return (
+    <div className="px-6 py-5">
+      <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-suave">
+        <PackageOpen size={12} /> Material — um por candidato
+      </p>
+      <p className="mb-4 text-xs leading-relaxed text-suave">
+        {faltam === 0
+          ? 'Tudo entregue. Pode seguir para o próximo contato.'
+          : 'Mande um de cada vez e espere a resposta. Emendar vários materiais seguidos é o que derruba número.'}
+      </p>
+
+      <div className="space-y-2">
+        {entregas.map((c) => {
+          const enviado = c.material_enviado_em !== null;
+          const semPeca = c.materiais === 0;
+          const bloqueado = ocupado || semPeca || !c.ativo;
+          return (
+            <div key={c.candidato_id}
+                 className={cx(
+                   'flex flex-wrap items-center gap-3 rounded-2xl border p-3.5 transition-colors',
+                   escolhido === c.candidato_id
+                     ? 'border-acento/50 bg-acento/10'
+                     : enviado ? 'border-borda bg-superficie-alta/50' : 'border-borda',
+                 )}>
+              <div className="mr-auto min-w-0">
+                <p className="flex items-center gap-2 text-sm font-semibold">
+                  {c.nome_urna}
+                  {c.principal && (
+                    <span title="Citado na primeira mensagem" className="text-acento">
+                      <Star size={12} fill="currentColor" />
+                    </span>
+                  )}
+                </p>
+                <p className="mt-0.5 text-xs text-suave">
+                  {ROTULO_CARGO[c.cargo]} · nº {c.numero}
+                  {c.partido_sigla && ` · ${c.partido_sigla}`}
+                </p>
+              </div>
+
+              {!c.ativo && <Pilula cor="alerta">desativado</Pilula>}
+              {c.ativo && semPeca && <Pilula cor="alerta">sem material</Pilula>}
+              {enviado && <Pilula cor="acento"><Check size={11} /> enviado</Pilula>}
+
+              <Botao variante={enviado ? 'neutro' : 'principal'} tamanho="p"
+                     disabled={bloqueado} onClick={() => aoPreparar(c.candidato_id)}>
+                {enviado ? 'Mandar de novo' : 'Preparar'}
+              </Botao>
+            </div>
+          );
+        })}
+      </div>
+
+      {entregas.some((c) => c.materiais === 0 && c.ativo) && (
+        <p className="mt-3 text-xs leading-relaxed text-alerta">
+          Candidato sem peça cadastrada não tem o que mandar — a mensagem sairia anunciando
+          material e sem link nenhum. Peça ao gestor para cadastrar os materiais dele.
+        </p>
+      )}
+    </div>
   );
 }
 

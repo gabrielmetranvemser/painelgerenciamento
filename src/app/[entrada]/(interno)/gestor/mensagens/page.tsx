@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
+import { rotas } from '@/lib/links-internos';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { Aviso, Titulo } from '@/components/ui';
-import type { Config, EtapaMsg, Modelo, Variacao } from '@/lib/tipos-banco';
+import { ROTULO_CARGO, type Candidato, type EtapaMsg, type Modelo, type Variacao } from '@/lib/tipos-banco';
 import { EditorMensagens } from './editor';
 
 export const metadata: Metadata = { title: 'Mensagens' };
@@ -12,14 +14,24 @@ const ORDEM: EtapaMsg[] = [
   'quer_ajudar', 'encaminhamento', 'convite_grupo',
 ];
 
-export default async function PaginaMensagens() {
+export default async function PaginaMensagens({
+  params,
+}: {
+  params: Promise<{ entrada: string }>;
+}) {
+  const { entrada } = await params;
   const supabase = await criarClienteServidor();
 
-  const [{ data: modelos }, { data: variacoes }, { data: cfg }] = await Promise.all([
-    supabase.from('modelos').select('*'),
-    supabase.from('variacoes').select('*').order('ordem'),
-    supabase.from('config').select('candidato, cargo, numero, timezone').eq('id', 1).single(),
-  ]);
+  const [{ data: modelos }, { data: variacoes }, { data: cfg }, { data: candidatos }] =
+    await Promise.all([
+      supabase.from('modelos').select('*'),
+      supabase.from('variacoes').select('*').order('ordem'),
+      supabase.from('config').select('timezone').eq('id', 1).single(),
+      // A prévia usa candidatos DE VERDADE. Com nome inventado o gestor não
+      // enxerga o texto que a pessoa vai receber — e é justamente o tamanho da
+      // lista de nomes que faz a Permissão passar ou estourar as quatro linhas.
+      supabase.from('candidatos').select('*').eq('ativo', true).limit(5),
+    ]);
 
   const agrupados = (modelos ?? [])
     .map((m) => ({
@@ -28,26 +40,38 @@ export default async function PaginaMensagens() {
     }))
     .sort((a, b) => ORDEM.indexOf(a.etapa) - ORDEM.indexOf(b.etapa));
 
-  const c = cfg as Pick<Config, 'candidato' | 'cargo' | 'numero' | 'timezone'> | null;
+  const lista = (candidatos ?? []) as Candidato[];
+  const primeiro = lista[0] ?? null;
 
   return (
     <>
       <Titulo sub="Você edita os textos sem depender do desenvolvedor. Algumas partes são obrigatórias e o sistema não deixa salvar sem elas.">Mensagens</Titulo>
 
-      {!c?.candidato && (
+      {lista.length === 0 && (
         <Aviso tom="alerta" className="mb-5">
-          Defina o nome do candidato, o cargo e o número em <strong>Configuração</strong> — sem
-          isso a prévia e as mensagens saem com lacunas.
+          Nenhum candidato cadastrado ainda. Cadastre em{' '}
+          <Link href={rotas(entrada).gestorCandidatos} className="underline underline-offset-4">
+            Candidatos
+          </Link>{' '}
+          — sem isso a prévia sai com lacunas e as mensagens também.
         </Aviso>
       )}
 
       <EditorMensagens
         modelos={agrupados}
         exemplo={{
-          candidato: c?.candidato ?? '',
-          cargo: c?.cargo ?? '',
-          numero: c?.numero ?? '',
-          timezone: c?.timezone ?? 'America/Porto_Velho',
+          candidato: primeiro?.nome_urna ?? '',
+          cargo: primeiro?.cargo ?? '',
+          numero: primeiro?.numero ?? '',
+          partido: primeiro?.partido_sigla ?? '',
+          cnpj: primeiro?.cnpj_campanha ?? '',
+          chapa: lista.map((c) => ({
+            nome: c.nome_urna,
+            cargo: ROTULO_CARGO[c.cargo],
+            numero: c.numero,
+            partido: c.partido_sigla,
+          })),
+          timezone: cfg?.timezone ?? 'America/Porto_Velho',
         }}
       />
     </>

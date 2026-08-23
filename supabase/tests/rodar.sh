@@ -38,6 +38,9 @@ echo "── Perfil do contato ────────────────�
 "${PSQL[@]}" -f supabase/tests/04_perfil.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
 
 echo
+"${PSQL[@]}" -f supabase/tests/07_captacao_por_candidato.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
+
+echo
 echo "── Concorrência da fila ─────────────────────────────────────────────────"
 "${PSQL[@]}" -f supabase/tests/99_limpeza.sql >/dev/null 2>&1
 if "${PSQL[@]}" -f supabase/tests/01_fixtures.sql >/dev/null 2>&1; then

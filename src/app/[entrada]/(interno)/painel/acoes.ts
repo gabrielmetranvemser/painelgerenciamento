@@ -4,8 +4,8 @@ import { criarClienteServidor } from '@/lib/supabase/server';
 import { montarTexto, primeiroNomeDe } from '@/lib/mensagem-etapas';
 import { urlWhatsApp } from '@/lib/telefone';
 import type {
-  CargoEleitoral, EtapaMsg, FilaStatus, RespostaAbertura, RespostaFila,
-  RespostaResultado, Resultado,
+  CargoEleitoral, EntregaDoContato, EtapaMsg, FilaStatus, OrigemContato,
+  RespostaAbertura, RespostaFila, RespostaResultado, Resultado,
 } from '@/lib/tipos-banco';
 
 export type MensagemPronta = {
@@ -48,7 +48,10 @@ type RespostaPreparar = {
   motivo?: string;
   modelo: string;
   variacao_id: string;
-  contato: { primeiro_nome: string | null; nome: string | null; telefone_e164: string };
+  contato: {
+    primeiro_nome: string | null; nome: string | null; telefone_e164: string;
+    origem: OrigemContato;
+  };
   atendente_nome: string;
   timezone: string;
   municipio: string | null;
@@ -58,6 +61,8 @@ type RespostaPreparar = {
     partido: string | null; cnpj: string | null;
   } | null;
   materiais: { titulo: string; tipo: string; token: string }[];
+  /** Token da página de material daquele candidato. Alimenta {{link}}. */
+  pagina_token: string | null;
 };
 
 /**
@@ -94,6 +99,9 @@ export async function prepararMensagem(
   const texto = montarTexto(r.modelo, {
     primeiroNome: r.contato.primeiro_nome ?? primeiroNomeDe(r.contato.nome),
     nomeAtendente: r.atendente_nome,
+    // Decide a frase de {{origem}}: quem veio da lista foi indicado por um
+    // apoiador; quem veio do site pediu o material sozinho.
+    origemContato: r.contato.origem,
     chapa: r.chapa.map((c) => ({
       nome: c.nome, cargo: c.cargo, numero: c.numero, partido: c.partido,
     })),
@@ -103,6 +111,9 @@ export async function prepararMensagem(
     partido: r.candidato?.partido ?? null,
     cnpj: r.candidato?.cnpj ?? null,
     materiais: r.materiais.map((m) => ({ titulo: m.titulo, url: `${base}/r/${m.token}` })),
+    // {{link}} é a PÁGINA do candidato, não a primeira peça: é ela que carrega
+    // a identificação da propaganda e o botão de sair.
+    link: r.pagina_token ? `${base}/r/${r.pagina_token}` : null,
     municipio: r.municipio,
     agora: new Date(),
     timezone: r.timezone,
@@ -136,6 +147,22 @@ export async function carregarChapa(): Promise<CandidatoDaChapa[]> {
     id: c.candidato_id, nome: c.nome_urna, cargo: c.cargo,
     numero: c.numero, partido: c.partido_sigla, principal: c.principal,
   }));
+}
+
+/**
+ * Os candidatos que ESTE contato conhece, com o que falta entregar a cada um.
+ *
+ * Não é a chapa do atendente: é a lista congelada quando a permissão foi
+ * enviada. Um candidato que entrou na chapa depois não aparece aqui, e é por
+ * isso que a tela não oferece um botão que o servidor recusaria.
+ */
+export async function carregarEntregas(contatoId: string): Promise<EntregaDoContato[]> {
+  const supabase = await criarClienteServidor();
+  const { data, error } = await supabase.rpc('candidatos_do_contato', {
+    p_contato_id: contatoId,
+  });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as EntregaDoContato[];
 }
 
 /** Marca que a conversa foi aberta. Idempotente: duplo clique não conta 2x. */

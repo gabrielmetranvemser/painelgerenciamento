@@ -21,7 +21,7 @@ export default async function LayoutGestor({
 
   const ABAS = [
     { href: r.gestor, rotulo: 'Visão geral', icone: <Gauge size={15} /> },
-    { href: `/${entrada}/gestor/candidatos`, rotulo: 'Candidatos', icone: <Vote size={15} /> },
+    { href: r.gestorCandidatos, rotulo: 'Candidatos', icone: <Vote size={15} /> },
     { href: r.gestorImportar, rotulo: 'Importar', icone: <Upload size={15} /> },
     { href: r.gestorAtendentes, rotulo: 'Atendentes', icone: <Users size={15} /> },
     { href: r.gestorChips, rotulo: 'Números', icone: <Smartphone size={15} /> },

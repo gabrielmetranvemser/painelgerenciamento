@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 import { ChevronRight, UserPlus, Users } from 'lucide-react';
 import { criarClienteServidor } from '@/lib/supabase/server';
+import { rotas } from '@/lib/links-internos';
 import { Avatar, Cartao, Pilula, Titulo, Vazio } from '@/components/ui';
 import { ROTULO_CARGO, type Candidato, type CargoEleitoral } from '@/lib/tipos-banco';
 import { FormularioCandidato } from './formulario';
@@ -63,7 +64,7 @@ export default async function PaginaCandidatos({
                 return (
                   <Link
                     key={c.id}
-                    href={`/${entrada}/gestor/candidatos/${c.id}`}
+                    href={rotas(entrada).gestorCandidato(c.id)}
                     className="flex flex-wrap items-center gap-3 px-5 py-4 transition-colors hover:bg-superficie-alta"
                   >
                     <Avatar nome={c.nome_urna} fotoUrl={c.foto_url} tamanho="m" />

@@ -7,11 +7,14 @@ export type Historico = {
   ok: true;
   interacoes: {
     etapa: EtapaMsg;
+    /** Nome de urna, nas etapas que são de um candidato. */
+    candidato: string | null;
     aberto_wa_em: string;
     texto_enviado: string | null;
     resultado: string | null;
   }[];
-  cliques: { destino: string; quando: string }[];
+  /** Cada clique real, com a peça que a pessoa abriu e de quem ela é. */
+  cliques: { peca: string; candidato: string | null; quando: string }[];
   pedido_kit: { endereco: string | null; itens: string[] | null; em: string } | null;
 } | { ok: false; motivo: string };
 

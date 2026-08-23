@@ -3,11 +3,13 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
+import { rotas } from '@/lib/links-internos';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { Avatar, Pilula } from '@/components/ui';
-import { ROTULO_CARGO, type Candidato, type Material } from '@/lib/tipos-banco';
+import { ROTULO_CARGO, type Candidato, type Material, type PapelUsuario } from '@/lib/tipos-banco';
 import { FormularioCandidato } from '../formulario';
 import { Materiais } from './materiais';
+import { AtendentesDoCandidato, type AtendenteDoCandidato } from './atendentes';
 
 export const metadata: Metadata = { title: 'Candidato' };
 export const dynamic = 'force-dynamic';
@@ -22,17 +24,40 @@ export default async function PaginaCandidato({
   const cabecalhos = await headers();
   const origem = `https://${cabecalhos.get('host') ?? 'seu-dominio.com.br'}`;
 
-  const [{ data: candidato }, { data: materiais }] = await Promise.all([
-    supabase.from('candidatos').select('*').eq('id', id).maybeSingle(),
-    supabase.from('materiais').select('*').eq('candidato_id', id).order('ordem'),
-  ]);
+  const [{ data: candidato }, { data: materiais }, { data: vinculos }, { data: usuarios }] =
+    await Promise.all([
+      supabase.from('candidatos').select('*').eq('id', id).maybeSingle(),
+      supabase.from('materiais').select('*').eq('candidato_id', id).order('ordem'),
+      supabase.from('atendente_candidatos')
+        .select('atendente_id, principal').eq('candidato_id', id),
+      // Gestor entra na lista também: nesta operação ele atende — tem chip e
+      // atalho para a tela de atendimento. Filtrar por papel deixaria a
+      // candidatura sem ninguém justamente na campanha pequena, que é o caso.
+      supabase.from('usuarios')
+        .select('id, primeiro_nome, ativo, papel').order('primeiro_nome'),
+    ]);
 
   if (!candidato) notFound();
   const c = candidato as Candidato;
 
+  const porAtendente = new Map(
+    ((vinculos ?? []) as { atendente_id: string; principal: boolean }[])
+      .map((v) => [v.atendente_id, v.principal]),
+  );
+  const equipe = (usuarios ?? []) as
+    { id: string; primeiro_nome: string; ativo: boolean; papel: PapelUsuario }[];
+
+  const atendentes: AtendenteDoCandidato[] = equipe
+    .filter((u) => porAtendente.has(u.id))
+    .map((u) => ({ ...u, principal: porAtendente.get(u.id) ?? false }));
+
+  // Conta inativa não entra na lista de quem dá para acrescentar: atribuir
+  // candidato a quem não trabalha só faz o gestor achar que tem cobertura.
+  const disponiveis = equipe.filter((u) => u.ativo && !porAtendente.has(u.id));
+
   return (
     <>
-      <Link href={`/${entrada}/gestor/candidatos`}
+      <Link href={rotas(entrada).gestorCandidatos}
             className="mb-5 inline-flex items-center gap-1.5 text-sm text-suave transition-colors hover:text-texto">
         <ArrowLeft size={15} /> Candidatos
       </Link>
@@ -57,7 +82,13 @@ export default async function PaginaCandidato({
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
         <FormularioCandidato candidato={c} origem={origem} />
-        <Materiais candidatoId={c.id} materiais={(materiais ?? []) as Material[]} />
+        <div className="space-y-6">
+          <AtendentesDoCandidato
+            candidatoId={c.id} nomeUrna={c.nome_urna} atendentes={atendentes}
+            disponiveis={disponiveis} entrada={entrada}
+          />
+          <Materiais candidatoId={c.id} materiais={(materiais ?? []) as Material[]} />
+        </div>
       </div>
     </>
   );

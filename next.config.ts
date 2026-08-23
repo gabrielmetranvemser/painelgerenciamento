@@ -11,6 +11,10 @@ import type { NextConfig } from 'next';
 const EXTENSAO = process.env.EXTENSAO_ID ?? 'pdpffmibfeikfffdbpfklhdkifmceden';
 
 const nextConfig: NextConfig = {
+  // Um cabeçalho a menos anunciando o que roda aqui. Não esconde o framework —
+  // os caminhos /_next/static continuam entregando isso — mas não custa nada.
+  poweredByHeader: false,
+
   async headers() {
     return [
       {

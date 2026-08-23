@@ -18,14 +18,20 @@ const TITULO: Record<EtapaMsg, string> = {
 
 const EXPLICACAO: Partial<Record<EtapaMsg, string>> = {
   permissao:
-    'Sem link e sem emoji. Precisa dizer quem é o candidato e para qual cargo na mesma frase, explicar que um apoiador passou o contato, e oferecer parar e apagar. Rotaciona entre as variações para o mesmo número não repetir o texto.',
+    'Sem link e sem emoji. Precisa declarar a chapa com {{candidatos}}, usar {{origem}} para dizer como você chegou no contato — a frase muda conforme a pessoa ter vindo da lista ou do site — e oferecer parar e apagar. Rotaciona entre as variações para o mesmo número não repetir o texto.',
   material:
     'Precisa conter {{link}} — é dele que sai a única métrica confiável do projeto.',
 };
 
 type Props = {
   modelos: (Modelo & { variacoes: Variacao[] })[];
-  exemplo: { candidato: string; cargo: string; numero: string; timezone: string };
+  exemplo: {
+    candidato: string; cargo: string; numero: string;
+    partido: string; cnpj: string;
+    /** A chapa de verdade: é ela que alimenta {{candidatos}} na Permissão. */
+    chapa: { nome: string; cargo: string; numero: string; partido: string | null }[];
+    timezone: string;
+  };
 };
 
 export function EditorMensagens({ modelos, exemplo }: Props) {
@@ -57,9 +63,14 @@ function useValidacao(etapa: EtapaMsg, texto: string, exemplo: Props['exemplo'])
     const previa = montarTexto(texto, {
       primeiroNome: 'Maria',
       nomeAtendente: 'Lucas',
-      candidato: exemplo.candidato || '(defina o candidato em Configuração)',
-      cargo: exemplo.cargo || '(defina o cargo)',
+      candidato: exemplo.candidato || '(cadastre um candidato)',
+      cargo: exemplo.cargo || '(sem cargo)',
       numero: exemplo.numero || '00000',
+      partido: exemplo.partido,
+      cnpj: exemplo.cnpj || '00.000.000/0001-00',
+      chapa: exemplo.chapa,
+      origemContato: 'lista_fria',
+      materiais: [{ titulo: 'Santinho', url: 'https://seu-dominio.com.br/r/abc123' }],
       link: 'https://seu-dominio.com.br/r/abc123',
       linkGrupo: 'https://whatsapp.com/channel/xxx',
       municipio: 'Porto Velho',

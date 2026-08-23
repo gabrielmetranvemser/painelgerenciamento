@@ -11,6 +11,7 @@ declare
   v_r     jsonb;
   v_falhas int := 0;
   v_token text;
+  v_cand  uuid;
 begin
   -- ── Fixtures ──────────────────────────────────────────────────────────────
   for i in 1..2 loop
@@ -31,6 +32,10 @@ begin
 
   insert into public.chips (atendente_id, rotulo, papel, status)
   values (v_uid, 'Chip Perfil', 'ativo', 'ativo') returning id into v_chip;
+
+  insert into public.candidatos (slug, nome_urna, cargo, numero, ativo)
+  values ('perfil-teste', 'Perfil Cand', 'deputado_federal', '4001', true)
+  returning id into v_cand;
 
   insert into public.contatos (origem, nome, primeiro_nome, telefone_e164, chave_dedup,
                                telefone_hmac, status, atendente_id, chip_id, primeiro_contato_em)
@@ -124,7 +129,9 @@ begin
   -- ── 7. Histórico: clique de gente conta, pré-carregamento não ─────────────
   perform set_config('request.jwt.claims',
     json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
-  v_token := public.garantir_link(v_c, 'material');
+  -- O link agora aponta para a PÁGINA do candidato — não existe mais destino
+  -- global. É esse token que a mensagem manda.
+  v_token := public.garantir_link_candidato(v_c, v_cand);
   insert into public.cliques (token, is_bot, user_agent) values
     (v_token, true,  'WhatsApp/2.24'),
     (v_token, false, 'Mozilla/5.0 (Linux; Android 13)');

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
 
-// Lê a configuração a cada acesso: o gestor edita candidato, cargo e textos
+// Lê a configuração a cada acesso: o gestor edita o responsável pelos dados
 // pelo painel, e a página não pode ficar congelada no que valia no build.
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +17,7 @@ export default async function Privacidade() {
   const supabase = criarClienteAdmin();
   const { data: cfg } = await supabase
     .from('config')
-    .select('candidato, responsavel_dados')
+    .select('responsavel_dados')
     .eq('id', 1)
     .single();
 
@@ -35,9 +35,14 @@ export default async function Privacidade() {
         em nenhum lugar do nosso sistema.
       </Secao>
 
+      {/* Qual candidatura é qual está na página do material que a pessoa
+          recebeu, e na frase que ela marcou ao se cadastrar — os dois trazem o
+          nome. Nomear um candidato AQUI seria nomear o errado para quem chegou
+          por outro. */}
       <Secao titulo="Para que usamos">
-        Apenas para o contato desta campanha eleitoral{cfg?.candidato ? ` (${cfg.candidato})` : ''}.
-        Não vendemos, não cedemos e não trocamos seus dados com ninguém.
+        Apenas para o contato da candidatura que você autorizou. O nome dela está na frase que
+        você marcou ao se cadastrar e na página do material que recebeu. Não vendemos, não
+        cedemos e não trocamos seus dados com ninguém.
       </Secao>
 
       <Secao titulo="Como sair">

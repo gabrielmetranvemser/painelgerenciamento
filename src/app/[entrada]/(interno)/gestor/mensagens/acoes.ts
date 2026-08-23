@@ -13,7 +13,7 @@ export type ResultadoSalvar = { ok: true } | { ok: false; erro: string };
  *
  * A tela já valida enquanto o gestor digita, mas a decisão é aqui: Server Action
  * é um endpoint HTTP, e as travas de texto (candidato+cargo na mesma frase, a
- * menção ao apoiador, a frase de parar/apagar, sem link e sem emoji na
+ * a variável de origem, a frase de parar/apagar, sem link e sem emoji na
  * Permissão) são o que sustenta a posição jurídica da campanha.
  */
 export async function salvarVariacao(

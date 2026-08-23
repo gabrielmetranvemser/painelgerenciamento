@@ -16,7 +16,7 @@ carregarEnv({ path: '.env.local', quiet: true });
 const TABELAS = {
   config: 'Config', usuarios: 'Usuario', chips: 'Chip', listas: 'Lista',
   contatos: 'Contato', interacoes: 'Interacao', modelos: 'Modelo',
-  variacoes: 'Variacao', destinos: 'Destino', links: 'Link',
+  variacoes: 'Variacao', links: 'Link',
   municipios: 'Municipio', dias_bloqueados: 'DiaBloqueado',
   alertas: 'Alerta', captacoes: 'Captacao',
   candidatos: 'Candidato', materiais: 'Material',
