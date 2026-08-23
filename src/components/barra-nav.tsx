@@ -4,6 +4,7 @@ import Link, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { itemAtivo } from '@/lib/nav';
 import { cx } from './ui';
 
 /**
@@ -29,11 +30,14 @@ export function BarraNav({
   abas: { href: string; rotulo: string; icone?: ReactNode }[];
 }) {
   const caminho = usePathname();
+  // Vence o casamento mais longo, não o prefixo: com /x/painel e
+  // /x/painel/suporte na lista, `startsWith` acendia as duas ao mesmo tempo.
+  const ativo = itemAtivo(caminho, abas.map((a) => a.href));
 
   return (
     <nav className="flex items-center gap-1 overflow-x-auto">
       {abas.map((a) => {
-        const ativa = a.href === caminho || (a.href !== '/painel' && a.href !== '/gestor' && caminho.startsWith(a.href));
+        const ativa = a.href === ativo;
         return (
           <Link
             key={a.href}
