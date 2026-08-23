@@ -19,6 +19,8 @@ const TABELAS = {
   variacoes: 'Variacao', destinos: 'Destino', links: 'Link',
   municipios: 'Municipio', dias_bloqueados: 'DiaBloqueado',
   alertas: 'Alerta', captacoes: 'Captacao',
+  candidatos: 'Candidato', materiais: 'Material',
+  atendente_candidatos: 'AtendenteCandidato', contato_candidato: 'ContatoCandidato',
 };
 
 const cliente = new pg.Client({ connectionString: process.env.SUPABASE_DB_URL });

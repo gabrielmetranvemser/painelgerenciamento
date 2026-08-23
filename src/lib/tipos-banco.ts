@@ -114,6 +114,8 @@ export type Contato = {
   primeiro_contato_em: string | null;
   resultado_em: string | null;
   encaminhamento: string | null;
+  /** De qual candidato o lead veio, quando entrou por uma página de candidato. */
+  candidato_origem_id: string | null;
   anonimizado_em: string | null;
   criado_em: string;
 };
@@ -136,7 +138,14 @@ export type Interacao = {
 export type Modelo = { id: string; etapa: EtapaMsg; nome: string; ativo: boolean; atualizado_em: string };
 export type Variacao = { id: string; modelo_id: string; texto: string; ordem: number; ativa: boolean; criado_em: string };
 export type Destino = { id: string; chave: string; nome: string; url: string; atualizado_em: string };
-export type Link = { token: string; contato_id: string; destino_id: string; criado_em: string };
+export type Link = {
+  token: string;
+  contato_id: string;
+  /** Exatamente um dos dois: um material de candidato, ou um destino global. */
+  material_id: string | null;
+  destino_id: string | null;
+  criado_em: string;
+};
 
 export type Alerta = {
   id: number;
@@ -162,6 +171,89 @@ export type Captacao = {
   user_agent: string | null;
   virou_contato: boolean;
   contato_id: string | null;
+  criado_em: string;
+};
+
+// ── Candidatos ───────────────────────────────────────────────────────────────
+
+export type CargoEleitoral =
+  | 'presidente' | 'governador' | 'senador'
+  | 'deputado_federal' | 'deputado_estadual' | 'deputado_distrital';
+
+/** Quantos dígitos o número de urna tem em cada cargo. Igual à cola do eleitor. */
+export const DIGITOS_DO_CARGO: Record<CargoEleitoral, number> = {
+  presidente: 2, governador: 2, senador: 3,
+  deputado_federal: 4, deputado_estadual: 5, deputado_distrital: 5,
+};
+
+export const ROTULO_CARGO: Record<CargoEleitoral, string> = {
+  presidente: 'Presidente',
+  governador: 'Governador',
+  senador: 'Senador',
+  deputado_federal: 'Deputado federal',
+  deputado_estadual: 'Deputado estadual',
+  deputado_distrital: 'Deputado distrital',
+};
+
+export type Candidato = {
+  id: string;
+  slug: string;
+  nome_urna: string;
+  nome_completo: string | null;
+  cargo: CargoEleitoral;
+  /** Só senador usa 2. É o que permite atender duas candidaturas ao Senado. */
+  vaga: number;
+  numero: string;
+  uf: string | null;
+  partido_sigla: string | null;
+  partido_numero: string | null;
+  coligacao: string | null;
+  cnpj_campanha: string | null;
+  responsavel_material: string | null;
+  cor_tema: string | null;
+  foto_url: string | null;
+  slogan: string | null;
+  chamada: string | null;
+  propostas: string | null;
+  ativo: boolean;
+  criado_em: string;
+};
+
+export type TipoMaterial = 'santinho' | 'propostas' | 'video' | 'canal' | 'site' | 'outro';
+
+export type Material = {
+  id: string;
+  candidato_id: string;
+  titulo: string;
+  descricao: string | null;
+  url: string;
+  tipo: TipoMaterial;
+  ordem: number;
+  ativo: boolean;
+  criado_em: string;
+};
+
+/**
+ * A chapa de um atendente. A regra "um candidato por cargo, dois senadores"
+ * é garantida no banco por `unique (atendente_id, cargo, vaga)`.
+ */
+export type AtendenteCandidato = {
+  atendente_id: string;
+  candidato_id: string;
+  cargo: CargoEleitoral;
+  vaga: number;
+  /** O citado na primeira mensagem. No máximo um por atendente. */
+  principal: boolean;
+  criado_em: string;
+};
+
+/** Trilha de quem recebeu material de qual candidato, e quando. */
+export type ContatoCandidato = {
+  contato_id: string;
+  candidato_id: string;
+  material_enviado_em: string | null;
+  atendente_id: string | null;
+  chip_id: string | null;
   criado_em: string;
 };
 
