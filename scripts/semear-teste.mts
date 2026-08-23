@@ -9,8 +9,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHmac } from 'node:crypto';
 import { config as carregarEnv } from 'dotenv';
-import { normalizarTelefone } from '../src/lib/telefone.ts';
-import { primeiroNomeDe } from '../src/lib/mensagem.ts';
+import { normalizarTelefone } from '../src/lib/telefone';
+import { primeiroNomeDe } from '../src/lib/mensagem';
 
 carregarEnv({ path: '.env.local', quiet: true });
 

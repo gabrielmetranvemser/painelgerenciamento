@@ -116,3 +116,50 @@ export function EtiquetaOrigem({ origem }: { origem: 'site' | 'kit' | 'lista_fri
     </span>
   );
 }
+
+/** Número grande com rótulo. Base dos painéis do gestor. */
+export function Metrica({
+  rotulo, valor, detalhe, tom = '',
+}: {
+  rotulo: string;
+  valor: number | string;
+  detalhe?: string;
+  tom?: string;
+}) {
+  return (
+    <Cartao className="p-4">
+      <p className={`text-2xl font-semibold tabular-nums ${tom}`}>
+        {typeof valor === 'number' ? valor.toLocaleString('pt-BR') : valor}
+      </p>
+      <p className="mt-0.5 text-xs font-medium">{rotulo}</p>
+      {detalhe && <p className="mt-0.5 text-xs text-suave">{detalhe}</p>}
+    </Cartao>
+  );
+}
+
+const CORES_FAROL = {
+  verde: 'bg-ok/15 text-ok',
+  amarelo: 'bg-alerta/15 text-alerta',
+  vermelho: 'bg-perigo/15 text-perigo',
+  sem_dados: 'bg-borda text-suave',
+} as const;
+
+const TEXTO_FAROL = {
+  verde: 'Saudável',
+  amarelo: 'Atenção',
+  vermelho: 'Trocar pelo reserva',
+  sem_dados: 'Poucos dados',
+} as const;
+
+/** Termômetro do chip (docs/03-OPERACAO.md §7). */
+export function Farol({ estado }: { estado: keyof typeof CORES_FAROL }) {
+  return (
+    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${CORES_FAROL[estado]}`}>
+      {TEXTO_FAROL[estado]}
+    </span>
+  );
+}
+
+export function Vazio({ children }: { children: ReactNode }) {
+  return <Cartao className="p-8 text-center text-sm text-suave">{children}</Cartao>;
+}

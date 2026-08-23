@@ -26,8 +26,7 @@
       "@/*": [
         "./src/*"
       ]
-    },
-    "allowImportingTsExtensions": true
+    }
   },
   "include": [
     "next-env.d.ts",
@@ -38,6 +37,7 @@
     "**/*.mts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    ".next/dev"
   ]
 }

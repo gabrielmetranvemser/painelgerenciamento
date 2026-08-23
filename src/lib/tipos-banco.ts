@@ -44,6 +44,10 @@ export type Config = {
   numero: string;
   termo_texto: string;
   termo_versao: number;
+  material_titulo: string;
+  material_texto: string;
+  kit_ativo: boolean;
+  responsavel_dados: string;
   atualizado_em: string;
 };
 
@@ -153,6 +157,8 @@ export type Captacao = {
   endereco: string | null;
   itens: string[] | null;
   aceite_em: string;
+  ip: string | null;
+  user_agent: string | null;
   virou_contato: boolean;
   contato_id: string | null;
   criado_em: string;
