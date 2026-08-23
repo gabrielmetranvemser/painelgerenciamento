@@ -20,9 +20,32 @@ carregarEnv({ path: '.env.local', quiet: true });
 const ORIGEM = 'extensao';
 const DESTINO = 'public/painel-extensao.zip';
 
-const base = (process.env.PAINEL_URL || process.env.LINK_BASE_URL || '').replace(/\/+$/, '');
+/**
+ * De onde sai a URL, em ordem de preferência:
+ *
+ *   PAINEL_URL                      domínio próprio, quando existir
+ *   LINK_BASE_URL                   o que a aplicação já usa
+ *   VERCEL_PROJECT_PRODUCTION_URL   o apelido estável do projeto
+ *   VERCEL_URL                      a URL desta implantação (último recurso:
+ *                                   muda a cada deploy, mas é melhor que nada)
+ *
+ * As duas últimas existem porque este script roda no `prebuild`: sem elas, uma
+ * variável faltando no ambiente de BUILD derrubaria o deploy inteiro por causa
+ * de um zip de 4 kB — foi exatamente o que aconteceu na primeira tentativa.
+ */
+function descobrirBase() {
+  const explicito = process.env.PAINEL_URL || process.env.LINK_BASE_URL;
+  if (explicito) return explicito.replace(/\/+$/, '');
+
+  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+  if (vercel) return `https://${vercel.replace(/^https?:\/\//, '').replace(/\/+$/, '')}`;
+
+  return null;
+}
+
+const base = descobrirBase();
 if (!base) {
-  console.error('❌ defina PAINEL_URL ou LINK_BASE_URL para empacotar a extensão');
+  console.error('❌ não sei o endereço do painel: defina PAINEL_URL ou LINK_BASE_URL.');
   process.exit(1);
 }
 const painelUrl = base.endsWith('/painel') ? base : `${base}/painel`;

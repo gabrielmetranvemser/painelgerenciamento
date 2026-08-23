@@ -31,8 +31,15 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const caminho = request.nextUrl.pathname;
-  const interna = caminho.startsWith('/painel') || caminho.startsWith('/gestor')
-    || caminho === '/termo' || caminho === '/instalar';
+  // `startsWith('/painel')` sozinho pegava também `/painel-extensao.zip`, que
+  // não é rota nenhuma — o download caía numa tela de login por acidente.
+  // O zip continua protegido, mas agora porque está listado aqui de propósito.
+  const interna =
+    caminho === '/painel' || caminho.startsWith('/painel/') ||
+    caminho === '/gestor' || caminho.startsWith('/gestor/') ||
+    caminho === '/termo' ||
+    caminho === '/instalar' ||
+    caminho === '/painel-extensao.zip';
 
   if (interna && !user) {
     const url = request.nextUrl.clone();
