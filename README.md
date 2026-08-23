@@ -45,10 +45,10 @@ npm run lint
 | 4 · Importação | ✅ CSV, mapeador de colunas, conferência, blocos de 500 |
 | 5 · Tela do atendente | ✅ fila, travas, 13 casos, atalhos 1–5, mensagem de seguimento por resultado |
 | 5b · Perfil do contato | ✅ histórico, correção de resultado, mensagens avulsas, pedido de kit |
-| 6 · Links + captação | ✅ /r/[token] com filtro de bot, /m/[token], /kit, /privacidade |
+| 6 · Links + captação | ✅ /r/[token] com filtro de bot, /m/[token], /kit, /site, /privacidade |
 | 7 · Painel do gestor | ✅ visão geral, atendentes, números, mensagens, config, relatórios |
 | 8 · Automações | ✅ lease, 72h, purga LGPD |
-| 9 · Extensão Chrome | ⬜ fase 2 — o painel funciona 100% sem ela |
+| 9 · Extensão Chrome | ✅ painel lateral Nível 0 — ver [extensao/LEIA-ME.md](extensao/LEIA-ME.md) |
 
 ## Testes
 

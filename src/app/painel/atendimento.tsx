@@ -91,9 +91,15 @@ export function Atendimento({
   const [ocupado, iniciar] = useTransition();
   const botaoAbrir = useRef<HTMLButtonElement>(null);
 
-  const valido = (id: string | null) => (id && chips.some((c) => c.id === id) ? id : null);
-  const chipId = valido(chipEscolhido) ?? valido(chipSalvo) ?? chips[0]?.id ?? '';
-  const chip = chips.find((c) => c.id === chipId);
+  const vivos = chips.filter((c) => c.status !== 'morto');
+  const valido = (id: string | null) => (id && vivos.some((c) => c.id === id) ? id : null);
+  const chipId = valido(chipEscolhido) ?? valido(chipSalvo) ?? vivos[0]?.id ?? '';
+  const chip = vivos.find((c) => c.id === chipId);
+
+  // O número que o atendente usava caiu. Ele precisa saber ANTES de tentar
+  // trabalhar — e precisa saber o que fazer (docs/03-OPERACAO.md §2.5).
+  const morto = chipSalvo ? chips.find((c) => c.id === chipSalvo && c.status === 'morto') : undefined;
+  const reserva = vivos.find((c) => c.papel === 'reserva') ?? vivos[0];
 
   // Lembra o número escolhido: o atendente troca de perfil do Chrome, não de aba.
   function trocarChip(id: string) {
@@ -232,10 +238,12 @@ export function Atendimento({
     return () => window.removeEventListener('keydown', aoTeclar);
   });
 
-  if (chips.length === 0) {
+  if (vivos.length === 0) {
     return (
       <Aviso tom="alerta">
-        Você ainda não tem nenhum número cadastrado. Peça ao gestor para cadastrar o seu Chip A.
+        {chips.length === 0
+          ? 'Você ainda não tem nenhum número cadastrado. Peça ao gestor para cadastrar o seu Chip A.'
+          : 'Todos os seus números foram desativados. Fale com o gestor antes de continuar.'}
       </Aviso>
     );
   }
@@ -248,13 +256,22 @@ export function Atendimento({
         <Barra
           primeiroNome={primeiroNome}
           fila={fila}
-          chips={chips}
+          chips={vivos}
           chipId={chipId}
           aoTrocarChip={trocarChip}
           aoSinalizar={() => iniciar(async () => { await sinalizarChip(chipId); await atualizarFila(); })}
         />
 
         {erro && <Aviso tom="erro">{erro}</Aviso>}
+
+        {morto && (
+          <Aviso tom="erro">
+            <strong>Seu {morto.rotulo} foi desativado.</strong>{' '}
+            {reserva
+              ? `Feche esta janela e abra o atalho do ${reserva.rotulo}. As conversas que estavam no ${morto.rotulo} não voltam — quem respondeu por lá não chega mais até você.`
+              : 'Fale com o gestor: você não tem outro número disponível.'}
+          </Aviso>
+        )}
 
         {chip && chip.status === 'amarelo' && (
           <Aviso tom="alerta">

@@ -11,21 +11,23 @@ export default async function PaginaPainel() {
   const supabase = await criarClienteServidor();
 
   const [{ data: chips }, { data: municipios }] = await Promise.all([
+    // Traz os mortos também: o atendente precisa ser AVISADO de que o número
+    // caiu, não descobrir sozinho que ele sumiu do seletor.
     supabase
       .from('chips')
       .select('*')
       .eq('atendente_id', usuario.id)
-      .not('status', 'in', '("morto")')
       .order('papel')
       .order('rotulo'),
     supabase.from('municipios').select('*').order('nome'),
   ]);
 
   const lista = (chips ?? []) as Chip[];
+  const vivos = lista.filter((c) => c.status !== 'morto');
 
   let filaInicial: FilaStatus | null = null;
-  if (lista.length > 0) {
-    const { data } = await supabase.rpc('fila_status', { p_chip_id: lista[0].id });
+  if (vivos.length > 0) {
+    const { data } = await supabase.rpc('fila_status', { p_chip_id: vivos[0].id });
     filaInicial = (data as FilaStatus) ?? null;
   }
 

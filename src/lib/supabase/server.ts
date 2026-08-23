@@ -1,6 +1,7 @@
 import 'server-only';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { ajustarCookie } from './cookies';
 
 /**
  * Cliente Supabase para Server Components, Server Actions e Route Handlers.
@@ -20,7 +21,7 @@ export async function criarClienteServidor() {
         setAll: (paraGravar) => {
           try {
             paraGravar.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options),
+              cookieStore.set(name, value, ajustarCookie(options)),
             );
           } catch {
             // Server Component não pode gravar cookie. O middleware já

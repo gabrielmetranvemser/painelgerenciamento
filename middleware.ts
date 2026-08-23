@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { ajustarCookie } from '@/lib/supabase/cookies';
 
 /**
  * Renova a sessão a cada requisição e barra as áreas internas de quem não está
@@ -19,7 +20,7 @@ export async function middleware(request: NextRequest) {
           paraGravar.forEach(({ name, value }) => request.cookies.set(name, value));
           resposta = NextResponse.next({ request });
           paraGravar.forEach(({ name, value, options }) =>
-            resposta.cookies.set(name, value, options),
+            resposta.cookies.set(name, value, ajustarCookie(options)),
           );
         },
       },
@@ -53,6 +54,6 @@ export const config = {
   matcher: [
     // Tudo, menos estáticos e as rotas públicas de captação (/r, /m, /kit),
     // que precisam responder rápido e sem sessão.
-    '/((?!_next/static|_next/image|favicon.ico|r/|m/|kit|privacidade|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|r/|m/|kit|site|privacidade|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
