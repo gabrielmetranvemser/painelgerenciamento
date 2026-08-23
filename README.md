@@ -40,7 +40,7 @@ npm run lint
 |---|---|
 | 0 · Fundação | ✅ Next.js, Tailwind, Vitest, CLAUDE.md |
 | 1 · Funções críticas | ✅ telefone, hmac, bots, mensagem — 169 testes |
-| 2 · Banco (schema, RLS, RPCs) | ⬜ |
+| 2 · Banco (schema, RLS, RPCs) | ✅ 17 tabelas, RLS total, fila atômica — 14 travas testadas |
 | 3 · Auth + termo | ⬜ |
 | 4 · Importação de lista | ⬜ |
 | 5 · Tela do atendente | ⬜ |
