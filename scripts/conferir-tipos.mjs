@@ -21,6 +21,7 @@ const TABELAS = {
   alertas: 'Alerta', captacoes: 'Captacao',
   candidatos: 'Candidato', materiais: 'Material',
   atendente_candidatos: 'AtendenteCandidato', contato_candidato: 'ContatoCandidato',
+  chamados: 'Chamado', chamado_mensagens: 'ChamadoMensagem', chamado_anexos: 'ChamadoAnexo',
 };
 
 const cliente = new pg.Client({ connectionString: process.env.SUPABASE_DB_URL });

@@ -301,12 +301,101 @@ export type EntregaDoContato = {
   canais: number;
 };
 
+// ── Suporte ──────────────────────────────────────────────────────────────────
+
+export const MOTIVOS_CHAMADO = ['tecnico', 'contato', 'juridico', 'material', 'outro'] as const;
+export type MotivoChamado = (typeof MOTIVOS_CHAMADO)[number];
+
+export const STATUS_CHAMADO = ['aberto', 'em_analise', 'resolvido'] as const;
+export type StatusChamado = (typeof STATUS_CHAMADO)[number];
+
+export const ROTULO_MOTIVO: Record<MotivoChamado, string> = {
+  tecnico: 'Problema técnico',
+  contato: 'Sobre um contato',
+  juridico: 'Risco jurídico',
+  material: 'Material ou texto',
+  outro: 'Outro assunto',
+};
+
+/** O que cada motivo quer dizer, na tela de quem abre o chamado. */
+export const DICA_MOTIVO: Record<MotivoChamado, string> = {
+  tecnico: 'O painel travou, a extensão não abre, o WhatsApp Web deu problema.',
+  contato: 'Algo sobre uma pessoa específica da sua fila.',
+  juridico: 'Intimação, ameaça de denúncia, advogado, ou alguém dizendo que vai processar.',
+  material: 'Link quebrado, peça errada, texto com problema.',
+  outro: 'Qualquer outra coisa que o gestor precise saber.',
+};
+
+export const ROTULO_STATUS_CHAMADO: Record<StatusChamado, string> = {
+  aberto: 'Aberto',
+  em_analise: 'Em análise',
+  resolvido: 'Resolvido',
+};
+
+export type Chamado = {
+  id: string;
+  atendente_id: string;
+  motivo: MotivoChamado;
+  assunto: string;
+  contato_id: string | null;
+  chip_id: string | null;
+  status: StatusChamado;
+  criado_em: string;
+  respondido_em: string | null;
+  resolvido_em: string | null;
+  resolvido_por: string | null;
+};
+
+export type ChamadoMensagem = {
+  id: string;
+  chamado_id: string;
+  autor_id: string | null;
+  texto: string;
+  criado_em: string;
+};
+
+export type ChamadoAnexo = {
+  id: string;
+  chamado_id: string;
+  mensagem_id: string | null;
+  autor_id: string | null;
+  /** Caminho dentro do balde PRIVADO `suporte`. Nunca vira URL pública. */
+  caminho: string;
+  bytes: number;
+  largura: number | null;
+  altura: number | null;
+  criado_em: string;
+};
+
+/** Uma linha da lista de chamados. */
+export type ChamadoNaLista = {
+  id: string;
+  motivo: MotivoChamado;
+  assunto: string;
+  status: StatusChamado;
+  criado_em: string;
+  respondido_em: string | null;
+  resolvido_em: string | null;
+  atendente_id: string;
+  atendente: string | null;
+  contato_id: string | null;
+  contato: string | null;
+  contato_telefone: string | null;
+  chip: string | null;
+  mensagens: number;
+  anexos: number;
+  ultima_em: string | null;
+  /** A última fala foi do atendente: a bola está com o gestor. */
+  espera_gestor: boolean | null;
+};
+
 // ── Views ────────────────────────────────────────────────────────────────────
 
 export type Resumo = {
   na_fila: number; fila_quente: number; fila_fria: number; em_atendimento: number;
   abordados: number; autorizou: number; pediu_saida: number; sem_resposta: number;
   perdidos: number; cliques_reais: number; abordados_hoje: number; alertas_abertos: number;
+  chamados_abertos: number; juridicos_abertos: number;
 };
 
 export type SaudeChip = {

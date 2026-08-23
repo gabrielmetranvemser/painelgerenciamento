@@ -1,4 +1,4 @@
-import { Headphones, LayoutGrid, LogOut, Users, Wrench } from 'lucide-react';
+import { Headphones, LayoutGrid, LifeBuoy, LogOut, Users, Wrench } from 'lucide-react';
 import { exigirAtendente } from '@/lib/sessao';
 import { rotas } from '@/lib/links-internos';
 import { sair } from '@/app/[entrada]/(interno)/entrar/acoes';
@@ -18,6 +18,7 @@ export default async function LayoutPainel({
   const abas = [
     { href: r.painel, rotulo: 'Atender', icone: <Headphones size={15} /> },
     { href: r.meusContatos, rotulo: 'Meus contatos', icone: <Users size={15} /> },
+    { href: r.suporte, rotulo: 'Falar com o gestor', icone: <LifeBuoy size={15} /> },
     { href: r.instalar, rotulo: 'Preparar máquina', icone: <Wrench size={15} /> },
     ...(usuario.papel === 'gestor'
       ? [{ href: r.gestor, rotulo: 'Gestor', icone: <LayoutGrid size={15} /> }]

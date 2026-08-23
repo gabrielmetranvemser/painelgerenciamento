@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
-  ArrowUpRight, BellRing, Flame, MousePointerClick, Smartphone, Snowflake,
+  ArrowUpRight, BellRing, Flame, Gavel, LifeBuoy, MousePointerClick, Smartphone, Snowflake,
   ThumbsUp, TriangleAlert, UsersRound, UserX,
 } from 'lucide-react';
 import { criarClienteServidor } from '@/lib/supabase/server';
@@ -35,6 +35,28 @@ export default async function PainelGestor({ params }: { params: Promise<{ entra
       <Titulo sub="Como a operação está agora. Os números atualizam a cada carga da página.">
         Visão geral
       </Titulo>
+
+      {(r?.juridicos_abertos ?? 0) > 0 && (
+        <Link href={rt.gestorSuporte} className="mb-6 block">
+          <Cartao className="border-perigo/40 bg-perigo/[0.08] p-5 transition-colors hover:border-perigo/60">
+            <div className="flex gap-3">
+              <Gavel size={18} className="mt-0.5 shrink-0 text-perigo" />
+              <div>
+                <p className="font-semibold text-perigo">
+                  {r!.juridicos_abertos === 1
+                    ? 'Um atendente relatou risco jurídico'
+                    : `${r!.juridicos_abertos} relatos de risco jurídico em aberto`}
+                </p>
+                <p className="mt-1 text-sm leading-relaxed text-suave">
+                  Intimação, ameaça de denúncia ou advogado. Abra antes de qualquer outra coisa —
+                  quem relatou está parado esperando resposta.
+                </p>
+              </div>
+              <ArrowUpRight size={16} className="ml-auto shrink-0 text-perigo" />
+            </div>
+          </Cartao>
+        </Link>
+      )}
 
       {vermelhos.length > 0 && (
         <Cartao className="mb-6 border-perigo/30 bg-perigo/[0.06] p-5">
@@ -129,8 +151,20 @@ export default async function PainelGestor({ params }: { params: Promise<{ entra
         </Secao>
       </div>
 
-      {(alertas ?? []).length > 0 && (
-        <Secao titulo="Avisos" className="mt-6">
+      {((alertas ?? []).length > 0 || (r?.chamados_abertos ?? 0) > 0) && (
+        <Secao titulo="Avisos" className="mt-6"
+               link={{ href: rt.gestorSuporte, rotulo: 'abrir suporte' }}>
+          {(r?.chamados_abertos ?? 0) > 0 && (
+            <Link href={rt.gestorSuporte}
+                  className="mb-3 flex items-center gap-3 rounded-2xl border border-borda bg-superficie px-5 py-4 transition-colors hover:border-borda-forte">
+              <LifeBuoy size={16} className="shrink-0 text-suave" />
+              <p className="mr-auto text-sm">
+                <strong>{r!.chamados_abertos}</strong>{' '}
+                {r!.chamados_abertos === 1 ? 'chamado aberto' : 'chamados abertos'} de atendente
+              </p>
+              <ArrowUpRight size={15} className="shrink-0 text-suave" />
+            </Link>
+          )}
           <Cartao className="divide-y divide-borda overflow-hidden">
             {((alertas ?? []) as Alerta[]).map((a) => (
               <div key={a.id} className="flex gap-3 px-5 py-4">

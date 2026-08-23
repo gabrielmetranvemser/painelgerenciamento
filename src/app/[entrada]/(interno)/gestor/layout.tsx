@@ -1,8 +1,8 @@
 import { Headphones, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import {
-  Contact, FileBarChart, Gauge, MessageSquareText, PackageOpen, Settings, Smartphone, Upload,
-  Users, Vote,
+  Contact, FileBarChart, Gauge, LifeBuoy, MessageSquareText, PackageOpen, Settings, Smartphone,
+  Upload, Users, Vote,
 } from 'lucide-react';
 import { exigirGestor } from '@/lib/sessao';
 import { rotas } from '@/lib/links-internos';
@@ -29,6 +29,7 @@ export default async function LayoutGestor({
     { href: r.gestorAtendentes, rotulo: 'Atendentes', icone: <Users size={15} /> },
     { href: r.gestorChips, rotulo: 'Números', icone: <Smartphone size={15} /> },
     { href: r.gestorMensagens, rotulo: 'Mensagens', icone: <MessageSquareText size={15} /> },
+    { href: r.gestorSuporte, rotulo: 'Suporte', icone: <LifeBuoy size={15} /> },
     { href: r.gestorRelatorios, rotulo: 'Relatórios', icone: <FileBarChart size={15} /> },
     { href: r.gestorConfiguracao, rotulo: 'Configuração', icone: <Settings size={15} /> },
   ];
