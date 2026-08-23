@@ -38,13 +38,36 @@ npm run lint
 
 | Bloco | Situação |
 |---|---|
-| 0 · Fundação | ✅ Next.js, Tailwind, Vitest, CLAUDE.md |
-| 1 · Funções críticas | ✅ telefone, hmac, bots, mensagem — 169 testes |
-| 2 · Banco (schema, RLS, RPCs) | ✅ 17 tabelas, RLS total, fila atômica — 14 travas testadas |
-| 3 · Auth + termo | ⬜ |
-| 4 · Importação de lista | ⬜ |
-| 5 · Tela do atendente | ⬜ |
-| 6 · Links rastreados + captação | ⬜ |
-| 7 · Painel do gestor | ⬜ |
-| 8 · Automações (cron) | ⬜ |
-| 9 · Extensão Chrome (fase 2) | ⬜ |
+| 0 · Fundação | ✅ Next.js 16, Tailwind 4, Vitest |
+| 1 · Funções críticas | ✅ telefone, hmac, bots, mensagem, importação, csv |
+| 2 · Banco | ✅ 17 tabelas, RLS total, 12 RPCs, 3 crons |
+| 3 · Auth + termo | ✅ cookie httpOnly, middleware, aceite datado |
+| 4 · Importação | ✅ CSV, mapeador de colunas, conferência, blocos de 500 |
+| 5 · Tela do atendente | ✅ fila, mensagem, travas, 13 casos, atalhos 1–5 |
+| 6 · Links + captação | ✅ /r/[token] com filtro de bot, /m/[token], /kit, /privacidade |
+| 7 · Painel do gestor | ✅ visão geral, atendentes, números, mensagens, config, relatórios |
+| 8 · Automações | ✅ lease, 72h, purga LGPD |
+| 9 · Extensão Chrome | ⬜ fase 2 — o painel funciona 100% sem ela |
+
+## Testes
+
+```bash
+npm run test:tudo     # typecheck + unitários + tipos do banco + banco
+```
+
+| Suíte | O que cobre |
+|---|---|
+| `npm test` | 213 testes: normalização de telefone (40 formatos reais), HMAC, filtro de bot, blocos travados, importação, CSV |
+| `npm run tipos` | compara `src/lib/tipos-banco.ts` coluna a coluna com o banco |
+| `npm run test:banco` | 16 travas de servidor, 4 automações, 4 de concorrência da fila |
+
+Os testes de banco são autossuficientes: criam os próprios dados e dão rollback.
+Podem rodar com a base em produção sem deixar resíduo.
+
+## Scripts
+
+```bash
+node scripts/criar-usuario.mjs <email> <nome> [gestor|atendente]
+npm run semear            # contatos de teste, pelas funções reais
+npm run importar:teste    # roda o pipeline de importação num CSV
+```

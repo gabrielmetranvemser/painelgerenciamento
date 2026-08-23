@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react';
 import { Aviso, Botao, Cartao, EtiquetaOrigem } from '@/components/ui';
 import { ComoAgir } from '@/components/como-agir';
 import { formatarExibicao } from '@/lib/telefone';
@@ -23,6 +23,30 @@ const ROTULO_RESULTADO: Record<Resultado, string> = {
 /** Nome da janela do WhatsApp: reaproveita a mesma aba em vez de abrir 30. */
 const JANELA_WA = 'whatsapp-atendimento';
 
+const CHAVE_CHIP = 'chip';
+
+/**
+ * Lê o chip salvo sem causar remontagem nem divergência de hidratação.
+ *
+ * useSyncExternalStore é o jeito que o React prevê para ler de um armazenamento
+ * externo: no servidor devolve null, no cliente devolve o valor guardado, e o
+ * próprio React concilia a diferença. Ler em useEffect e chamar setState
+ * causaria uma renderização em cascata a cada montagem — numa tela que o
+ * atendente abre e recarrega o dia inteiro.
+ */
+function assinarArmazenamento(aoMudar: () => void) {
+  window.addEventListener('storage', aoMudar);
+  return () => window.removeEventListener('storage', aoMudar);
+}
+
+function useChipSalvo(): string | null {
+  return useSyncExternalStore(
+    assinarArmazenamento,
+    () => window.localStorage.getItem(CHAVE_CHIP),
+    () => null,
+  );
+}
+
 export function Atendimento({
   primeiroNome,
   chips,
@@ -34,7 +58,9 @@ export function Atendimento({
   municipios: Municipio[];
   filaInicial: FilaStatus | null;
 }) {
-  const [chipId, setChipId] = useState(chips[0]?.id ?? '');
+  // `null` enquanto o atendente não escolheu explicitamente nesta sessão.
+  const [chipEscolhido, setChipEscolhido] = useState<string | null>(null);
+  const chipSalvo = useChipSalvo();
   const [fila, setFila] = useState<FilaStatus | null>(filaInicial);
   const [contato, setContato] = useState<ContatoDaFila | null>(null);
   const [mensagem, setMensagem] = useState<MensagemPronta | null>(null);
@@ -46,16 +72,15 @@ export function Atendimento({
   const [ocupado, iniciar] = useTransition();
   const botaoAbrir = useRef<HTMLButtonElement>(null);
 
+  const valido = (id: string | null) => (id && chips.some((c) => c.id === id) ? id : null);
+  const chipId = valido(chipEscolhido) ?? valido(chipSalvo) ?? chips[0]?.id ?? '';
   const chip = chips.find((c) => c.id === chipId);
 
-  // Lembra o chip escolhido: o atendente troca de perfil do Chrome, não de aba.
-  useEffect(() => {
-    const salvo = localStorage.getItem('chip');
-    if (salvo && chips.some((c) => c.id === salvo)) setChipId(salvo);
-  }, [chips]);
-  useEffect(() => {
-    if (chipId) localStorage.setItem('chip', chipId);
-  }, [chipId]);
+  // Lembra o número escolhido: o atendente troca de perfil do Chrome, não de aba.
+  function trocarChip(id: string) {
+    setChipEscolhido(id);
+    window.localStorage.setItem(CHAVE_CHIP, id);
+  }
 
   const atualizarFila = useCallback(async () => {
     if (!chipId) return;
@@ -71,11 +96,15 @@ export function Atendimento({
     return () => clearInterval(t);
   }, [espera]);
 
-  // Quando a contagem zera, confirma com o servidor — o relógio do navegador
-  // não decide nada, só mostra.
+  // Quando o intervalo termina, confirma com o SERVIDOR — o relógio do navegador
+  // não decide nada, só mostra. O agendamento sai do tempo que o servidor
+  // informou, não da contagem local, para não depender de o usuário ter deixado
+  // a aba em primeiro plano.
   useEffect(() => {
-    if (espera === 0 && fila?.motivo === 'intervalo') void atualizarFila();
-  }, [espera, fila?.motivo, atualizarFila]);
+    if (fila?.motivo !== 'intervalo' || fila.segundos_espera <= 0) return;
+    const t = setTimeout(() => void atualizarFila(), fila.segundos_espera * 1000 + 300);
+    return () => clearTimeout(t);
+  }, [fila, atualizarFila]);
 
   // Enquanto ocioso, reconsulta de tempos em tempos: a fila pode receber
   // contatos novos e o horário pode virar.
@@ -199,7 +228,7 @@ export function Atendimento({
           fila={fila}
           chips={chips}
           chipId={chipId}
-          aoTrocarChip={setChipId}
+          aoTrocarChip={trocarChip}
           aoSinalizar={() => iniciar(async () => { await sinalizarChip(chipId); await atualizarFila(); })}
         />
 

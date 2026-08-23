@@ -47,7 +47,10 @@ select
   '69' || lpad(g::text, 8, '0'),
   'hmac-teste-' || lpad(g::text, 4, '0'),
   'na_fila',
-  now() + make_interval(secs => g),
+  -- Um ano no passado: a fila ordena por criado_em, então os contatos de teste
+  -- são SEMPRE os primeiros a sair. Sem isso, os claims simultâneos pegariam
+  -- contatos reais da base e os deixariam presos em atendimento.
+  now() - interval '1 year' + make_interval(secs => g),
   (select id from public.listas where rotulo = 'teste-lista-fria')
 from generate_series(1, 10) g;
 

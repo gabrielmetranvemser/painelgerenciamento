@@ -40,6 +40,8 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `src/lib/hmac.ts` | quem pediu saída volta para a fila → multa por mensagem |
 | `src/lib/bots.ts` | o pré-carregamento de link do WhatsApp vira "clique" → métrica inútil |
 | `src/lib/mensagem.ts` | texto sai sem os blocos travados → perde a defesa jurídica |
+| `src/lib/importacao.ts` | dedup e casamento de município da planilha |
+| `pegar_proximo_contato` | dois atendentes pegam o mesmo contato
 
 ### 2. Toda trava é validada no SERVIDOR
 
@@ -94,15 +96,19 @@ nome e município nunca vão para a query string.
 ## Comandos
 
 ```bash
-npm run dev        # servidor de desenvolvimento
-npm test           # funções críticas — rodar antes de qualquer commit
-npm run typecheck  # tsc --noEmit
-npm run build      # build de produção
-npm run lint
+npm run dev          # servidor de desenvolvimento
+npm run test:tudo    # typecheck + unitários + tipos + banco — antes de commitar
+npm test             # só os unitários (rápido)
+npm run test:banco   # travas, automações e concorrência, contra o banco
+npm run tipos        # confere src/lib/tipos-banco.ts contra as colunas reais
+npm run build
 ```
 
-Migrations: `supabase db push` contra o projeto remoto (não há stack local —
-esta máquina não tem Docker).
+Migrations: `supabase db push --db-url "$SUPABASE_DB_URL"` contra o projeto
+remoto. Não há stack local — esta máquina não tem Docker, e por isso
+`supabase gen types` também não roda: **os tipos de `src/lib/tipos-banco.ts`
+são mantidos à mão.** Depois de qualquer migration, rode `npm run tipos`, que
+falha se alguma coluna ficou sem tipo.
 
 ## Infraestrutura
 

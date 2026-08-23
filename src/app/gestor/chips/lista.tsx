@@ -2,7 +2,6 @@
 
 import { useActionState, useState, useTransition } from 'react';
 import { Aviso, Botao, Campo, Cartao, Farol } from '@/components/ui';
-import { formatarExibicao } from '@/lib/telefone';
 import type { SaudeChip, StatusChip, Usuario } from '@/lib/tipos-banco';
 import { criarChip, matarChip, mudarStatus } from './acoes';
 

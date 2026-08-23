@@ -7,9 +7,11 @@
 # Uso: PGPASSWORD=... PGHOST=... ./supabase/tests/concorrencia.sh
 set -uo pipefail
 
-Q() { psql -qtAX -c "$1"; }
+# Aceita PSQL_URL para o runner funcionar sem exportar PGHOST/PGPASSWORD.
+CONN=("${PSQL_URL:-}")
+[ -z "${CONN[0]}" ] && CONN=()
 
-PARES=$(psql -qtAX -c "
+PARES=$(psql "${CONN[@]}" -qtAX -c "
   select u.id || ' ' || c.id
     from public.usuarios u
     join public.chips c on c.atendente_id = u.id
@@ -17,7 +19,7 @@ PARES=$(psql -qtAX -c "
    order by c.rotulo;")
 
 claim() { # $1=uid $2=chip $3=arquivo de saida
-  psql -qtAX -o "$3" -c "
+  psql "${CONN[@]}" -qtAX -o "$3" -c "
     begin;
     set local request.jwt.claims = '{\"sub\":\"$1\",\"role\":\"authenticated\"}';
     select coalesce(public.pegar_proximo_contato('$2')->'contato'->>'id',
@@ -32,7 +34,7 @@ LINHA_A=$(echo "$PARES" | sed -n 1p); UID_A=${LINHA_A% *}; CHIP_A=${LINHA_A#* }
 LINHA_B=$(echo "$PARES" | sed -n 2p); UID_B=${LINHA_B% *}; CHIP_B=${LINHA_B#* }
 
 # A pega um contato e SEGURA a transação aberta por 4s, sem commitar.
-psql -qtAX -o "$OUT/a" -c "
+psql "${CONN[@]}" -qtAX -o "$OUT/a" -c "
   begin;
   set local request.jwt.claims = '{\"sub\":\"$UID_A\",\"role\":\"authenticated\"}';
   select public.pegar_proximo_contato('$CHIP_A')->'contato'->>'id';
@@ -78,26 +80,44 @@ fi
 
 echo
 echo "── Teste 3: ordem da fila (quente antes de frio) ────────────────────────"
-ORDEM=$(psql -qtAX -c "
-  select string_agg(origem::text, ',' order by claimed_at)
-    from public.contatos
-   where status = 'em_atendimento' and nome like 'Contato Teste %';")
-echo "  ordem de entrega: $ORDEM"
-PRIMEIROS=$(echo "$ORDEM" | cut -d, -f1-3)
-if [ "$PRIMEIROS" = "site,site,site" ]; then
-  echo "  ✅ os 3 contatos quentes saíram antes de qualquer frio"
+# Sequencial de propósito. Sob concorrência não dá para aferir a ORDEM de
+# entrega: claimed_at é o horário de início da transação, e uma transação que
+# começou antes pode adquirir o lock depois. O produto entrega certo, mas a
+# medição ficaria inconclusiva. Aqui claimamos um de cada vez, com chips
+# diferentes (o intervalo mínimo impede o mesmo chip de pegar dois seguidos), e
+# lemos a origem direto da resposta da função.
+psql "${CONN[@]}" -qtAX -c "
+  update public.contatos
+     set status='na_fila', atendente_id=null, chip_id=null, claimed_at=null, claim_expira_em=null
+   where nome like 'Contato Teste %';" >/dev/null
+
+ORIGENS=""
+i=0
+while read -r linha; do
+  i=$((i+1)); [ "$i" -gt 4 ] && break
+  u=${linha% *}; c=${linha#* }
+  o=$(psql "${CONN[@]}" -qtAX -c "
+    begin;
+    set local request.jwt.claims = '{\"sub\":\"$u\",\"role\":\"authenticated\"}';
+    select public.pegar_proximo_contato('$c')->'contato'->>'origem';
+    commit;")
+  ORIGENS="$ORIGENS$o,"
+done <<< "$PARES"
+
+echo "  4 primeiras entregas: ${ORIGENS%,}"
+if [ "${ORIGENS%,}" = "site,site,site,lista_fria" ]; then
+  echo "  ✅ os 3 quentes saíram primeiro, e só então a fila fria"
 else
   echo "  ❌ FALHOU: a fila fria foi atendida antes da quente"; FALHAS=1
 fi
 
-echo
 echo "── Teste 4: retomada (recarregar a página não pula contato) ─────────────"
-PRIMEIRO=$(psql -qtAX -c "
+PRIMEIRO=$(psql "${CONN[@]}" -qtAX -c "
   begin;
   set local request.jwt.claims = '{\"sub\":\"$UID_B\",\"role\":\"authenticated\"}';
   select public.pegar_proximo_contato('$CHIP_B')->'contato'->>'id';
   commit;")
-SEGUNDO=$(psql -qtAX -c "
+SEGUNDO=$(psql "${CONN[@]}" -qtAX -c "
   begin;
   set local request.jwt.claims = '{\"sub\":\"$UID_B\",\"role\":\"authenticated\"}';
   select public.pegar_proximo_contato('$CHIP_B')->'contato'->>'id';
