@@ -4,7 +4,8 @@ import { useActionState, useState, useTransition } from 'react';
 import { useFormStatus } from 'react-dom';
 import { KeyRound, Power, UserPlus } from 'lucide-react';
 import { Avatar, Aviso, Botao, Campo, Cartao, Pilula, Selecao } from '@/components/ui';
-import type { Usuario } from '@/lib/tipos-banco';
+import type { Candidato, Usuario } from '@/lib/tipos-banco';
+import { ChapaDoAtendente, type ItemChapa } from './chapa-do-atendente';
 import { alternarAtivo, criarAtendente, redefinirSenha } from './acoes';
 
 function BotaoCriar() {
@@ -50,7 +51,14 @@ function Senha({ email, senha, entrada }: { email: string; senha: string; entrad
   );
 }
 
-export function GerenciarAtendentes({ usuarios, entrada }: { usuarios: Usuario[]; entrada: string }) {
+export function GerenciarAtendentes({
+  usuarios, entrada, candidatos, chapas,
+}: {
+  usuarios: Usuario[];
+  entrada: string;
+  candidatos: Candidato[];
+  chapas: Record<string, ItemChapa[]>;
+}) {
   const [estado, acao] = useActionState(criarAtendente, null);
   const [ocupado, iniciar] = useTransition();
   const [novaSenha, setNovaSenha] = useState<{ nome: string; senha: string } | null>(null);
@@ -85,10 +93,13 @@ export function GerenciarAtendentes({ usuarios, entrada }: { usuarios: Usuario[]
         )}
       </div>
 
-      <Cartao className="divide-y divide-borda overflow-hidden">
-        {usuarios.length === 0 && <p className="p-8 text-center text-sm text-suave">Ninguém cadastrado ainda.</p>}
+      <div className="space-y-4">
+        {usuarios.length === 0 && (
+          <Cartao className="p-8 text-center text-sm text-suave">Ninguém cadastrado ainda.</Cartao>
+        )}
         {usuarios.map((u) => (
-          <div key={u.id} className="flex flex-wrap items-center gap-3 px-5 py-4">
+          <Cartao key={u.id} className="overflow-hidden">
+          <div className="flex flex-wrap items-center gap-3 px-5 py-4">
             <Avatar nome={u.primeiro_nome} fotoUrl={u.foto_url} tamanho="m" />
             <div className="mr-auto min-w-0">
               <p className="flex items-center gap-2 text-sm font-semibold">
@@ -115,8 +126,17 @@ export function GerenciarAtendentes({ usuarios, entrada }: { usuarios: Usuario[]
               <Power size={12} /> {u.ativo ? 'Desativar' : 'Reativar'}
             </Botao>
           </div>
+
+          {u.papel === 'atendente' && (
+            <ChapaDoAtendente
+              atendenteId={u.id}
+              chapa={chapas[u.id] ?? []}
+              candidatos={candidatos}
+            />
+          )}
+          </Cartao>
         ))}
-      </Cartao>
+      </div>
     </div>
   );
 }

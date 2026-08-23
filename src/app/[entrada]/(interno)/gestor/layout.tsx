@@ -1,7 +1,7 @@
 import { Headphones, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import {
-  FileBarChart, Gauge, MessageSquareText, Settings, Smartphone, Upload, Users,
+  FileBarChart, Gauge, MessageSquareText, Settings, Smartphone, Upload, Users, Vote,
 } from 'lucide-react';
 import { exigirGestor } from '@/lib/sessao';
 import { rotas } from '@/lib/links-internos';
@@ -21,6 +21,7 @@ export default async function LayoutGestor({
 
   const ABAS = [
     { href: r.gestor, rotulo: 'Visão geral', icone: <Gauge size={15} /> },
+    { href: `/${entrada}/gestor/candidatos`, rotulo: 'Candidatos', icone: <Vote size={15} /> },
     { href: r.gestorImportar, rotulo: 'Importar', icone: <Upload size={15} /> },
     { href: r.gestorAtendentes, rotulo: 'Atendentes', icone: <Users size={15} /> },
     { href: r.gestorChips, rotulo: 'Números', icone: <Smartphone size={15} /> },
