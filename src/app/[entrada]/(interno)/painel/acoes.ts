@@ -1,6 +1,7 @@
 'use server';
 
 import { criarClienteServidor } from '@/lib/supabase/server';
+import { enderecoBase } from '@/lib/endereco';
 import { montarTexto, primeiroNomeDe } from '@/lib/mensagem-etapas';
 import { urlWhatsApp } from '@/lib/telefone';
 import type {
@@ -95,7 +96,12 @@ export async function prepararMensagem(
   const r = data as RespostaPreparar;
   if (!r.ok) return { ok: false, motivo: r.motivo ?? 'erro' };
 
-  const base = process.env.LINK_BASE_URL ?? '';
+  // Sem endereço não dá para montar link, e link relativo numa mensagem de
+  // WhatsApp é texto morto. Falha aqui, com motivo, em vez de o atendente
+  // mandar algo que a pessoa não consegue abrir.
+  const base = enderecoBase();
+  if (base === null && r.pagina_token) return { ok: false, motivo: 'sem_endereco' };
+
   const texto = montarTexto(r.modelo, {
     primeiroNome: r.contato.primeiro_nome ?? primeiroNomeDe(r.contato.nome),
     nomeAtendente: r.atendente_nome,
@@ -202,6 +208,26 @@ export async function registrarResultado(
   });
   if (error) throw new Error(error.message);
   return data as RespostaResultado;
+}
+
+/**
+ * "Buscar outro contato": solta o contato que está na mão.
+ *
+ * Se nada foi enviado, ele volta para a fila com um adiamento — senão seria o
+ * mais antigo da fila e viria de volta no clique seguinte, para a mesma pessoa
+ * que acabou de pular. Se a primeira mensagem já saiu, a conversa está viva:
+ * fica em "Meus contatos" aguardando resposta e ninguém mais aborda.
+ */
+export async function pularContato(contatoId: string, chipId: string) {
+  const supabase = await criarClienteServidor();
+  const { data, error } = await supabase.rpc('pular_contato', {
+    p_contato_id: contatoId,
+    p_chip_id: chipId,
+  });
+  if (error) throw new Error(error.message);
+  return data as
+    | { ok: true; destino: 'aguardando_resposta' | 'devolvido_a_fila'; fila?: FilaStatus }
+    | { ok: false; motivo: string };
 }
 
 /** Botão "Meu WhatsApp está estranho". */

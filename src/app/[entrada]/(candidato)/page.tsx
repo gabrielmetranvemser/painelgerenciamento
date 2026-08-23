@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
-import { Cartao } from '@/components/ui';
+import { Cartao, cx } from '@/components/ui';
 import { textoDoAceite } from '@/lib/consentimento';
 import { ROTULO_CARGO, type CargoEleitoral, type Municipio } from '@/lib/tipos-banco';
 import { FormularioCandidato } from './formulario';
@@ -13,6 +13,8 @@ type CandidatoPublico = {
   id: string; slug: string; nome_urna: string; cargo: CargoEleitoral; numero: string;
   partido_sigla: string | null; coligacao: string | null; cnpj_campanha: string | null;
   responsavel_material: string | null; slogan: string | null; chamada: string | null;
+  cor_tema: string | null; cor_fundo: string | null; foto_url: string | null;
+  tema: 'auto' | 'claro' | 'escuro';
   ativo: boolean;
 };
 
@@ -22,7 +24,7 @@ async function buscar(slug: string) {
     .from('candidatos')
     .select(
       'id, slug, nome_urna, cargo, numero, partido_sigla, coligacao, cnpj_campanha, ' +
-      'responsavel_material, slogan, chamada, ativo',
+      'responsavel_material, slogan, chamada, cor_tema, cor_fundo, foto_url, tema, ativo',
     )
     .eq('slug', slug)
     .maybeSingle();
@@ -71,8 +73,24 @@ export default async function PaginaDoCandidato({
   const aceite = textoDoAceite(candidato);
 
   return (
-    <main className="mx-auto w-full max-w-lg flex-1 px-4 py-10 sm:px-6">
+    <main
+      className={cx(
+        'publico flex min-h-screen w-full flex-1 flex-col items-center px-4 py-10 text-texto sm:px-6',
+        candidato.tema === 'claro' && 'tema-claro',
+        candidato.tema === 'escuro' && 'tema-escuro',
+      )}
+      style={estiloDoCandidato(candidato)}
+    >
+      <div className="w-full max-w-lg">
       <header className="mb-6 text-center">
+        {candidato.foto_url && (
+          // Imagem de fora, endereço que o gestor digita: <img> comum. O
+          // otimizador do Next exigiria domínio configurado, e cada campanha
+          // hospeda a logo onde quiser.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={candidato.foto_url} alt={candidato.nome_urna}
+               className="mx-auto mb-4 h-16 w-auto max-w-[70%] object-contain" />
+        )}
         <p className="text-sm text-suave">
           {ROTULO_CARGO[candidato.cargo]} · nº {candidato.numero}
           {candidato.partido_sigla && ` · ${candidato.partido_sigla}`}
@@ -112,6 +130,42 @@ export default async function PaginaDoCandidato({
           .
         </p>
       </div>
+      </div>
     </main>
   );
+}
+
+
+/**
+ * A identidade do candidato, aplicada por variáveis CSS.
+ *
+ * Vai em `style` e não em classe do Tailwind porque a cor é escolhida em
+ * runtime pelo gestor: a varredura do Tailwind só enxerga nome literal, e uma
+ * classe montada por interpolação não chega a existir no CSS.
+ *
+ * `--acento` e `--tinta-acento` são os mesmos tokens que os componentes já
+ * usam, então redefini-los aqui pinta botão, foco e destaque de uma vez — sem
+ * um segundo sistema de cor convivendo com o primeiro.
+ */
+function estiloDoCandidato(c: CandidatoPublico): React.CSSProperties {
+  const estilo: Record<string, string> = {};
+  if (c.cor_tema) {
+    estilo['--acento'] = c.cor_tema;
+    estilo['--acento-alto'] = c.cor_tema;
+    estilo['--tinta-acento'] = contrasta(c.cor_tema);
+  }
+  if (c.cor_fundo) estilo['--fundo'] = c.cor_fundo;
+  return estilo as React.CSSProperties;
+}
+
+/**
+ * Preto ou branco por cima de uma cor, pelo brilho percebido.
+ *
+ * Luminância relativa, não média dos canais: o olho enxerga o verde muito mais
+ * que o azul, e a média escolheria branco sobre amarelo — botão ilegível.
+ */
+function contrasta(hex: string): string {
+  const n = parseInt(hex.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 150 ? '#111111' : '#ffffff';
 }

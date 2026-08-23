@@ -1,9 +1,22 @@
 'use client';
 
-import Link from 'next/link';
+import Link, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cx } from './ui';
+
+/**
+ * Troca o ícone da aba por um girador enquanto a navegação está em curso.
+ *
+ * Precisa ser um componente próprio: `useLinkStatus` lê o estado do `<Link>`
+ * mais próximo acima, então só funciona DENTRO dele.
+ */
+function IconeDaAba({ icone }: { icone?: ReactNode }) {
+  const { pending } = useLinkStatus();
+  if (pending) return <Loader2 size={15} className="animate-spin" />;
+  return <>{icone}</>;
+}
 
 /**
  * Navegação em pílulas, com a aba ativa preenchida.
@@ -33,7 +46,7 @@ export function BarraNav({
                 : 'text-suave hover:bg-superficie-alta hover:text-texto',
             )}
           >
-            {a.icone}
+            <IconeDaAba icone={a.icone} />
             <span className="hidden sm:inline">{a.rotulo}</span>
           </Link>
         );

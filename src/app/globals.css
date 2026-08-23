@@ -49,44 +49,76 @@
   --r:              1.25rem;   /* raio dos blocos */
 }
 
-/* ── Claro: só nas páginas públicas, e só se o aparelho pedir ───────────── */
+/* ── Público: claro e escuro, uma paleta só ─────────────────────────────
+ *
+ * Duas chaves, `--claro` e `--escuro`, das quais exatamente uma vale `initial`
+ * (inválida de propósito) e a outra vazia. Aí `var(--claro, A) var(--escuro, B)`
+ * rende A ou B — e a paleta aparece UMA vez no arquivo, em vez de uma cópia no
+ * @media e outra na classe, que sairiam de sincronia no primeiro ajuste.
+ *
+ * ⚠️ Não usar `light-dark()` aqui. O Lightning CSS, que o Next roda sobre este
+ * arquivo, converte a função exatamente nesta mesma técnica — só que com
+ * chaves dele, ligadas ao `@media` e ao `:root`. As classes de tema do
+ * candidato ficam de fora, e o resultado é fundo claro com texto claro.
+ *
+ * `color-scheme` continua sendo declarado: é ele que pinta a barra de rolagem
+ * e os controles nativos do formulário.
+ */
 .publico {
   color-scheme: light dark;
+
+  /* Padrão: escuro, e o @media abaixo vira para claro se o aparelho pedir. */
+  --claro:  ;
+  --escuro: initial;
+}
+
+@media (prefers-color-scheme: light) {
+  .publico { --claro: initial; --escuro: ; }
+}
+
+/* O candidato manda mais que o aparelho, quando ele escolheu. */
+.publico.tema-claro  { color-scheme: light; --claro: initial; --escuro: ; }
+.publico.tema-escuro { color-scheme: dark;  --claro: ;       --escuro: initial; }
+
+.publico {
+  --fundo:          var(--claro, #f4f4f3) var(--escuro, #08090b);
+  --fundo-fundo:    var(--claro, #ececeb) var(--escuro, #050607);
+  --superficie:     var(--claro, #ffffff) var(--escuro, #121316);
+  --superficie-alta:var(--claro, #f8f8f7) var(--escuro, #191b1f);
+  --vidro:          var(--claro, rgba(255, 255, 255, 0.72)) var(--escuro, rgba(255, 255, 255, 0.045));
+  --borda:          var(--claro, rgba(9, 9, 11, 0.09)) var(--escuro, rgba(255, 255, 255, 0.075));
+  --borda-forte:    var(--claro, rgba(9, 9, 11, 0.18)) var(--escuro, rgba(255, 255, 255, 0.14));
+  --texto:          var(--claro, #14151a) var(--escuro, #f5f5f6);
+  --suave:          var(--claro, #63666f) var(--escuro, #8a8d95);
+  --tenue:          var(--claro, #8f939c) var(--escuro, #5c5f68);
+
+  /* Lima pura sobre branco não tem contraste. No claro o acento escurece. */
+  --acento:         var(--claro, #4d7c0f) var(--escuro, #c6f24e);
+  --acento-alto:    var(--claro, #3f6212) var(--escuro, #d5fa6e);
+  --tinta-acento:   var(--claro, #ffffff) var(--escuro, #0a0c07);
+  --ok:             var(--claro, #4d7c0f) var(--escuro, #c6f24e);
+
+  --alerta:         var(--claro, #b45309) var(--escuro, #f5b83d);
+  --perigo:         var(--claro, #be123c) var(--escuro, #ff6b81);
+  --quente:         var(--claro, #c2410c) var(--escuro, #fb923c);
+  --frio:           var(--claro, #0369a1) var(--escuro, #7dd3fc);
+
+  --brilho:         var(--claro, 0 1px 0 0 rgba(255, 255, 255, 0.9) inset)
+                    var(--escuro, 0 1px 0 0 rgba(255, 255, 255, 0.06) inset);
+
+  /* A sombra tem duas camadas e vírgula não cabe na troca — o que muda é a
+     cor, e a composição fica fora. */
+  --sombra-perto:   var(--claro, rgb(9 9 11 / 0.08)) var(--escuro, rgb(0 0 0 / 0.7));
+  --sombra-longe:   var(--claro, rgb(9 9 11 / 0.22)) var(--escuro, rgb(0 0 0 / 0.9));
+  --sombra:         0 1px 2px -1px var(--sombra-perto), 0 12px 32px -16px var(--sombra-longe);
+  --sombra-alta:    0 2px 6px -2px var(--sombra-perto), 0 24px 56px -24px var(--sombra-longe);
+
   /* Repinta o próprio clarão com os tokens já trocados: sem isto o brilho do
      painel escuro apareceria por trás de uma página clara. */
   background:
     radial-gradient(60rem 40rem at 82% -10%, color-mix(in oklab, var(--acento) 7%, transparent), transparent 60%),
     var(--fundo);
-}
-
-@media (prefers-color-scheme: light) {
-  .publico {
-    --fundo:          #f4f4f3;
-    --fundo-fundo:    #ececeb;
-    --superficie:     #ffffff;
-    --superficie-alta:#f8f8f7;
-    --vidro:          rgba(255, 255, 255, 0.72);
-    --borda:          rgba(9, 9, 11, 0.09);
-    --borda-forte:    rgba(9, 9, 11, 0.18);
-    --texto:          #14151a;
-    --suave:          #63666f;
-    --tenue:          #8f939c;
-
-    /* Lima pura sobre branco não tem contraste. No claro o acento escurece. */
-    --acento:         #4d7c0f;
-    --acento-alto:    #3f6212;
-    --tinta-acento:   #ffffff;
-    --ok:             #4d7c0f;
-
-    --alerta:         #b45309;
-    --perigo:         #be123c;
-    --quente:         #c2410c;
-    --frio:           #0369a1;
-
-    --brilho:         0 1px 0 0 rgba(255, 255, 255, 0.9) inset;
-    --sombra:         0 1px 2px -1px rgb(9 9 11 / 0.08), 0 12px 28px -18px rgb(9 9 11 / 0.22);
-    --sombra-alta:    0 2px 6px -2px rgb(9 9 11 / 0.1), 0 24px 48px -24px rgb(9 9 11 / 0.28);
-  }
+  color: var(--texto);
 }
 
 @theme inline {
@@ -116,7 +148,6 @@
 }
 
 html { color-scheme: dark; }
-.publico { color-scheme: light dark; }
 
 body {
   background: var(--fundo);

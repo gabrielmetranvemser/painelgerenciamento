@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react';
 import {
-  AlertTriangle, Check, CircleSlash, Clock, Flame, MessageSquare, PackageOpen, Send, Siren,
-  Snowflake, SkipForward, Star,
+  AlertTriangle, Check, CircleSlash, Clock, Flame, Loader2, MessageSquare, PackageOpen,
+  Send, Siren, Snowflake, SkipForward, Star,
 } from 'lucide-react';
 import { Aviso, Avatar, Botao, Cartao, EtiquetaOrigem, Pilula, Selecao, Vidro, cx } from '@/components/ui';
 import { ComoAgir } from '@/components/como-agir';
@@ -15,7 +15,7 @@ import {
 } from '@/lib/tipos-banco';
 import {
   carregarEntregas, consultarFila, definirMunicipio, pegarProximo, prepararMensagem,
-  registrarAbertura, registrarResultado, sinalizarChip, type MensagemPronta,
+  pularContato, registrarAbertura, registrarResultado, sinalizarChip, type MensagemPronta,
 } from './acoes';
 
 type Fase = 'ocioso' | 'permissao' | 'aberta' | 'entrega' | 'seguimento';
@@ -88,6 +88,7 @@ export function Atendimento({
   const [municipioId, setMunicipioId] = useState<number | ''>('');
   const [encaminhamento, setEncaminhamento] = useState('');
   const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
   const botaoAbrir = useRef<HTMLButtonElement>(null);
 
@@ -246,6 +247,25 @@ export function Atendimento({
     buscarProximo();
   }
 
+  /**
+   * "Buscar outro contato". A fila devolve sempre o contato que está na sua
+   * mão — é o que impede recarregar a página de pular alguém —, então sem isto
+   * quem abriu um contato e não vai falar com ele agora fica preso nele.
+   */
+  function pularEBuscar() {
+    if (!contato) return;
+    setErro(null);
+    const id = contato.id;
+    iniciar(async () => {
+      const r = await pularContato(id, chipId);
+      if (!r.ok) { setErro(`Não consegui soltar este contato: ${r.motivo}`); return; }
+      setAviso(r.destino === 'aguardando_resposta'
+        ? 'Você já tinha falado com essa pessoa, então ela ficou em Meus contatos aguardando resposta.'
+        : 'Contato devolvido para a fila. Ele não volta para você nas próximas 2 horas.');
+      limparEBuscar();
+    });
+  }
+
   // Atalhos de teclado: são 30 conversas por dia, o mouse cansa.
   useEffect(() => {
     function aoTeclar(e: KeyboardEvent) {
@@ -292,6 +312,7 @@ export function Atendimento({
         )}
 
         {erro && <Aviso tom="erro" icone={<AlertTriangle size={16} />}>{erro}</Aviso>}
+        {aviso && <Aviso tom="info">{aviso}</Aviso>}
 
         {chip?.status === 'amarelo' && (
           <Aviso tom="alerta" icone={<Siren size={16} />}>
@@ -310,7 +331,9 @@ export function Atendimento({
                 : `${fila?.frios_na_fila ?? 0} contatos na fila.`}
             </p>
             <Botao tamanho="g" className="mt-7" onClick={buscarProximo} disabled={ocupado}>
-              {ocupado ? 'Buscando…' : 'Buscar próximo contato'}
+              {ocupado
+                ? <><Loader2 size={17} className="animate-spin" /> Buscando…</>
+                : 'Buscar próximo contato'}
             </Botao>
           </Cartao>
         )}
@@ -327,7 +350,7 @@ export function Atendimento({
             }}
             aoMudarEncaminhamento={setEncaminhamento}
             aoAbrir={abrirConversa} aoMarcar={marcar} aoProximo={limparEBuscar}
-            aoPrepararMaterial={prepararMaterial}
+            aoPular={pularEBuscar} aoPrepararMaterial={prepararMaterial}
           />
         )}
       </div>
@@ -346,6 +369,9 @@ const MOTIVO_ENTREGA: Record<string, string> = {
     'Esta pessoa não foi avisada deste candidato na primeira mensagem, então não dá para mandar o material dele. ' +
     'Ela só autorizou o que estava escrito lá.',
   candidato_inativo: 'Este candidato foi desativado pelo gestor.',
+  sem_endereco:
+    'O sistema não sabe o endereço público do painel, então o link do material sairia quebrado. ' +
+    'Não mande nada — avise o gestor para configurar LINK_BASE_URL.',
   candidato_obrigatorio: 'Escolha de qual candidato é o material.',
   contato_bloqueado: 'Esta pessoa pediu para sair. Não dá para mandar mais nada.',
   modelo_ausente: 'Não existe modelo de material cadastrado. Fale com o gestor.',
@@ -483,7 +509,8 @@ function Travado({ fila, espera }: { fila: FilaStatus; espera: number }) {
 
 function CartaoAtendimento({
   contato, mensagem, fase, ocupado, entregas, refBotao, municipios, municipioId, encaminhamento,
-  aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoMarcar, aoProximo, aoPrepararMaterial,
+  aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoMarcar, aoProximo, aoPular,
+  aoPrepararMaterial,
 }: {
   contato: ContatoDaFila; mensagem: MensagemPronta | null; fase: Fase; ocupado: boolean;
   entregas: EntregaDoContato[];
@@ -492,7 +519,7 @@ function CartaoAtendimento({
   aoMudarMunicipio: (id: number | '') => void;
   aoMudarEncaminhamento: (v: string) => void;
   aoAbrir: () => void; aoMarcar: (r: Resultado) => void; aoProximo: () => void;
-  aoPrepararMaterial: (candidatoId: string) => void;
+  aoPular: () => void; aoPrepararMaterial: (candidatoId: string) => void;
 }) {
   const nome = contato.primeiro_nome ?? contato.nome ?? 'Sem nome';
   const titulo = mensagem?.candidato
@@ -535,7 +562,9 @@ function CartaoAtendimento({
 
           <div className="border-t border-borda px-6 py-5">
             <Botao ref={refBotao} tamanho="g" className="w-full" onClick={aoAbrir} disabled={ocupado}>
-              <Send size={17} /> Abrir conversa no WhatsApp
+              {ocupado
+                ? <><Loader2 size={17} className="animate-spin" /> Registrando…</>
+                : <><Send size={17} /> Abrir conversa no WhatsApp</>}
             </Botao>
           </div>
         </>
@@ -581,8 +610,24 @@ function CartaoAtendimento({
             </Selecao>
           )}
           <Botao variante="neutro" tamanho="g" className="w-full" onClick={aoProximo} disabled={ocupado}>
-            <SkipForward size={16} /> Próximo contato
+            {ocupado
+              ? <><Loader2 size={16} className="animate-spin" /> Buscando…</>
+              : <><SkipForward size={16} /> Próximo contato</>}
           </Botao>
+        </div>
+      )}
+
+      {/* Sair deste contato sem encerrar. A fila devolve sempre quem está na
+          sua mão, então sem esta saída quem abriu um contato e não vai falar
+          com ele agora pede o próximo e recebe o mesmo, indefinidamente. */}
+      {fase !== 'entrega' && fase !== 'seguimento' && (
+        <div className="border-t border-borda px-6 py-4 text-center">
+          <button type="button" onClick={aoPular} disabled={ocupado}
+                  className="inline-flex items-center gap-1.5 text-xs text-suave transition-colors hover:text-texto disabled:opacity-45">
+            {ocupado
+              ? <><Loader2 size={12} className="animate-spin" /> soltando…</>
+              : <><SkipForward size={12} /> Deixar este para depois e buscar outro contato</>}
+          </button>
         </div>
       )}
     </Cartao>
@@ -661,7 +706,7 @@ function Entrega({
 
               <Botao variante={enviado ? 'neutro' : 'principal'} tamanho="p"
                      disabled={bloqueado} onClick={() => aoPreparar(c.candidato_id)}>
-                {enviado ? 'Mandar de novo' : 'Preparar'}
+                {enviado ? 'Mandar de novo' : 'Preparar material'}
               </Botao>
             </div>
           );

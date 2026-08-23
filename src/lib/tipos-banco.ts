@@ -112,6 +112,8 @@ export type Contato = {
   chip_id: string | null;
   claimed_at: string | null;
   claim_expira_em: string | null;
+  /** Pulado pelo atendente: fica fora da fila até esta hora passar. */
+  adiado_ate: string | null;
   primeiro_contato_em: string | null;
   resultado_em: string | null;
   encaminhamento: string | null;
@@ -175,6 +177,11 @@ export type Captacao = {
   candidato_id: string | null;
   /** A frase que a pessoa marcou, copiada no ato. É a prova do que foi aceito. */
   texto_aceite: string | null;
+  entregue_em: string | null;
+  entregue_por: string | null;
+  entrega_obs: string | null;
+  cancelado_em: string | null;
+  cancelado_por: string | null;
   aceite_em: string;
   ip: string | null;
   user_agent: string | null;
@@ -220,6 +227,10 @@ export type Candidato = {
   cnpj_campanha: string | null;
   responsavel_material: string | null;
   cor_tema: string | null;
+  /** Fundo da página pública. Nulo = o padrão do sistema. */
+  cor_fundo: string | null;
+  /** Como a página pública se apresenta: seguir o aparelho, clara ou escura. */
+  tema: 'auto' | 'claro' | 'escuro';
   foto_url: string | null;
   slogan: string | null;
   chamada: string | null;
@@ -308,6 +319,67 @@ export type DesempenhoAtendente = {
   atendente_id: string; atendente: string; ativo: boolean;
   hoje: number; total_abordados: number; autorizou: number; pediu_saida: number;
   invalido: number; quer_ajudar: number; sem_resposta: number; cliques_reais: number;
+};
+
+/** Uma linha da fila de entrega de material impresso. */
+export type Entrega = {
+  id: string;
+  nome: string | null;
+  telefone_e164: string | null;
+  municipio: string | null;
+  endereco: string | null;
+  itens: string[] | null;
+  pedido_em: string;
+  entregue_em: string | null;
+  entregue_por: string | null;
+  cancelado_em: string | null;
+  cancelado_por: string | null;
+  entrega_obs: string | null;
+  candidato: string | null;
+  contato_id: string | null;
+  status_contato: StatusContato | null;
+  atendente: string | null;
+  estado: 'pendente' | 'entregue' | 'cancelado';
+};
+
+/** Uma linha da tela de contatos do gestor. */
+export type ContatoDoGestor = {
+  id: string;
+  nome: string | null;
+  primeiro_nome: string | null;
+  telefone_e164: string | null;
+  origem: OrigemContato;
+  status: StatusContato;
+  municipio_id: number | null;
+  municipio: string | null;
+  atendente_id: string | null;
+  atendente: string | null;
+  chip: string | null;
+  candidato_origem_id: string | null;
+  candidato_origem: string | null;
+  lista: string | null;
+  primeiro_contato_em: string | null;
+  resultado_em: string | null;
+  criado_em: string;
+  encaminhamento: string | null;
+  anonimizado_em: string | null;
+  claim_expira_em: string | null;
+  adiado_ate: string | null;
+  mensagens: number;
+  materiais_enviados: number;
+  cliques: number;
+  kit_pendente: boolean;
+};
+
+/** O que está EM ABERTO na mão de cada atendente. */
+export type CargaAtendente = {
+  atendente_id: string;
+  atendente: string;
+  ativo: boolean;
+  na_mao_agora: number;
+  aguardando_resposta: number;
+  abertos_sem_falar: number;
+  ultima_conversa: string | null;
 };
 
 export type CaptacaoPorCandidato = {

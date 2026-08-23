@@ -15,9 +15,16 @@ import type { Metadata } from 'next';
  */
 export const metadata: Metadata = { title: { template: '%s', default: 'Material da campanha' } };
 
+/**
+ * O tema não pode ser decidido aqui.
+ *
+ * Este layout não recebe os dados do candidato — quem os busca é a página. Por
+ * isso a classe `tema-claro`/`tema-escuro` é aplicada lá, no <main>, e este
+ * invólucro só garante o fundo cobrindo a tela.
+ */
 export default function LayoutCandidato({ children }: { children: React.ReactNode }) {
   return (
-    <div className="publico surgir flex min-h-screen flex-col bg-fundo text-texto">
+    <div className="surgir flex min-h-screen flex-col">
       {children}
     </div>
   );

@@ -84,27 +84,41 @@ export async function GET(
     }
 
     case 'kit': {
-      // O que a equipe de entrega precisa levar na rua.
+      // O que a equipe de entrega precisa levar na rua, com o que já saiu.
+      //
+      // O filtro é `itens is not null`, não `origem = 'kit'`: o pedido também
+      // nasce do bloco que o atendente preenche durante a conversa, e ali a
+      // origem do contato continua sendo a de onde ele veio.
       const { data } = await supabase
-        .from('captacoes')
-        .select('*, municipios(nome)')
-        .eq('origem', 'kit')
-        .order('criado_em', { ascending: false });
+        .from('v_entregas')
+        .select('*')
+        .order('pedido_em', { ascending: true });
 
       type L = {
         nome: string | null; telefone_e164: string | null; endereco: string | null;
-        itens: string[] | null; aceite_em: string; virou_contato: boolean;
-        municipios: { nome: string } | null;
+        itens: string[] | null; pedido_em: string; municipio: string | null;
+        candidato: string | null; atendente: string | null; estado: string;
+        entregue_em: string | null; entregue_por: string | null;
+        cancelado_em: string | null; entrega_obs: string | null;
+        status_contato: string | null;
       };
 
       csv = gerarCsv((data ?? []) as unknown as L[], [
+        { cabecalho: 'Situação', valor: (c) => c.estado },
         { cabecalho: 'Nome', valor: (c) => c.nome },
         { cabecalho: 'Telefone', valor: (c) => (c.telefone_e164 ? formatarExibicao(c.telefone_e164) : '') },
-        { cabecalho: 'Município', valor: (c) => c.municipios?.nome },
+        { cabecalho: 'Município', valor: (c) => c.municipio },
         { cabecalho: 'Endereço', valor: (c) => c.endereco },
         { cabecalho: 'Itens', valor: (c) => (c.itens ?? []).join(', ') },
-        { cabecalho: 'Pedido em', valor: (c) => q(c.aceite_em) },
-        { cabecalho: 'Já entrou na fila', valor: (c) => (c.virou_contato ? 'sim' : 'não') },
+        { cabecalho: 'Candidato', valor: (c) => c.candidato },
+        { cabecalho: 'Atendente', valor: (c) => c.atendente },
+        { cabecalho: 'Pedido em', valor: (c) => q(c.pedido_em) },
+        { cabecalho: 'Entregue em', valor: (c) => q(c.entregue_em) },
+        { cabecalho: 'Entregue por', valor: (c) => c.entregue_por },
+        { cabecalho: 'Cancelado em', valor: (c) => q(c.cancelado_em) },
+        { cabecalho: 'Observação', valor: (c) => c.entrega_obs },
+        // Quem pediu material e depois pediu para sair NÃO recebe visita.
+        { cabecalho: 'Atenção', valor: (c) => (c.status_contato === 'pediu_saida' ? 'PEDIU SAÍDA — não entregar' : '') },
       ]);
       nome = 'pedidos-de-kit';
       break;

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState, useTransition } from 'react';
 import {
-  ArrowLeft, Check, Gift, History, MessageSquarePlus, MousePointerClick, PackageOpen,
+  ArrowLeft, Check, Gift, History, Loader2, MessageSquarePlus, MousePointerClick, PackageOpen,
   Radio, Send, Star,
 } from 'lucide-react';
 import { Avatar, Aviso, Botao, Cartao, EtiquetaOrigem, Pilula, Selecao, AreaTexto, cx } from '@/components/ui';
@@ -72,6 +72,9 @@ const MOTIVO: Record<string, string> = {
     'Esta pessoa não foi avisada deste candidato, então não dá para mandar o material dele. ' +
     'Ela só autorizou o que estava escrito na primeira mensagem.',
   candidato_inativo: 'Este candidato foi desativado pelo gestor.',
+  sem_endereco:
+    'O sistema não sabe o endereço público do painel, então o link do material sairia quebrado. ' +
+    'Não mande nada — avise o gestor para configurar LINK_BASE_URL.',
   candidato_obrigatorio: 'Escolha de qual candidato é a mensagem.',
   contato_bloqueado: 'Esta pessoa pediu para sair. Não dá para mandar mais nada.',
   dados_ja_apagados: 'Os dados desta pessoa já foram apagados. Não há o que corrigir.',
@@ -235,7 +238,9 @@ export function Perfil({
                   {mensagem.texto}
                 </div>
                 <Botao tamanho="g" className="mt-4 w-full" onClick={abrir} disabled={ocupado}>
-                  <Send size={17} /> Abrir conversa no WhatsApp
+                  {ocupado
+                    ? <><Loader2 size={17} className="animate-spin" /> Registrando…</>
+                    : <><Send size={17} /> Abrir conversa no WhatsApp</>}
                 </Botao>
               </div>
             )}
@@ -319,8 +324,13 @@ function PorCandidato({
       <h2 className="mb-1 flex items-center gap-2 font-semibold">
         <PackageOpen size={16} className="text-suave" /> Material por candidato
       </h2>
-      <p className="mb-3 text-xs text-suave">
+      <p className="mb-3 text-xs leading-relaxed text-suave">
         Só aparecem os candidatos que esta pessoa ouviu na primeira mensagem.
+        <br />
+        <strong className="text-texto">Mandar material</strong> manda a página do candidato,
+        com todas as peças dele dentro — é a mensagem normal depois do &ldquo;pode&rdquo;.{' '}
+        <strong className="text-texto">Convidar pro canal</strong> manda só o link do canal no
+        WhatsApp, para quando a pessoa perguntar se tem grupo.
       </p>
 
       {entregas.length === 0 ? (
@@ -356,14 +366,17 @@ function PorCandidato({
 
                 <Botao variante={marcado('material') ? 'principal' : 'neutro'} tamanho="p"
                        disabled={ocupado || !c.ativo || c.materiais === 0}
+                       title="Manda a página com todas as peças deste candidato"
                        onClick={() => aoPreparar('material', c.candidato_id)}>
-                  Material
+                  Mandar material
                 </Botao>
                 <Botao variante={marcado('convite_grupo') ? 'principal' : 'neutro'} tamanho="p"
                        disabled={ocupado || !c.ativo || c.canais === 0}
-                       title={c.canais === 0 ? 'Este candidato não tem canal cadastrado' : undefined}
+                       title={c.canais === 0
+                         ? 'Este candidato não tem canal cadastrado — peça ao gestor'
+                         : 'Manda só o link do canal no WhatsApp'}
                        onClick={() => aoPreparar('convite_grupo', c.candidato_id)}>
-                  <Radio size={13} /> Canal
+                  <Radio size={13} /> Convidar pro canal
                 </Botao>
               </div>
             );
