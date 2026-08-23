@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { exigirAtendente } from '@/lib/sessao';
 import { Cartao, EtiquetaOrigem } from '@/components/ui';
@@ -40,7 +41,8 @@ export default async function MeusContatos() {
     <>
       <h1 className="mb-1 text-xl font-semibold">Meus contatos</h1>
       <p className="mb-5 text-sm text-suave">
-        Quem você já abordou. Se alguém responder dias depois, encontre aqui.
+        Quem você já abordou. Clique para ver o histórico, corrigir o resultado,
+        mandar outra mensagem ou anotar um pedido de kit.
       </p>
 
       {contatos.length === 0 ? (
@@ -50,7 +52,11 @@ export default async function MeusContatos() {
       ) : (
         <Cartao className="divide-y divide-borda">
           {contatos.map((c) => (
-            <div key={c.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+            <Link
+              key={c.id}
+              href={`/painel/contatos/${c.id}`}
+              className="flex flex-wrap items-center gap-3 px-5 py-3 hover:bg-fundo"
+            >
               <div className="mr-auto min-w-0">
                 <p className="truncate font-medium">
                   {c.primeiro_nome ?? c.nome ?? <span className="text-suave">(dado apagado)</span>}
@@ -63,7 +69,8 @@ export default async function MeusContatos() {
               </div>
               <EtiquetaOrigem origem={c.origem} />
               <span className="text-xs text-suave">{ROTULO[c.status] ?? c.status}</span>
-            </div>
+              <span aria-hidden className="text-suave">›</span>
+            </Link>
           ))}
         </Cartao>
       )}

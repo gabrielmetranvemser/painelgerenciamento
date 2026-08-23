@@ -43,7 +43,8 @@ npm run lint
 | 2 · Banco | ✅ 17 tabelas, RLS total, 12 RPCs, 3 crons |
 | 3 · Auth + termo | ✅ cookie httpOnly, middleware, aceite datado |
 | 4 · Importação | ✅ CSV, mapeador de colunas, conferência, blocos de 500 |
-| 5 · Tela do atendente | ✅ fila, mensagem, travas, 13 casos, atalhos 1–5 |
+| 5 · Tela do atendente | ✅ fila, travas, 13 casos, atalhos 1–5, mensagem de seguimento por resultado |
+| 5b · Perfil do contato | ✅ histórico, correção de resultado, mensagens avulsas, pedido de kit |
 | 6 · Links + captação | ✅ /r/[token] com filtro de bot, /m/[token], /kit, /privacidade |
 | 7 · Painel do gestor | ✅ visão geral, atendentes, números, mensagens, config, relatórios |
 | 8 · Automações | ✅ lease, 72h, purga LGPD |

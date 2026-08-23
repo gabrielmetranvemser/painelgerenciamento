@@ -4,13 +4,32 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useTran
 import { Aviso, Botao, Cartao, EtiquetaOrigem } from '@/components/ui';
 import { ComoAgir } from '@/components/como-agir';
 import { formatarExibicao } from '@/lib/telefone';
-import { RESULTADOS, TEXTO_MOTIVO, type Chip, type ContatoDaFila, type FilaStatus, type Municipio, type Resultado } from '@/lib/tipos-banco';
+import { RESULTADOS, TEXTO_MOTIVO, type Chip, type ContatoDaFila, type EtapaMsg, type FilaStatus, type Municipio, type Resultado } from '@/lib/tipos-banco';
 import {
   consultarFila, definirMunicipio, pegarProximo, prepararMensagem,
   registrarAbertura, registrarResultado, sinalizarChip, type MensagemPronta,
 } from './acoes';
 
-type Fase = 'ocioso' | 'permissao' | 'aberta' | 'material';
+type Fase = 'ocioso' | 'permissao' | 'aberta' | 'seguimento';
+
+/**
+ * A mensagem que cada resultado carrega (docs/03-OPERACAO.md §4).
+ * "Número inválido" é o único sem seguimento: vai direto para o próximo.
+ */
+const SEGUIMENTO: Partial<Record<Resultado, EtapaMsg>> = {
+  autorizou: 'material',
+  pediu_saida: 'saida',
+  quer_ajudar: 'quer_ajudar',
+  encaminhado: 'encaminhamento',
+};
+
+const TITULO_ETAPA: Partial<Record<EtapaMsg, string>> = {
+  permissao: 'Primeira mensagem — só o pedido de permissão',
+  material: 'Segunda mensagem — o material',
+  saida: 'Confirme que o contato saiu da lista',
+  quer_ajudar: 'Resposta para quem quer ajudar',
+  encaminhamento: 'Resposta para quem pediu algo que não podemos prometer',
+};
 
 const ROTULO_RESULTADO: Record<Resultado, string> = {
   autorizou: 'Autorizou',
@@ -171,11 +190,14 @@ export function Atendimento({
         setErro(`Não consegui gravar o resultado: ${r.motivo}`);
         return;
       }
-      if (resultado === 'autorizou') {
-        const m = await prepararMensagem(contato.id, chipId, 'material');
+      // Cada resultado carrega a mensagem seguinte. Sem isto, quem pediu saída
+      // ficava sem a confirmação, e quem quis ajudar ficava sem resposta.
+      const etapa = SEGUIMENTO[resultado];
+      if (etapa) {
+        const m = await prepararMensagem(contato.id, chipId, etapa);
         if (m.ok) {
           setMensagem(m);
-          setFase('material');
+          setFase('seguimento');
           setTimeout(() => botaoAbrir.current?.focus(), 50);
           return;
         }
@@ -401,7 +423,7 @@ function CartaoAtendimento({
 
       <div className="px-5 py-4">
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-suave">
-          {fase === 'material' ? 'Segunda mensagem — o material' : 'Primeira mensagem — só o pedido de permissão'}
+          {TITULO_ETAPA[mensagem.etapa] ?? 'Mensagem'}
         </p>
         <div className="whitespace-pre-wrap rounded-lg border border-borda bg-fundo p-4 text-[15px] leading-relaxed">
           {mensagem.texto}
@@ -451,9 +473,9 @@ function CartaoAtendimento({
         </div>
       )}
 
-      {fase === 'material' && (
+      {fase === 'seguimento' && (
         <div className="space-y-4 border-t border-borda px-5 py-4">
-          <label className="block">
+          <label className={mensagem.etapa === 'material' ? 'block' : 'hidden'}>
             <span className="mb-1.5 block text-sm font-medium">De qual cidade a pessoa é?</span>
             <select
               value={municipioId}
