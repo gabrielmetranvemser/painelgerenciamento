@@ -1,21 +1,32 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { criarClienteServidor } from '@/lib/supabase/server';
+import { ehChaveDoPainel } from '@/lib/rotas';
+import type { OrigemContato, StatusContato } from '@/lib/tipos-banco';
 import { dataHoraLocal, gerarCsv, type Coluna } from '@/lib/csv';
 import { formatarCep } from '@/lib/cep';
 import { formatarExibicao } from '@/lib/telefone';
 
 export const dynamic = 'force-dynamic';
 
-const ROTULO_STATUS: Record<string, string> = {
+/**
+ * ⚠️ Os dois mapas são `Record<Tipo, string>`, não `Record<string, string>`.
+ *
+ * Com `string` na chave, o TypeScript aceita um mapa incompleto — e foi assim
+ * que a origem 'chamou' entrou no sistema e nunca chegou aqui: a planilha do
+ * gestor mostrava `chamou` cru, no meio de rótulos em português, e nada quebrou
+ * para avisar. Tipado pelo enum, esquecer um valor novo vira erro de build.
+ */
+const ROTULO_STATUS: Record<StatusContato, string> = {
   novo: 'Novo', na_fila: 'Na fila', em_atendimento: 'Em atendimento',
   autorizou: 'Autorizou', pediu_saida: 'Pediu saída', invalido: 'Número inválido',
   quer_ajudar: 'Quer ajudar', encaminhado: 'Encaminhado',
   sem_resposta: 'Sem resposta', perdido: 'Perdido',
 };
 
-const ROTULO_ORIGEM: Record<string, string> = {
+const ROTULO_ORIGEM: Record<OrigemContato, string> = {
   site: 'Cadastro no site', kit: 'Pedido de kit', lista_fria: 'Lista fria',
+  chamou: 'Chamou no WhatsApp',
 };
 
 /**
@@ -23,22 +34,34 @@ const ROTULO_ORIGEM: Record<string, string> = {
  *
  * ⚠️ Contém dado pessoal. Só gestor, e é por isso que a checagem de papel
  * acontece aqui e não só na navegação.
+ *
+ * ⚠️ E a checagem do segmento secreto TAMBÉM acontece aqui, pelo mesmo motivo:
+ * Route Handler NÃO executa layout. O `notFound()` de `(interno)/layout.tsx`,
+ * que protege todas as telas, simplesmente não roda para esta rota — então
+ * `/qualquer-coisa/api/export/contatos` respondia `401 {"erro":"sem sessão"}`
+ * em vez de 404. Não vazava dado nenhum, mas confirmava a quem estivesse
+ * varrendo o domínio que existe um painel ali, que é exatamente o que o
+ * segmento secreto existe para não fazer.
+ *
+ * Toda recusa devolve 404, igual a qualquer endereço inexistente: de fora,
+ * "não existe", "existe mas você não entrou" e "existe mas você não é gestor"
+ * precisam ser a mesma coisa.
  */
 export async function GET(
   _request: NextRequest,
-  ctx: { params: Promise<{ relatorio: string }> },
+  ctx: { params: Promise<{ entrada: string; relatorio: string }> },
 ) {
+  const { entrada, relatorio } = await ctx.params;
+  if (!ehChaveDoPainel(entrada)) return naoEncontrado();
+
   const supabaseSessao = await criarClienteServidor();
   const { data: { user } } = await supabaseSessao.auth.getUser();
-  if (!user) return NextResponse.json({ erro: 'sem sessão' }, { status: 401 });
+  if (!user) return naoEncontrado();
 
   const { data: perfil } = await supabaseSessao
-    .from('usuarios').select('papel, ativo').eq('id', user.id).single();
-  if (!perfil?.ativo || perfil.papel !== 'gestor') {
-    return NextResponse.json({ erro: 'restrito ao gestor' }, { status: 403 });
-  }
+    .from('usuarios').select('papel, ativo').eq('id', user.id).maybeSingle();
+  if (!perfil?.ativo || perfil.papel !== 'gestor') return naoEncontrado();
 
-  const { relatorio } = await ctx.params;
   const supabase = criarClienteAdmin();
 
   const { data: cfg } = await supabase.from('config').select('timezone').eq('id', 1).single();
@@ -69,8 +92,8 @@ export async function GET(
         { cabecalho: 'Nome', valor: (c) => c.nome },
         { cabecalho: 'Telefone', valor: (c) => (c.telefone_e164 ? formatarExibicao(c.telefone_e164) : '') },
         { cabecalho: 'Município', valor: (c) => c.municipios?.nome },
-        { cabecalho: 'Origem', valor: (c) => ROTULO_ORIGEM[c.origem] ?? c.origem },
-        { cabecalho: 'Situação', valor: (c) => ROTULO_STATUS[c.status] ?? c.status },
+        { cabecalho: 'Origem', valor: (c) => ROTULO_ORIGEM[c.origem as OrigemContato] ?? c.origem },
+        { cabecalho: 'Situação', valor: (c) => ROTULO_STATUS[c.status as StatusContato] ?? c.status },
         { cabecalho: 'Atendente', valor: (c) => c.usuarios?.primeiro_nome },
         { cabecalho: 'Lista', valor: (c) => c.listas?.rotulo },
         { cabecalho: 'Primeiro contato', valor: (c) => q(c.primeiro_contato_em) },
@@ -171,7 +194,7 @@ export async function GET(
     }
 
     default:
-      return NextResponse.json({ erro: 'relatório desconhecido' }, { status: 404 });
+      return naoEncontrado();
   }
 
   const hoje = new Date().toISOString().slice(0, 10);
@@ -181,5 +204,12 @@ export async function GET(
       'Content-Disposition': `attachment; filename="${nome}-${hoje}.csv"`,
       'Cache-Control': 'no-store',
     },
+  });
+}
+
+function naoEncontrado() {
+  return new NextResponse('Página não encontrada.', {
+    status: 404,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   });
 }

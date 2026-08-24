@@ -1,8 +1,10 @@
 'use server';
 
+import { updateTag } from 'next/cache';
 import { z } from 'zod';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { exigirGestorOuFalhar } from '@/lib/gestor';
+import { ETIQUETA_CANDIDATOS } from '@/lib/cache';
 import { TEXTO_PROBLEMA_SLUG, validarSlug } from '@/lib/slug';
 import { DIGITOS_DO_CARGO, type CargoEleitoral } from '@/lib/tipos-banco';
 
@@ -10,11 +12,23 @@ import { DIGITOS_DO_CARGO, type CargoEleitoral } from '@/lib/tipos-banco';
  * Sem `revalidatePath` de propósito.
  *
  * Todas as telas do gestor são `force-dynamic`, então já buscam dados a cada
- * requisição — não há cache a invalidar. Invalidar o layout inteiro seria
- * trabalho jogado fora a cada gravação.
+ * requisição — não há cache de PÁGINA a invalidar. Quem atualiza a tela depois
+ * da ação é o `router.refresh()` do componente.
  *
- * Quem atualiza a tela depois da ação é o `router.refresh()` do componente.
+ * O que existe é cache de DADOS, e só num lugar: a página pública do candidato
+ * guarda a consulta por um minuto para não ir ao banco a cada visita da
+ * internet inteira. Toda ação daqui derruba essa etiqueta — senão o gestor
+ * edita a página, abre para conferir, e vê o texto antigo.
  */
+function publicarMudanca() {
+  // `updateTag`, e não `revalidateTag`: aqui o caso é ler-a-própria-escrita —
+  // o gestor salva, abre a página do candidato para conferir, e precisa ver o
+  // que acabou de escrever. `revalidateTag` serviria o conteúdo velho uma vez.
+  //
+  // Se um dia esta chamada deixar de alcançar o cache, o prejuízo é limitado:
+  // a consulta expira sozinha em 60 segundos de qualquer jeito.
+  updateTag(ETIQUETA_CANDIDATOS);
+}
 
 export type Resultado = { ok: true; id?: string } | { ok: false; erro: string };
 
@@ -144,6 +158,7 @@ export async function criarCandidato(_anterior: Resultado | null, form: FormData
 
   if (error) return { ok: false, erro: traduzir(error.message) };
 
+  publicarMudanca();
   return { ok: true, id: data.id };
 }
 
@@ -160,6 +175,7 @@ export async function salvarCandidato(id: string, form: FormData): Promise<Resul
   const { error } = await supabase.from('candidatos').update(paraBanco(analise.data)).eq('id', id);
   if (error) return { ok: false, erro: traduzir(error.message) };
 
+  publicarMudanca();
   return { ok: true };
 }
 
@@ -198,6 +214,7 @@ export async function adicionarMaterial(candidatoId: string, form: FormData): Pr
   });
 
   if (error) return { ok: false, erro: error.message };
+  publicarMudanca();
   return { ok: true };
 }
 
@@ -205,6 +222,7 @@ export async function alternarMaterial(id: string, ativo: boolean) {
   await exigirGestorOuFalhar();
   const supabase = criarClienteAdmin();
   await supabase.from('materiais').update({ ativo }).eq('id', id);
+  publicarMudanca();
 }
 
 export async function removerMaterial(id: string): Promise<Resultado> {
@@ -225,6 +243,7 @@ export async function removerMaterial(id: string): Promise<Resultado> {
 
   const { error } = await supabase.from('materiais').delete().eq('id', id);
   if (error) return { ok: false, erro: error.message };
+  publicarMudanca();
   return { ok: true };
 }
 
@@ -283,6 +302,7 @@ export async function enviarImagem(
     .eq('id', candidatoId);
   if (error) return { ok: false, erro: error.message };
 
+  publicarMudanca();
   return { ok: true, url };
 }
 
@@ -301,5 +321,6 @@ export async function removerImagem(
     .update({ [COLUNA[tipo]]: null })
     .eq('id', candidatoId);
   if (error) return { ok: false, erro: error.message };
+  publicarMudanca();
   return { ok: true };
 }

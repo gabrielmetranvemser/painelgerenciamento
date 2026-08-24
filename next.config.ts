@@ -10,6 +10,54 @@ import type { NextConfig } from 'next';
  */
 const EXTENSAO = process.env.EXTENSAO_ID ?? 'pdpffmibfeikfffdbpfklhdkifmceden';
 
+/**
+ * A política de conteúdo.
+ *
+ * Antes daqui saía uma linha só, `frame-ancestors`. Ela resolvia o problema
+ * mais óbvio — outro site enquadrar o painel e capturar os cliques do atendente
+ * por cima —, e nada além disso.
+ *
+ * ⚠️ Honestidade sobre o alcance: `script-src` precisa de `'unsafe-inline'`
+ * porque o Next injeta scripts inline sem nonce, e nonce exigiria tornar toda
+ * página dinâmica. Ou seja, isto NÃO é proteção contra XSS. O que ele entrega,
+ * e que antes não existia:
+ *
+ *   connect-src   o painel só fala com a própria origem e com o Supabase. Se um
+ *                 script hostil entrar de algum jeito, ele não consegue mandar a
+ *                 base de contatos para fora — que é o dano que importa aqui.
+ *   form-action   nenhum formulário desta aplicação posta para outro domínio.
+ *                 Fecha a captura de e-mail e senha por formulário sequestrado.
+ *   base-uri      impede reescrever a base das URLs relativas e sequestrar todo
+ *                 caminho da página de uma vez.
+ *   object-src    não existe Flash, PDF embutido nem applet aqui.
+ *
+ * As fontes são self-hosted pelo `next/font` (vão para /_next/static/media), por
+ * isso `font-src 'self'` basta e nenhum host do Google aparece nesta lista.
+ */
+function politicaDeConteudo(): string {
+  const supabase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const dev = process.env.NODE_ENV !== 'production';
+
+  return [
+    "default-src 'self'",
+    // `unsafe-eval` só em desenvolvimento: é o React Refresh. Em produção não
+    // entra — se um dia entrar, foi engano.
+    `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ''}`,
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
+    // A foto e o fundo do candidato ficam no armazenamento do Supabase, mas
+    // cadastros antigos podem apontar para qualquer host. Imagem de fora não
+    // executa nada; recusar aqui só quebraria a página de quem entrega o lead.
+    "img-src 'self' data: blob: https:",
+    `connect-src 'self'${supabase ? ` ${supabase} ${supabase.replace('https://', 'wss://')}` : ''}`,
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+    // Quem pode enquadrar o painel: nós mesmos e a extensão do painel lateral.
+    `frame-ancestors 'self' chrome-extension://${EXTENSAO}`,
+  ].join('; ');
+}
+
 const nextConfig: NextConfig = {
   // Um cabeçalho a menos anunciando o que roda aqui. Não esconde o framework —
   // os caminhos /_next/static continuam entregando isso — mas não custa nada.
@@ -28,19 +76,21 @@ const nextConfig: NextConfig = {
       {
         source: '/:caminho*',
         headers: [
-          {
-            // Quem pode colocar o painel dentro de um iframe: nós mesmos e a
-            // extensão do painel lateral. Sem isto, QUALQUER site podia
-            // enquadrar o painel e capturar cliques do atendente por cima.
-            key: 'Content-Security-Policy',
-            value: `frame-ancestors 'self' chrome-extension://${EXTENSAO}`,
-          },
+          { key: 'Content-Security-Policy', value: politicaDeConteudo() },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           {
             // Nada nesta aplicação usa câmera, microfone ou localização.
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
+          },
+          {
+            // Dois anos, subdomínios juntos. O painel só existe em https, e o
+            // cookie de sessão é `Secure` — mas sem isto a PRIMEIRA visita do
+            // dia, digitada sem "https://", sai em texto claro antes do desvio.
+            // É a janela onde um Wi-Fi de lanchonete rouba a sessão inteira.
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains',
           },
         ],
       },

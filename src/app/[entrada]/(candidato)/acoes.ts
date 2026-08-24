@@ -6,6 +6,7 @@ import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { ipDosCabecalhos, registrarCaptacao } from '@/lib/captacao';
 import { ENDERECO_VAZIO, TAMANHOS_CAMISETA, normalizarCep, type EnderecoEstruturado } from '@/lib/cep';
 import { textoDoAceite } from '@/lib/consentimento';
+import { primeiroNomeDe } from '@/lib/mensagem';
 import type { CargoEleitoral } from '@/lib/tipos-banco';
 
 const ITENS_VALIDOS = ['santinho', 'adesivo', 'camiseta'] as const;
@@ -26,6 +27,13 @@ const Entrada = z.object({
   tamanhoCamiseta: z.enum(TAMANHOS_CAMISETA).optional().nullable().catch(null),
   itens: z.array(z.enum(ITENS_VALIDOS)),
   aceite: z.literal('on', { message: 'É preciso autorizar o contato pelo WhatsApp.' }),
+  /**
+   * Armadilha. O campo existe no HTML, fica escondido do olho e do leitor de
+   * tela, e nenhuma pessoa consegue preenchê-lo. Robô preenche todo campo que
+   * encontra — é assim que ele se identifica sozinho, sem CAPTCHA e sem o
+   * eleitor perder um segundo.
+   */
+  apelido: z.string().max(200).optional(),
 });
 
 export type ResultadoCadastro = { ok: true; nome: string } | { ok: false; erro: string };
@@ -57,12 +65,19 @@ export async function cadastrar(
     tamanhoCamiseta: form.get('tamanho_camiseta') || null,
     itens: form.getAll('itens'),
     aceite: form.get('aceite'),
+    apelido: form.get('apelido') ?? undefined,
   });
 
   if (!analise.success) {
     return { ok: false, erro: analise.error.issues[0]?.message ?? 'Confira os campos.' };
   }
   const d = analise.data;
+
+  // Caiu na armadilha: devolve a MESMA tela de sucesso e não grava nada. Dizer
+  // "recusado" ensinaria o robô a contornar no próximo cadastro.
+  if (d.apelido && d.apelido.trim()) {
+    return { ok: true, nome: primeiroNomeDe(d.nome) ?? d.nome };
+  }
 
   const supabase = criarClienteAdmin();
   const { data: candidato } = await supabase

@@ -69,7 +69,10 @@ declare
   v_outro   uuid;
   v_r       jsonb;
   v_cfg_teto int;
+  v_cfg_ini  int;
   v_cfg_fim  int;
+  v_terceiro uuid;
+  v_quarto   uuid;
 
 begin
   select u.id, c.id into v_uid, v_chip
@@ -79,7 +82,20 @@ begin
     from public.usuarios u join public.chips c on c.atendente_id = u.id
    where c.rotulo = 'Chip Trava 2';
 
-  select teto_diario, hora_fim into v_cfg_teto, v_cfg_fim from public.config where id = 1;
+  select teto_diario, hora_inicio, hora_fim
+    into v_cfg_teto, v_cfg_ini, v_cfg_fim from public.config where id = 1;
+
+  -- ⚠️ A JANELA DE HORÁRIO ABRE PARA O TESTE INTEIRO, e isso conserta um
+  -- defeito do próprio arquivo: como as travas de verdade recusam envio fora do
+  -- horário, esta suíte só passava entre 9h e 20h de Porto Velho. Rodar às 21h
+  -- devolvia onze falhas que não eram falhas — e a única saída era esperar o
+  -- dia seguinte para saber se uma migration tinha quebrado alguma coisa.
+  --
+  -- Um teste que só roda no horário comercial é um teste que ninguém roda antes
+  -- de subir código à noite, que é exatamente quando se sobe código.
+  --
+  -- A janela real volta no fim, e o rollback desfaz tudo de qualquer jeito.
+  update public.config set hora_inicio = 0, hora_fim = 24 where id = 1;
 
   perform set_config('request.jwt.claims', json_build_object('sub', v_uid, 'role','authenticated')::text, true);
 
@@ -160,13 +176,20 @@ begin
   update public.config set teto_diario = v_cfg_teto where id = 1;
 
   -- ── 7. janela de horário (no fuso de Porto Velho) ────────────────────────
-  update public.config set hora_fim = public.hora_local() where id = 1;
+  -- Fecha a janela EM VOLTA da hora atual, seja ela qual for. Os dois ramos
+  -- existem porque `hora_fim` tem de ficar entre 1 e 24: à meia-noite não dá
+  -- para fechar por baixo, então fecha-se por cima.
+  if public.hora_local() >= 1 then
+    update public.config set hora_inicio = 0, hora_fim = public.hora_local() where id = 1;
+  else
+    update public.config set hora_inicio = 1, hora_fim = 24 where id = 1;
+  end if;
   v_r := public.fila_status(v_chip);
   if v_r->>'motivo' = 'fora_de_horario' then
     raise notice '  ✅ 7. fora do horário bloqueou (hora local %h)', v_r->>'hora_local';
   else raise warning '  ❌ 7. horário não bloqueou: %', v_r; v_falhas := v_falhas + 1;
   end if;
-  update public.config set hora_fim = v_cfg_fim where id = 1;
+  update public.config set hora_inicio = 0, hora_fim = 24 where id = 1;
 
   -- ── 8. dia bloqueado (eleição) ───────────────────────────────────────────
   insert into public.dias_bloqueados (data, motivo) values (public.hoje_operacional(), 'teste');
@@ -240,6 +263,141 @@ begin
     raise notice '  ✅ 14. abertura recusada para contato bloqueado';
   else raise warning '  ❌ 14. abriu conversa com bloqueado: %', v_r; v_falhas := v_falhas + 1;
   end if;
+
+  -- =========================================================================
+  -- O teto e o intervalo valem no ENVIO, não só na fila
+  -- =========================================================================
+  -- ⚠️ Estas quatro travas cobrem o buraco maior desta suíte: até aqui, teto e
+  -- intervalo eram testados só via `fila_status` / `pegar_proximo_contato` —
+  -- isto é, na porta de entrada de contato NOVO. `registrar_abertura`, que é a
+  -- função correspondente a uma mensagem saindo de verdade, não checava
+  -- nenhum dos dois, e o painel tinha três caminhos que passavam por fora:
+  -- a rajada de material da fase de entrega, as mensagens de seguimento pelo
+  -- perfil, e o botão "Mandar de novo".
+
+  -- Dois contatos limpos, na mão do atendente. Limpos importa: os contatos das
+  -- travas anteriores terminaram bloqueados (teste 12 e 13), e reaproveitar um
+  -- deles faria estas travas medirem `contato_bloqueado` em vez de teto.
+  --
+  --   v_quarto   → já falou hoje: é quem representa a conversa em andamento
+  --   v_terceiro → pessoa nova: é quem o teto tem de barrar
+  insert into public.contatos (origem, nome, primeiro_nome, telefone_e164, chave_dedup,
+                               telefone_hmac, status, atendente_id, chip_id,
+                               claimed_at, claim_expira_em, criado_em)
+  values ('lista_fria', 'Trava Envio', 'Trava', '5569930007777', '6930007777',
+          'hmac-trava-envio', 'em_atendimento', v_uid, v_chip,
+          now(), now() + interval '20 minutes', now() - interval '30 days')
+  returning id into v_terceiro;
+
+  insert into public.contatos (origem, nome, primeiro_nome, telefone_e164, chave_dedup,
+                               telefone_hmac, status, atendente_id, chip_id,
+                               claimed_at, claim_expira_em, criado_em)
+  values ('lista_fria', 'Trava Conversa', 'Trava', '5569930007778', '6930007778',
+          'hmac-trava-conversa', 'em_atendimento', v_uid, v_chip,
+          now(), now() + interval '20 minutes', now() - interval '30 days')
+  returning id into v_quarto;
+
+  -- Zera o histórico do chip e deixa UMA abordagem, velha o bastante para o
+  -- intervalo não interferir na trava de teto.
+  delete from public.interacoes where chip_id = v_chip;
+  insert into public.interacoes (contato_id, atendente_id, chip_id, etapa,
+                                 aberto_wa_em, dia_operacional)
+  values (v_quarto, v_uid, v_chip, 'permissao',
+          now() - interval '600 seconds', public.hoje_operacional());
+
+  -- ── 15. teto do dia recusa a ABERTURA, não só o próximo contato ──────────
+  update public.config set teto_diario = 1 where id = 1;
+  v_r := public.registrar_abertura(v_terceiro, v_chip, 'permissao', 'x');
+  if v_r->>'motivo' = 'teto_atingido' then
+    raise notice '  ✅ 15. teto do dia recusa abrir conversa com pessoa nova';
+  else raise warning '  ❌ 15. abriu acima do teto: %', v_r; v_falhas := v_falhas + 1;
+  end if;
+
+  -- ── 16. seguimento na MESMA pessoa não consome teto novo ─────────────────
+  -- O teto conta com quantas pessoas o número falou, não quantas mensagens
+  -- mandou. Recusar a segunda mensagem de uma conversa já aberta deixaria o
+  -- atendente sem responder quem acabou de escrever.
+  v_r := public.registrar_abertura(v_quarto, v_chip, 'quem_passou', 'x');
+  if (v_r->>'ok')::boolean then
+    raise notice '  ✅ 16. seguir a conversa de quem já contou hoje continua liberado';
+  else raise warning '  ❌ 16. seguimento recusado por teto: %', v_r; v_falhas := v_falhas + 1;
+  end if;
+  update public.config set teto_diario = v_cfg_teto where id = 1;
+
+  -- ── 17. intervalo recusa a ABERTURA de outra abordagem ───────────────────
+  update public.interacoes set aberto_wa_em = now() where chip_id = v_chip;
+  v_r := public.registrar_abertura(v_terceiro, v_chip, 'permissao', 'x');
+  if v_r->>'motivo' = 'intervalo' and (v_r->>'segundos_espera')::int > 0 then
+    raise notice '  ✅ 17. intervalo recusa abordagem emendada (% s restantes)',
+                 v_r->>'segundos_espera';
+  else raise warning '  ❌ 17. abordagem emendada passou: %', v_r; v_falhas := v_falhas + 1;
+  end if;
+
+  -- ── 18. resposta a quem escreveu NÃO espera o intervalo ──────────────────
+  -- Decisão de desenho, e deliberada: `saida`, `quem_passou`, `quer_ajudar` e
+  -- `encaminhamento` são respostas dentro de uma conversa viva. Fazer o
+  -- atendente esperar 90 segundos para responder é o que faz ELE parecer robô —
+  -- o oposto do que a trava protege.
+  delete from public.interacoes where contato_id = v_quarto and etapa = 'quem_passou';
+  v_r := public.registrar_abertura(v_quarto, v_chip, 'quem_passou', 'x');
+  if (v_r->>'ok')::boolean then
+    raise notice '  ✅ 18. responder a quem escreveu não espera o intervalo';
+  else raise warning '  ❌ 18. resposta travada pelo intervalo: %', v_r; v_falhas := v_falhas + 1;
+  end if;
+
+  -- =========================================================================
+  -- O texto nem chega a ser montado quando o envio não pode acontecer
+  -- =========================================================================
+  -- ⚠️ No painel, `window.open` vinha ANTES do `await` do servidor. Quando a
+  -- resposta era "não" — pessoa bloqueada, fora do horário, DIA DA ELEIÇÃO — a
+  -- janela do WhatsApp já estava aberta com o texto da campanha preenchido, e a
+  -- trava virava um aviso vermelho na aba de trás.
+  --
+  -- A correção do navegador está em `atendimento.tsx`. Esta é a outra metade:
+  -- `preparar_mensagem` recusa cedo, então não existe texto para abrir.
+
+  -- ── 19. dia bloqueado não monta mensagem ─────────────────────────────────
+  insert into public.dias_bloqueados (data, motivo) values (public.hoje_operacional(), 'teste');
+  v_r := public.preparar_mensagem(v_terceiro, v_chip, 'permissao');
+  if v_r->>'motivo' = 'dia_bloqueado' then
+    raise notice '  ✅ 19. no dia bloqueado o painel não chega a montar o texto';
+  else raise warning '  ❌ 19. montou mensagem em dia bloqueado: %', v_r; v_falhas := v_falhas + 1;
+  end if;
+  delete from public.dias_bloqueados where data = public.hoje_operacional();
+
+  -- ── 20. fora do horário não monta mensagem ───────────────────────────────
+  if public.hora_local() >= 1 then
+    update public.config set hora_inicio = 0, hora_fim = public.hora_local() where id = 1;
+  else
+    update public.config set hora_inicio = 1, hora_fim = 24 where id = 1;
+  end if;
+  v_r := public.preparar_mensagem(v_terceiro, v_chip, 'permissao');
+  if v_r->>'motivo' = 'fora_de_horario' then
+    raise notice '  ✅ 20. fora do horário o painel não chega a montar o texto';
+  else raise warning '  ❌ 20. montou mensagem fora do horário: %', v_r; v_falhas := v_falhas + 1;
+  end if;
+  update public.config set hora_inicio = 0, hora_fim = 24 where id = 1;
+
+  -- ── 21. bloqueado não monta mensagem — menos a confirmação de saída ──────
+  -- A exceção é a certa: a mensagem de saída não oferece nada, não tem link e
+  -- não pede resposta. Ela informa que o pedido foi cumprido, que é justamente
+  -- o que a pessoa quer ouvir.
+  v_r := public.preparar_mensagem(v_outro, v_chip, 'permissao');
+  if v_r->>'motivo' = 'contato_bloqueado' then
+    raise notice '  ✅ 21. para quem pediu saída, nem o texto é montado';
+  else raise warning '  ❌ 21. montou mensagem para bloqueado: %', v_r; v_falhas := v_falhas + 1;
+  end if;
+
+  v_r := public.preparar_mensagem(v_outro, v_chip, 'saida');
+  if (v_r->>'ok')::boolean then
+    raise notice '  ✅ 21b. a confirmação de saída continua podendo ser montada';
+  else raise warning '  ❌ 21b. a saída ficou impossível de mandar: %', v_r; v_falhas := v_falhas + 1;
+  end if;
+
+  -- Devolve a configuração real (o rollback também devolveria).
+  update public.config
+     set teto_diario = v_cfg_teto, hora_inicio = v_cfg_ini, hora_fim = v_cfg_fim
+   where id = 1;
 
   if v_falhas > 0 then
     raise exception 'RESULTADO: ❌ % trava(s) falharam', v_falhas;

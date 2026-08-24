@@ -97,8 +97,39 @@ begin
   else raise warning '  ❌ 4. purga incorreta'; v_falhas := v_falhas + 1;
   end if;
 
+  -- ── 5. a purga alcança o ENDEREÇO de quem pediu o kit ────────────────────
+  -- ⚠️ Furo encontrado na auditoria: a purga só limpava `contatos`. Quem pediu
+  -- santinho deixou nome, telefone, CEP, rua, número e bairro em `captacoes` —
+  -- o endereço da casa — e essa linha ficava intacta para sempre. A promessa de
+  -- "apagamos em até 48 horas", que está escrita em /privacidade e na mensagem
+  -- de saída, valia pela metade, e valia menos justamente para quem entregou
+  -- mais dado sobre si.
+  --
+  -- O HMAC fica, como em `contatos`: é ele que impede o número de voltar.
+  insert into public.captacoes
+    (origem, nome, telefone_e164, chave_dedup, telefone_hmac, endereco,
+     cep, rua, numero, bairro, itens, contato_id)
+  select 'kit', 'Quem Saiu', '5569930006666', '6930006666', c.telefone_hmac,
+         'Rua das Flores, 123 — Centro', '76801000', 'Rua das Flores', '123',
+         'Centro', array['santinho'], c.id
+    from public.contatos c where c.id = v_contato;
+
+  perform public.purgar_dados_de_saida();
+
+  if (select nome is null and telefone_e164 is null and chave_dedup is null
+             and endereco is null and cep is null and rua is null
+             and numero is null and bairro is null
+             and telefone_hmac is not null
+        from public.captacoes where contato_id = v_contato) then
+    raise notice '  ✅ 5. a purga apagou o endereço do pedido de kit, e o HMAC ficou';
+  else raise warning '  ❌ 5. endereço de quem pediu saída sobreviveu à purga: %',
+       (select to_jsonb(x) from (select nome, telefone_e164, endereco, cep, bairro
+                                   from public.captacoes where contato_id = v_contato) x);
+    v_falhas := v_falhas + 1;
+  end if;
+
   if v_falhas > 0 then raise exception 'AUTOMAÇÕES: ❌ % falha(s)', v_falhas; end if;
-  raise notice 'AUTOMAÇÕES: ✅ as 4 passaram';
+  raise notice 'AUTOMAÇÕES: ✅ as 5 passaram';
 end $$;
 
 rollback;

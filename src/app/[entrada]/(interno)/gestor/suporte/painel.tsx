@@ -1,18 +1,25 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
-import { Siren } from 'lucide-react';
-import { Cartao, Pilula, Selecao, Vazio, cx } from '@/components/ui';
+import { useMemo, useState, useTransition } from 'react';
+import { Check, Loader2, Siren, Undo2 } from 'lucide-react';
+import { Aviso, Botao, Cartao, Pilula, Selecao, Vazio, cx } from '@/components/ui';
 import { CartaoChamado } from '@/components/chamado';
 import {
   MOTIVOS_CHAMADO, ROTULO_MOTIVO,
   type Alerta, type ChamadoNaLista, type MotivoChamado,
 } from '@/lib/tipos-banco';
+import { liberarBloqueio, resolverAlerta } from './acoes';
 
 const ROTULO_ALERTA: Record<string, string> = {
   whatsapp_estranho: 'Atendente sinalizou WhatsApp estranho',
   chip_morto: 'Número caiu',
+  optin_de_bloqueado: 'Número bloqueado tentou se cadastrar de novo',
+  saida_para_revisar: 'Atendente diz que marcou "Pediu saída" por engano',
+  captacao_em_excesso: 'Enxurrada de cadastros de um mesmo lugar',
+  cadastro_de_bloqueado_recusado: 'Atendente tentou cadastrar número bloqueado',
+  saida_corrigida: 'Um "Pediu saída" foi corrigido',
+  // Alertas gravados antes de o cadastro deixar de desfazer bloqueio.
   bloqueio_removido_por_optin: 'Número bloqueado voltou por cadastro próprio',
 };
 
@@ -102,22 +109,97 @@ export function PainelSuporte({
         <section>
           <h2 className="mb-2 text-sm font-medium text-suave">Alertas do sistema</h2>
           <p className="mb-2 text-xs text-suave">
-            Vêm do botão &ldquo;WhatsApp estranho&rdquo; e da checagem de número caído — ninguém
-            escreveu, o sistema detectou.
+            Vêm do botão &ldquo;WhatsApp estranho&rdquo;, da checagem de número caído e das
+            recusas do formulário público — ninguém escreveu, o sistema detectou.
           </p>
           <Cartao className="divide-y divide-borda">
-            {alertas.map((a) => (
-              <div key={a.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <Pilula cor="alerta">{ROTULO_ALERTA[a.tipo] ?? a.tipo}</Pilula>
-                <span className="mr-auto min-w-0 truncate text-sm text-suave">{a.detalhe ?? '—'}</span>
-                <span className="text-xs text-suave">
-                  {new Date(a.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
-                </span>
-              </div>
-            ))}
+            {alertas.map((a) => <LinhaAlerta key={a.id} alerta={a} />)}
           </Cartao>
         </section>
       )}
+    </div>
+  );
+}
+
+/**
+ * Um alerta e o que dá para fazer com ele.
+ *
+ * Antes daqui não saía ação nenhuma: `alertas.resolvido_em` não era escrito por
+ * código nenhum do sistema, então o contador do menu só crescia e a lista virava
+ * um mural que ninguém lê. "Dispensar" existe para isso.
+ *
+ * "Liberar" só aparece em `optin_de_bloqueado`, e é o ÚNICO caminho que desfaz
+ * um bloqueio no sistema inteiro. Fica atrás de uma confirmação porque a decisão
+ * é irreversível pelo painel e o custo de errar é multa por mensagem.
+ */
+function LinhaAlerta({ alerta }: { alerta: Alerta }) {
+  const router = useRouter();
+  const [ocupado, iniciar] = useTransition();
+  const [erro, setErro] = useState<string | null>(null);
+  const [confirmando, setConfirmando] = useState(false);
+
+  // Os dois alertas que o gestor resolve com uma decisão, não só com um "li".
+  const podeLiberar =
+    (alerta.tipo === 'optin_de_bloqueado' && alerta.captacao_id !== null) ||
+    (alerta.tipo === 'saida_para_revisar' && alerta.contato_id !== null);
+
+  return (
+    <div className="px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <Pilula cor="alerta">{ROTULO_ALERTA[alerta.tipo] ?? alerta.tipo}</Pilula>
+        <span className="text-xs text-suave">
+          {new Date(alerta.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+        </span>
+        <div className="ml-auto flex items-center gap-2">
+          {podeLiberar && (
+            confirmando ? (
+              <Botao
+                variante="perigo" tamanho="p" disabled={ocupado}
+                onClick={() => iniciar(async () => {
+                  const r = await liberarBloqueio(alerta.id);
+                  if (!r.ok) { setErro(r.erro); setConfirmando(false); return; }
+                  router.refresh();
+                })}
+              >
+                {ocupado ? <Loader2 size={12} className="animate-spin" /> : <Undo2 size={12} />}
+                Confirmar: liberar o número
+              </Botao>
+            ) : (
+              <Botao variante="neutro" tamanho="p" disabled={ocupado}
+                     onClick={() => { setErro(null); setConfirmando(true); }}>
+                <Undo2 size={12} /> Liberar
+              </Botao>
+            )
+          )}
+          <Botao
+            variante="neutro" tamanho="p" disabled={ocupado}
+            onClick={() => iniciar(async () => {
+              const r = await resolverAlerta(alerta.id);
+              if (!r.ok) { setErro(r.erro); return; }
+              router.refresh();
+            })}
+          >
+            {ocupado ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+            Dispensar
+          </Botao>
+        </div>
+      </div>
+
+      <p className="mt-1.5 text-sm leading-relaxed text-suave">{alerta.detalhe ?? '—'}</p>
+
+      {confirmando && podeLiberar && (
+        <p className="mt-2 text-xs leading-relaxed text-alerta">
+          {alerta.tipo === 'saida_para_revisar'
+            ? 'Liberar devolve esta pessoa para a conversa, com o mesmo atendente. Confirme só se ' +
+              'você acredita que foi mesmo clique errado — se ela pediu para sair de verdade, ' +
+              'mandar mensagem depois disso é multa por mensagem.'
+            : 'Liberar devolve esta pessoa para a fila quente. O cadastro sozinho não prova quem ' +
+              'preencheu o formulário — confirme só se você souber que ela realmente voltou a ' +
+              'procurar a campanha.'}
+        </p>
+      )}
+
+      {erro && <Aviso tom="erro" className="mt-2">{erro}</Aviso>}
     </div>
   );
 }

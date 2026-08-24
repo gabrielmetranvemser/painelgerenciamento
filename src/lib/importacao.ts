@@ -9,6 +9,58 @@
 import { normalizarTelefone, type MotivoInvalido } from './telefone';
 import { primeiroNomeDe } from './mensagem';
 
+export type ProblemaArquivo =
+  /** É um zip: .xlsx, .ods ou .numbers renomeado. */
+  | 'planilha_binaria'
+  /** Não sobrou texto nenhum depois de decodificar. */
+  | 'vazio';
+
+export type LeituraArquivo =
+  | { ok: true; texto: string; /** `true` quando foi preciso reler como Windows-1252. */ latin: boolean }
+  | { ok: false; problema: ProblemaArquivo };
+
+/**
+ * Transforma os bytes do arquivo escolhido em texto para o Papa parsear.
+ *
+ * Existe como função separada — e testada — porque os dois defeitos que ela
+ * resolve são silenciosos e caros:
+ *
+ * 1. ENCODING. O Excel em português, no "CSV (separado por vírgulas)", grava em
+ *    Windows-1252. Lido como UTF-8, "Ji-Paraná" vira "Ji-Paran�", que não
+ *    casa com município nenhum — e o relatório por município, que é o que mostra
+ *    onde a campanha está pegando, nasce inteiro em "(não informado)" sem que
+ *    ninguém perceba, porque a importação termina dizendo que deu certo.
+ *
+ * 2. .XLSX. É um zip. O parser lia os bytes comprimidos como se fossem texto e
+ *    devolvia "não consegui ler nenhuma linha", que manda o gestor conferir o
+ *    cabeçalho — o lugar errado para procurar.
+ *
+ * O sinal de encoding errado é o caractere de substituição (U+FFFD), que o
+ * decodificador de UTF-8 põe no lugar de todo byte que não soube ler. Nenhum
+ * arquivo UTF-8 legítimo o contém.
+ */
+export function decodificarPlanilha(bytes: ArrayBuffer): LeituraArquivo {
+  const inicio = new Uint8Array(bytes.slice(0, 2));
+  // "PK" — assinatura de zip, e portanto de .xlsx, .ods e .numbers.
+  if (inicio[0] === 0x50 && inicio[1] === 0x4b) {
+    return { ok: false, problema: 'planilha_binaria' };
+  }
+
+  let latin = false;
+  let texto = new TextDecoder('utf-8').decode(bytes);
+  if (texto.includes('\uFFFD')) {
+    texto = new TextDecoder('windows-1252').decode(bytes);
+    latin = true;
+  }
+
+  // O BOM sobrevive à decodificação e grudaria no nome da primeira coluna,
+  // fazendo o palpite de mapeamento errar a coluna de telefone.
+  texto = texto.replace(/^\uFEFF/, '');
+
+  if (texto.trim().length === 0) return { ok: false, problema: 'vazio' };
+  return { ok: true, texto, latin };
+}
+
 export type MapaColunas = {
   nome: string | null;
   telefone: string;

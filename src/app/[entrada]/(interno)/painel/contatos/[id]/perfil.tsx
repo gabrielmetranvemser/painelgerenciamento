@@ -70,6 +70,10 @@ const ITENS_KIT = [
 const MOTIVO: Record<string, string> = {
   saida_pedida_pela_pessoa:
     'Não dá. Quem pediu para sair foi a própria pessoa, pelo link. Isso só ela pode desfazer.',
+  saida_so_o_gestor_desfaz:
+    'Não dá para desfazer por aqui — mandar mensagem para quem pediu para sair é multa por ' +
+    'mensagem, então quem decide isso é o gestor. Já avisei ele, com esta pessoa em anexo. ' +
+    'Se ele liberar, a conversa volta para você do jeito que estava.',
   candidato_nao_declarado:
     'Esta pessoa não foi avisada deste candidato, então não dá para mandar o material dele. ' +
     'Ela só autorizou o que estava escrito na primeira mensagem.',
@@ -84,6 +88,15 @@ const MOTIVO: Record<string, string> = {
   conversa_nao_aberta: 'Você ainda não abriu conversa com esta pessoa.',
   dados_apagados: 'Os dados desta pessoa já foram apagados.',
   sem_itens: 'Escolha pelo menos um item.',
+  dia_bloqueado: 'Hoje é dia bloqueado — não se fala com ninguém. Nada foi enviado.',
+  fora_de_horario: 'O horário de atendimento acabou. Nada foi enviado; continue amanhã.',
+  chip_indisponivel: 'Seu número está pausado ou foi desativado. Nada foi enviado — fale com o gestor.',
+  teto_atingido: 'Você chegou ao limite de conversas deste número hoje. Nada foi enviado.',
+  intervalo:
+    'Ainda falta o intervalo entre uma abordagem e outra. Nada foi enviado — espere um pouco e tente de novo.',
+  chip_nao_e_seu: 'Esse número não está no seu cadastro. Fale com o gestor.',
+  modelo_ausente: 'Não existe modelo cadastrado para esta mensagem. Fale com o gestor.',
+  sem_variacao: 'O modelo está sem texto. Fale com o gestor.',
 };
 
 export function Perfil({
@@ -121,16 +134,30 @@ export function Perfil({
     });
   }
 
+  /**
+   * Mesma ordem da tela de atendimento, pelo mesmo motivo: a janela abre em
+   * branco no clique (síncrono, senão o navegador bloqueia o pop-up) e só é
+   * apontada para o WhatsApp depois de o servidor autorizar. Com URL vazia,
+   * `window.open` não navega uma janela nomeada que já exista — a aba de
+   * WhatsApp em uso fica onde está.
+   */
   function abrir() {
     if (!mensagem) return;
-    window.open(mensagem.urlWhatsApp, JANELA_WA);
+    const janela = window.open('', JANELA_WA);
+    setErro(null); setOk(null);
     const enviada = mensagem;
     iniciar(async () => {
       const r = await registrarAbertura(
-        contato.id, chipId, enviada.etapa, enviada.texto, enviada.variacaoId,
+        contato.id, chipId, enviada.etapa, enviada.variacaoId,
         enviada.candidato?.id ?? null,
       );
-      if (!r.ok) { setErro(MOTIVO[r.motivo] ?? `O sistema não registrou o envio: ${r.motivo}`); return; }
+      if (!r.ok) {
+        // Não navega: nada chega ao WhatsApp.
+        setErro(MOTIVO[r.motivo] ?? `O sistema não registrou o envio: ${r.motivo}`);
+        return;
+      }
+      if (janela && !janela.closed) janela.location.href = enviada.urlWhatsApp;
+      else window.open(enviada.urlWhatsApp, JANELA_WA);
       setOk('Envio registrado.');
       recarregar();
     });

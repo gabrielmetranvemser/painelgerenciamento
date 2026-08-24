@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Headphones } from 'lucide-react';
 import { Aviso, Cartao } from '@/components/ui';
 import { FormularioEntrar } from './formulario';
+import { AcessoNoPainelLateral } from './painel-lateral';
 
 export const metadata: Metadata = { title: 'Entrar' };
 
@@ -26,6 +27,7 @@ export default async function Entrar({
         </div>
 
         <Cartao className="p-7" elevado>
+          <AcessoNoPainelLateral />
           {erro === 'inativo' && (
             <Aviso tom="erro" className="mb-4">
               Sua conta está inativa. Fale com o gestor.
