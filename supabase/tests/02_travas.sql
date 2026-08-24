@@ -35,12 +35,27 @@ begin
   end loop;
 end $$;
 
+-- ⚠️ `criado_em` no PASSADO, e isso não é detalhe.
+--
+-- A fila ordena por `criado_em` crescente. Com data futura, estes contatos
+-- ficavam ATRÁS de toda a base real, e o `pegar_proximo_contato` do teste 1
+-- entregava um contato de verdade — apesar de este arquivo prometer, no
+-- cabeçalho, não depender de nada externo.
+--
+-- Quando o contato sorteado já tinha uma interação de `preparar_mensagem`
+-- pendente (texto montado, conversa nunca aberta), o `registrar_abertura` do
+-- teste 3 caía no `on conflict` e atualizava AQUELA linha — que aponta para
+-- outro chip. O teto do chip do teste continuava zero e as travas 3 e 4
+-- falhavam, de forma intermitente, conforme o estado da base real.
+--
+-- 30 dias atrás põe os seis à frente de qualquer coisa e torna o teste
+-- determinístico. Continua tudo revertido pelo rollback.
 insert into public.contatos (origem, nome, primeiro_nome, telefone_e164, chave_dedup, telefone_hmac, status, criado_em)
 select 'lista_fria', 'Trava Contato ' || g, 'Trava',
        '55690' || lpad(g::text, 8, '0'),
        '690' || lpad(g::text, 8, '0'),
        'hmac-trava-' || lpad(g::text, 4, '0'),
-       'na_fila', now() + make_interval(secs => g)
+       'na_fila', now() - make_interval(days => 30, secs => -g)
 from generate_series(1, 6) g;
 
 do $$
@@ -71,9 +86,14 @@ begin
   -- ── 1. claim normal ───────────────────────────────────────────────────────
   v_r := public.pegar_proximo_contato(v_chip);
   v_contato := (v_r->'contato'->>'id')::uuid;
-  if (v_r->>'ok')::boolean and v_contato is not null then
-    raise notice '  ✅ 1. claim entregou um contato';
-  else raise warning '  ❌ 1. claim falhou: %', v_r; v_falhas := v_falhas + 1;
+  -- Exige que tenha vindo um contato DESTE arquivo. Sem esta checagem, o dia em
+  -- que a fila voltar a entregar um contato real o teste não quebra aqui: ele
+  -- quebra três travas adiante, com uma mensagem que não explica nada.
+  if (v_r->>'ok')::boolean and v_contato is not null
+     and (select nome from public.contatos where id = v_contato) like 'Trava Contato %' then
+    raise notice '  ✅ 1. claim entregou um contato (dos criados aqui)';
+  else raise warning '  ❌ 1. claim falhou ou veio contato de fora do teste: %', v_r;
+    v_falhas := v_falhas + 1;
   end if;
 
   -- ── 2. anti-fraude: resultado sem conversa aberta ────────────────────────
