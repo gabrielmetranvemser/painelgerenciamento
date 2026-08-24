@@ -4,17 +4,26 @@ import { headers } from 'next/headers';
 import { z } from 'zod';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { ipDosCabecalhos, registrarCaptacao } from '@/lib/captacao';
+import { ENDERECO_VAZIO, TAMANHOS_CAMISETA, normalizarCep, type EnderecoEstruturado } from '@/lib/cep';
 import { textoDoAceite } from '@/lib/consentimento';
 import type { CargoEleitoral } from '@/lib/tipos-banco';
 
 const ITENS_VALIDOS = ['santinho', 'adesivo', 'camiseta'] as const;
+
+/** Campo de endereço que veio em branco chega como '' e deve virar null. */
+const Texto = (max: number) =>
+  z.string().trim().max(max).optional().transform((v) => (v ? v : null));
 
 const Entrada = z.object({
   slug: z.string().trim().min(3).max(40),
   nome: z.string().trim().min(3, 'Escreva seu nome completo.').max(120),
   telefone: z.string().trim().min(8, 'Escreva seu WhatsApp com DDD.'),
   municipioId: z.coerce.number().int().positive('Escolha sua cidade.'),
-  endereco: z.string().trim().max(300).optional(),
+  cep: Texto(9),
+  rua: Texto(120),
+  numero: Texto(20),
+  bairro: Texto(80),
+  tamanhoCamiseta: z.enum(TAMANHOS_CAMISETA).optional().nullable().catch(null),
   itens: z.array(z.enum(ITENS_VALIDOS)),
   aceite: z.literal('on', { message: 'É preciso autorizar o contato pelo WhatsApp.' }),
 });
@@ -41,7 +50,11 @@ export async function cadastrar(
     nome: form.get('nome'),
     telefone: form.get('telefone'),
     municipioId: form.get('municipio_id'),
-    endereco: form.get('endereco') ?? undefined,
+    cep: form.get('cep') ?? undefined,
+    rua: form.get('rua') ?? undefined,
+    numero: form.get('numero') ?? undefined,
+    bairro: form.get('bairro') ?? undefined,
+    tamanhoCamiseta: form.get('tamanho_camiseta') || null,
     itens: form.getAll('itens'),
     aceite: form.get('aceite'),
   });
@@ -65,12 +78,19 @@ export async function cadastrar(
   const querKit = d.itens.length > 0;
   const cabecalhos = await headers();
 
+  // Sem item pedido não há entrega, e endereço guardado sem entrega para fazer
+  // é dado pessoal que ninguém vai usar. Não grava.
+  const endereco: EnderecoEstruturado = querKit
+    ? { cep: normalizarCep(d.cep), rua: d.rua, numero: d.numero, bairro: d.bairro }
+    : ENDERECO_VAZIO;
+
   const r = await registrarCaptacao({
     origem: querKit ? 'kit' : 'site',
     nome: d.nome,
     telefone: d.telefone,
     municipioId: d.municipioId,
-    endereco: querKit ? (d.endereco ?? null) : null,
+    endereco,
+    tamanhoCamiseta: querKit && d.itens.includes('camiseta') ? d.tamanhoCamiseta ?? null : null,
     itens: querKit ? d.itens : null,
     candidatoId: candidato.id,
     textoAceite: textoDoAceite({

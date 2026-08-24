@@ -2,7 +2,9 @@
 
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { Aviso, Botao, Campo, cx } from '@/components/ui';
+import { Aviso, Botao, Campo, Selecao, cx } from '@/components/ui';
+import { CamposEndereco } from '@/components/campos-endereco';
+import { ENDERECO_VAZIO, TAMANHOS_CAMISETA, type EnderecoEstruturado } from '@/lib/cep';
 import type { Municipio } from '@/lib/tipos-banco';
 import { cadastrar } from './acoes';
 
@@ -31,6 +33,11 @@ export function FormularioCandidato({
 }) {
   const [estado, acao] = useActionState(cadastrar, null);
   const [querImpresso, setQuerImpresso] = useState(false);
+  const [cidadeId, setCidadeId] = useState<number | ''>('');
+  const [itens, setItens] = useState<string[]>([]);
+  const [endereco, setEndereco] = useState<EnderecoEstruturado>(ENDERECO_VAZIO);
+
+  const cidade = municipios.find((m) => m.id === cidadeId) ?? null;
 
   if (estado?.ok) {
     return (
@@ -59,20 +66,21 @@ export function FormularioCandidato({
         dica="Com DDD. Precisa ser um celular com WhatsApp."
       />
 
-      <label className="block">
-        <span className="mb-2 block text-[13px] font-semibold">Sua cidade</span>
-        <select
-          name="municipio_id"
-          required
-          defaultValue=""
-          className="w-full rounded-2xl border border-borda bg-superficie-alta px-4 py-3 text-[15px]"
-        >
-          <option value="" disabled>Escolha…</option>
-          {municipios.map((m) => (
-            <option key={m.id} value={m.id}>{m.nome}</option>
-          ))}
-        </select>
-      </label>
+      {/* A cidade é estado do React, e não só um <select> solto, porque o bloco
+          de endereço depende dela: é ela que confere o CEP e limita a busca por
+          nome de rua. Perguntar de novo lá embaixo seria perguntar duas vezes. */}
+      <Selecao
+        rotulo="Sua cidade"
+        name="municipio_id"
+        required
+        value={cidadeId}
+        onChange={(e) => setCidadeId(e.target.value ? Number(e.target.value) : '')}
+      >
+        <option value="" disabled>Escolha…</option>
+        {municipios.map((m) => (
+          <option key={m.id} value={m.id}>{m.nome}</option>
+        ))}
+      </Selecao>
 
       {/* O impresso é opcional e fica fechado: formulário curto converte mais, e
           a maioria só quer o material digital. */}
@@ -87,22 +95,43 @@ export function FormularioCandidato({
           <span className="text-sm font-medium">Quero também material impresso</span>
         </label>
 
-        <div className={cx('space-y-3 border-t border-borda p-4', querImpresso ? 'block' : 'hidden')}>
-          {ITENS.map((i) => (
-            <label key={i.valor} className="flex cursor-pointer items-center gap-3">
-              <input type="checkbox" name="itens" value={i.valor} disabled={!querImpresso}
-                     className="size-5 accent-[var(--acento)]" />
-              <span className="text-sm">{i.rotulo}</span>
-            </label>
-          ))}
-          <label className="block">
-            <span className="mb-2 block text-[13px] font-semibold">Endereço para entrega</span>
-            <textarea
-              name="endereco" rows={2} disabled={!querImpresso} maxLength={300}
-              placeholder="Rua, número, bairro, ponto de referência — e o tamanho da camiseta"
-              className="w-full resize-y rounded-2xl border border-borda bg-superficie-alta px-4 py-3 text-[15px] leading-relaxed placeholder:text-tenue"
+        <div className={cx('space-y-4 border-t border-borda p-4', querImpresso ? 'block' : 'hidden')}>
+          <div className="space-y-3">
+            {ITENS.map((i) => (
+              <label key={i.valor} className="flex cursor-pointer items-center gap-3">
+                <input
+                  type="checkbox" name="itens" value={i.valor} disabled={!querImpresso}
+                  checked={itens.includes(i.valor)}
+                  onChange={(e) => setItens((a) =>
+                    e.target.checked ? [...a, i.valor] : a.filter((v) => v !== i.valor))}
+                  className="size-5 accent-[var(--acento)]"
+                />
+                <span className="text-sm">{i.rotulo}</span>
+              </label>
+            ))}
+          </div>
+
+          {itens.includes('camiseta') && (
+            <Selecao rotulo="Tamanho da camiseta" name="tamanho_camiseta" disabled={!querImpresso}
+                     defaultValue="">
+              <option value="">Escolha…</option>
+              {TAMANHOS_CAMISETA.map((t) => <option key={t} value={t}>{t}</option>)}
+            </Selecao>
+          )}
+
+          {/* Nome, WhatsApp e cidade já foram perguntados acima — aqui só entra
+              o que falta para achar a casa. Sem complemento: vinha vazio em
+              quase todo pedido. */}
+          <div>
+            <p className="mb-2 text-[13px] font-semibold">Endereço para entrega</p>
+            <CamposEndereco
+              valor={endereco}
+              aoMudar={setEndereco}
+              cidade={cidade ? { nome: cidade.nome, uf: cidade.uf } : null}
+              desabilitado={!querImpresso}
+              obrigatorio={querImpresso && itens.length > 0}
             />
-          </label>
+          </div>
         </div>
       </div>
 

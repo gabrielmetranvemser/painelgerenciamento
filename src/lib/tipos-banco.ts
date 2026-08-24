@@ -7,7 +7,11 @@
  * Docker e substitua o arquivo.
  */
 
-export type OrigemContato = 'site' | 'kit' | 'lista_fria';
+/**
+ * 'chamou' é a pessoa que escreveu para o atendente por conta própria. Conta
+ * como QUENTE na fila — quente é tudo que não é 'lista_fria'.
+ */
+export type OrigemContato = 'site' | 'kit' | 'lista_fria' | 'chamou';
 
 export type StatusContato =
   | 'novo' | 'na_fila' | 'em_atendimento' | 'autorizou' | 'pediu_saida'
@@ -171,7 +175,14 @@ export type Captacao = {
   telefone_e164: string | null;
   chave_dedup: string | null;
   municipio_id: number | null;
+  /** A linha montada a partir das partes. É o que os relatórios leem. */
   endereco: string | null;
+  /** 8 dígitos, sem hífen. Nulo quando a pessoa não soube o CEP. */
+  cep: string | null;
+  rua: string | null;
+  numero: string | null;
+  bairro: string | null;
+  tamanho_camiseta: string | null;
   itens: string[] | null;
   /** De qual candidatura veio o cadastro. Nulo nas páginas genéricas. */
   candidato_id: string | null;
@@ -421,6 +432,11 @@ export type Entrega = {
   telefone_e164: string | null;
   municipio: string | null;
   endereco: string | null;
+  cep: string | null;
+  rua: string | null;
+  numero: string | null;
+  bairro: string | null;
+  tamanho_camiseta: string | null;
   itens: string[] | null;
   pedido_em: string;
   entregue_em: string | null;
@@ -528,6 +544,29 @@ export type RespostaFila =
 export type RespostaAbertura =
   | { ok: true; ja_registrado: boolean; interacao_id: string; fila: FilaStatus }
   | { ok: false; motivo: string };
+
+/** Por que `adicionar_contato` recusou. Cada um vira uma frase na tela. */
+export type MotivoAdicionar =
+  | 'usuario_inativo' | 'termo_nao_aceito' | 'chip_nao_e_seu' | 'chip_indisponivel'
+  | 'telefone_invalido' | 'numero_bloqueado' | 'ja_e_de_outro_atendente'
+  | 'numero_repetido';
+
+export type RespostaAdicionarContato =
+  | {
+      ok: true;
+      /** O número já estava na base — o cadastro reaproveitou a linha. */
+      ja_existia: boolean;
+      era_de_outro: boolean;
+      contato: ContatoDaFila;
+    }
+  | {
+      ok: false;
+      motivo: MotivoAdicionar;
+      /** Primeiro nome de quem já atende esse número, em 'ja_e_de_outro_atendente'. */
+      atendente?: string;
+      /** Por que o telefone não serve, em 'telefone_invalido'. */
+      detalhe?: string;
+    };
 
 export type RespostaResultado =
   | { ok: true; status: Resultado }

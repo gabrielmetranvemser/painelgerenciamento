@@ -6,7 +6,9 @@ import {
   ArrowLeft, Check, Gift, History, Loader2, MessageSquarePlus, MousePointerClick, PackageOpen,
   Radio, Send, Star,
 } from 'lucide-react';
-import { Avatar, Aviso, Botao, Cartao, EtiquetaOrigem, Pilula, Selecao, AreaTexto, cx } from '@/components/ui';
+import { Avatar, Aviso, Botao, Cartao, EtiquetaOrigem, Pilula, Selecao, cx } from '@/components/ui';
+import { CamposEndereco } from '@/components/campos-endereco';
+import { TAMANHOS_CAMISETA, type EnderecoEstruturado } from '@/lib/cep';
 import { formatarExibicao } from '@/lib/telefone';
 import {
   RESULTADOS, ROTULO_CARGO,
@@ -16,7 +18,7 @@ import {
   carregarEntregas, definirMunicipio, prepararMensagem, registrarAbertura, registrarResultado,
   type MensagemPronta,
 } from '@/app/[entrada]/(interno)/painel/acoes';
-import { carregarHistorico, registrarPedidoKit, type Historico } from './acoes';
+import { carregarHistorico, registrarPedidoKit, type Historico, type PedidoKit as DadosPedidoKit } from './acoes';
 
 const JANELA_WA = 'whatsapp-atendimento';
 
@@ -393,19 +395,27 @@ function PedidoKit({
   contatoId: string;
   municipios: Municipio[];
   municipioId: number | null;
-  pedido: { endereco: string | null; itens: string[] | null } | null;
+  pedido: DadosPedidoKit | null;
   aoSalvar: () => void;
 }) {
   // Estado inicial vem direto das props. O componente só é montado depois que o
   // histórico chegou, e a `key` de quem o renderiza faz remontar quando o
   // pedido passa a existir — então não há efeito copiando prop para estado,
   // que causaria uma renderização em cascata a cada carga.
-  const [endereco, setEndereco] = useState(pedido?.endereco ?? '');
+  const [endereco, setEndereco] = useState<EnderecoEstruturado>({
+    cep: pedido?.cep ?? null,
+    rua: pedido?.rua ?? null,
+    numero: pedido?.numero ?? null,
+    bairro: pedido?.bairro ?? null,
+  });
   const [itens, setItens] = useState<string[]>(pedido?.itens ?? []);
+  const [tamanho, setTamanho] = useState(pedido?.tamanho_camiseta ?? '');
   const [cidade, setCidade] = useState<number | ''>(municipioId ?? '');
   const [erro, setErro] = useState<string | null>(null);
   const [salvo, setSalvo] = useState(false);
   const [ocupado, iniciar] = useTransition();
+
+  const municipio = municipios.find((m) => m.id === cidade) ?? null;
 
   function alternar(valor: string) {
     setSalvo(false);
@@ -432,11 +442,17 @@ function PedidoKit({
         ))}
       </div>
 
-      <div className="mt-4">
-        <AreaTexto rotulo="Endereço para entrega" value={endereco} rows={2}
-                   onChange={(e) => { setEndereco(e.target.value); setSalvo(false); }}
-                   placeholder="Rua, número, bairro, ponto de referência — e o tamanho da camiseta" />
-      </div>
+      {/* Só aparece com camiseta no pedido: perguntar o tamanho de quem pediu
+          adesivo é campo que a pessoa lê, pensa e deixa em branco. */}
+      {itens.includes('camiseta') && (
+        <div className="mt-3">
+          <Selecao rotulo="Tamanho da camiseta" value={tamanho}
+                   onChange={(e) => { setTamanho(e.target.value); setSalvo(false); }}>
+            <option value="">Não informou</option>
+            {TAMANHOS_CAMISETA.map((t) => <option key={t} value={t}>{t}</option>)}
+          </Selecao>
+        </div>
+      )}
 
       <div className="mt-4">
         <Selecao rotulo="Cidade" value={cidade}
@@ -446,12 +462,23 @@ function PedidoKit({
         </Selecao>
       </div>
 
+      <div className="mt-4">
+        <p className="mb-2 text-[13px] font-semibold">Endereço para entrega</p>
+        <CamposEndereco
+          valor={endereco}
+          aoMudar={(e) => { setEndereco(e); setSalvo(false); }}
+          cidade={municipio ? { nome: municipio.nome, uf: municipio.uf } : null}
+        />
+      </div>
+
       {erro && <Aviso tom="erro" className="mt-3">{erro}</Aviso>}
 
       <div className="mt-4 flex items-center gap-3">
         <Botao disabled={ocupado || itens.length === 0}
           onClick={() => iniciar(async () => {
-            const r = await registrarPedidoKit(contatoId, endereco, itens, cidade === '' ? null : cidade);
+            const r = await registrarPedidoKit(
+              contatoId, endereco, itens, cidade === '' ? null : cidade, tamanho || null,
+            );
             if (!r.ok) { setErro(MOTIVO[r.motivo ?? ''] ?? 'Não consegui salvar.'); return; }
             if (cidade !== '') await definirMunicipio(contatoId, cidade);
             setErro(null); setSalvo(true); aoSalvar();

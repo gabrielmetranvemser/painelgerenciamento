@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { dataHoraLocal, gerarCsv, type Coluna } from '@/lib/csv';
+import { formatarCep } from '@/lib/cep';
 import { formatarExibicao } from '@/lib/telefone';
 
 export const dynamic = 'force-dynamic';
@@ -96,6 +97,8 @@ export async function GET(
 
       type L = {
         nome: string | null; telefone_e164: string | null; endereco: string | null;
+        cep: string | null; rua: string | null; numero: string | null; bairro: string | null;
+        tamanho_camiseta: string | null;
         itens: string[] | null; pedido_em: string; municipio: string | null;
         candidato: string | null; atendente: string | null; estado: string;
         entregue_em: string | null; entregue_por: string | null;
@@ -108,8 +111,17 @@ export async function GET(
         { cabecalho: 'Nome', valor: (c) => c.nome },
         { cabecalho: 'Telefone', valor: (c) => (c.telefone_e164 ? formatarExibicao(c.telefone_e164) : '') },
         { cabecalho: 'Município', valor: (c) => c.municipio },
+        // Bairro logo depois do município: quem monta a rota ordena por ele, e
+        // numa planilha isso quer dizer que as duas colunas ficam lado a lado.
+        { cabecalho: 'Bairro', valor: (c) => c.bairro },
+        { cabecalho: 'Rua', valor: (c) => c.rua },
+        { cabecalho: 'Número', valor: (c) => c.numero },
+        { cabecalho: 'CEP', valor: (c) => (c.cep ? formatarCep(c.cep) : '') },
+        // A linha inteira continua saindo: é o único endereço que existe nos
+        // pedidos anteriores a esta versão, quando o campo era texto livre.
         { cabecalho: 'Endereço', valor: (c) => c.endereco },
         { cabecalho: 'Itens', valor: (c) => (c.itens ?? []).join(', ') },
+        { cabecalho: 'Tamanho da camiseta', valor: (c) => c.tamanho_camiseta },
         { cabecalho: 'Candidato', valor: (c) => c.candidato },
         { cabecalho: 'Atendente', valor: (c) => c.atendente },
         { cabecalho: 'Pedido em', valor: (c) => q(c.pedido_em) },

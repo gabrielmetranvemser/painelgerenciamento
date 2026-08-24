@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ComponentProps, ReactNode } from 'react';
+import type { OrigemContato } from '@/lib/tipos-banco';
 
 export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(' ');
@@ -182,9 +183,14 @@ export function Pilula({
 }
 
 /** Quente e frio nunca se misturam na tela — a cor é parte da regra. */
-export function EtiquetaOrigem({ origem }: { origem: 'site' | 'kit' | 'lista_fria' }) {
-  const texto = { site: 'Cadastrou no site', kit: 'Pediu o kit', lista_fria: 'Lista fria' }[origem];
-  return <Pilula cor={origem === 'lista_fria' ? 'frio' : 'quente'}>{texto}</Pilula>;
+export function EtiquetaOrigem({ origem }: { origem: OrigemContato }) {
+  const texto: Record<OrigemContato, string> = {
+    site: 'Cadastrou no site',
+    kit: 'Pediu o kit',
+    lista_fria: 'Lista fria',
+    chamou: 'Chamou no WhatsApp',
+  };
+  return <Pilula cor={origem === 'lista_fria' ? 'frio' : 'quente'}>{texto[origem]}</Pilula>;
 }
 
 /* ── Métrica ────────────────────────────────────────────────────────────── */

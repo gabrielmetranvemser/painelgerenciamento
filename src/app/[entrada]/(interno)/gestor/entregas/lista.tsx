@@ -46,6 +46,8 @@ export function ListaEntregas({ entregas }: { entregas: Entrega[] }) {
       (!t ||
         (e.nome ?? '').toLowerCase().includes(t) ||
         (e.telefone_e164 ?? '').includes(t.replace(/\D/g, '')) ||
+        // Busca por bairro é como a equipe de entrega separa a rota do dia.
+        (e.bairro ?? '').toLowerCase().includes(t) ||
         (e.endereco ?? '').toLowerCase().includes(t)),
     );
   }, [entregas, aba, cidade, busca]);
@@ -114,7 +116,7 @@ export function ListaEntregas({ entregas }: { entregas: Entrega[] }) {
                     )}
                     {e.municipio && (
                       <span className="inline-flex items-center gap-1.5">
-                        <MapPin size={11} /> {e.municipio}
+                        <MapPin size={11} /> {[e.bairro, e.municipio].filter(Boolean).join(', ')}
                       </span>
                     )}
                     <span>pedido em {new Date(e.pedido_em).toLocaleDateString('pt-BR')}</span>
@@ -131,6 +133,7 @@ export function ListaEntregas({ entregas }: { entregas: Entrega[] }) {
                     {(e.itens ?? []).map((i) => (
                       <Pilula key={i} cor="acento">{ROTULO_ITEM[i] ?? i}</Pilula>
                     ))}
+                    {e.tamanho_camiseta && <Pilula>tamanho {e.tamanho_camiseta}</Pilula>}
                   </p>
 
                   {e.estado === 'entregue' && e.entregue_em && (

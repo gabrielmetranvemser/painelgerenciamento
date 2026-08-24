@@ -1,6 +1,7 @@
 import 'server-only';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { hashTelefone } from '@/lib/hmac';
+import { montarLinhaEndereco, normalizarCep, type EnderecoEstruturado } from '@/lib/cep';
 import { normalizarTelefone, type MotivoInvalido } from '@/lib/telefone';
 import { primeiroNomeDe } from '@/lib/mensagem';
 
@@ -19,7 +20,9 @@ export type DadosCaptacao = {
   nome: string;
   telefone: string;
   municipioId: number;
-  endereco?: string | null;
+  /** As partes do endereço. A linha para os relatórios é montada aqui. */
+  endereco?: EnderecoEstruturado | null;
+  tamanhoCamiseta?: string | null;
   itens?: string[] | null;
   /** De qual candidatura veio o cadastro. É o dono do lead. */
   candidatoId: string | null;
@@ -62,7 +65,15 @@ export async function registrarCaptacao(dados: DadosCaptacao): Promise<Resultado
       telefone_e164: telefone.e164,
       chave_dedup: telefone.chaveDedup,
       municipio_id: dados.municipioId,
-      endereco: dados.endereco || null,
+      // A linha montada continua sendo gravada porque é o que o relatório, a
+      // exportação e a busca de entregas leem — e é o que mantém os pedidos
+      // antigos, de quando o campo era texto livre, na mesma lista dos novos.
+      endereco: dados.endereco ? montarLinhaEndereco(dados.endereco) || null : null,
+      cep: normalizarCep(dados.endereco?.cep),
+      rua: dados.endereco?.rua?.trim() || null,
+      numero: dados.endereco?.numero?.trim() || null,
+      bairro: dados.endereco?.bairro?.trim() || null,
+      tamanho_camiseta: dados.tamanhoCamiseta || null,
       itens: dados.itens?.length ? dados.itens : null,
       candidato_id: dados.candidatoId,
       texto_aceite: dados.textoAceite,

@@ -91,9 +91,14 @@ begin
   update public.contatos set status = 'autorizou' where id = v_c;
 
   -- ── 4. Pedido de kit ──────────────────────────────────────────────────────
-  v_r := public.registrar_pedido_kit(v_c, 'Rua das Flores, 100 - Centro',
-                                     array['santinho','adesivo'],
-                                     (select id from public.municipios where nome = 'Porto Velho'));
+  v_r := public.registrar_pedido_kit(
+           p_contato_id   => v_c,
+           p_itens        => array['santinho','adesivo'],
+           p_endereco     => 'Rua das Flores, 100 - Centro',
+           p_rua          => 'Rua das Flores',
+           p_numero       => '100',
+           p_bairro       => 'Centro',
+           p_municipio_id => (select id from public.municipios where nome = 'Porto Velho'));
   if (v_r->>'ok')::boolean
      and exists (select 1 from public.captacoes
                   where contato_id = v_c and origem = 'kit'
@@ -105,7 +110,9 @@ begin
   end if;
 
   -- ── 5. Editar o pedido não duplica ────────────────────────────────────────
-  perform public.registrar_pedido_kit(v_c, 'Rua Nova, 200', array['camiseta'], null);
+  perform public.registrar_pedido_kit(
+            p_contato_id => v_c, p_itens => array['camiseta'],
+            p_endereco => 'Rua Nova, 200', p_rua => 'Rua Nova', p_numero => '200');
   if (select count(*) from public.captacoes where contato_id = v_c and origem = 'kit') = 1
      and (select endereco from public.captacoes where contato_id = v_c) = 'Rua Nova, 200' then
     raise notice '  ✅ 5. corrigir o endereço atualiza, não cria um segundo pedido';
@@ -115,7 +122,8 @@ begin
   -- ── 6. Contato de outro atendente é intocável ─────────────────────────────
   perform set_config('request.jwt.claims',
     json_build_object('sub', v_uid2, 'role', 'authenticated')::text, true);
-  v_r := public.registrar_pedido_kit(v_c, 'x', array['santinho'], null);
+  v_r := public.registrar_pedido_kit(
+           p_contato_id => v_c, p_itens => array['santinho'], p_endereco => 'x');
   if v_r->>'motivo' = 'contato_nao_e_seu' then
     raise notice '  ✅ 6. não dá para mexer no contato de outro atendente';
   else raise warning '  ❌ 6. mexeu em contato alheio: %', v_r; v_falhas := v_falhas + 1;
