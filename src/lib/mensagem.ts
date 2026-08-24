@@ -50,7 +50,7 @@ export type CandidatoNaChapa = {
 
 export type MaterialComLink = { titulo: string; url: string };
 
-export type OrigemDoContato = 'site' | 'kit' | 'lista_fria';
+export type OrigemDoContato = 'site' | 'kit' | 'lista_fria' | 'chamou';
 
 /**
  * Como chegamos até a pessoa — a frase de {{origem}}.
@@ -66,6 +66,7 @@ const FRASE_ORIGEM: Record<OrigemDoContato, string> = {
   lista_fria: 'um apoiador me passou seu contato',
   site: 'você deixou seu contato no site pedindo o material',
   kit: 'você pediu material pelo site',
+  chamou: 'você me chamou aqui no WhatsApp',
 };
 
 export type ContextoMensagem = {
