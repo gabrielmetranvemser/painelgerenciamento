@@ -143,6 +143,7 @@ export function TabelaContatos({
           <option value="">Fria e quente</option>
           <option value="site">Cadastrou no site</option>
           <option value="kit">Pediu o kit</option>
+          <option value="chamou">Chamou no WhatsApp</option>
           <option value="lista_fria">Lista fria</option>
         </Selecao>
 

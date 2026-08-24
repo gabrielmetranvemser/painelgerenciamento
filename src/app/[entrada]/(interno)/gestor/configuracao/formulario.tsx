@@ -38,6 +38,24 @@ export function FormularioConfig({
 }) {
   const [estado, acao] = useActionState(salvarConfig, null);
 
+  // Os campos de ritmo viram estado só para o aviso poder aparecer enquanto a
+  // pessoa digita. Quem grava continua sendo o formulário, pelo `name`.
+  const [inicio, setInicio] = useState(config.hora_inicio);
+  const [fim, setFim] = useState(config.hora_fim);
+  const [intervalo, setIntervalo] = useState(config.intervalo_seg);
+
+  /**
+   * ⚠️ Estes três campos desligam proteções, e desligavam em silêncio.
+   *
+   * `hora_inicio: 0` com `hora_fim: 24` abre a operação a noite inteira, e
+   * `intervalo: 0` tira o espaçamento entre abordagens — os dois padrões que o
+   * WhatsApp lê como disparo, e o segundo é a trava que existe para o número do
+   * atendente não cair. Nenhum dos dois é proibido: o gestor pode ter motivo. O
+   * que não pode é mudar por engano e descobrir pelo chip morto.
+   */
+  const madrugada = inicio <= 5 || fim >= 23;
+  const semIntervalo = intervalo < 30;
+
   return (
     <div className="space-y-5">
       <Aviso tom="info">
@@ -55,11 +73,11 @@ export function FormularioConfig({
             <Campo rotulo="Conversas por dia" name="teto_diario" type="number" min={1} max={200}
                    defaultValue={config.teto_diario} />
             <Campo rotulo="Intervalo (segundos)" name="intervalo_seg" type="number" min={0} max={3600}
-                   defaultValue={config.intervalo_seg} />
+                   value={intervalo} onChange={(e) => setIntervalo(Number(e.target.value))} />
             <Campo rotulo="Começa às" name="hora_inicio" type="number" min={0} max={23}
-                   defaultValue={config.hora_inicio} />
+                   value={inicio} onChange={(e) => setInicio(Number(e.target.value))} />
             <Campo rotulo="Termina às" name="hora_fim" type="number" min={1} max={24}
-                   defaultValue={config.hora_fim} />
+                   value={fim} onChange={(e) => setFim(Number(e.target.value))} />
           </div>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <Campo rotulo="Fuso horário" name="timezone" defaultValue={config.timezone}
@@ -68,6 +86,31 @@ export function FormularioConfig({
                    min={1} max={240} defaultValue={config.lease_minutos}
                    dica="Depois disso, volta para a fila se ninguém falou com a pessoa." />
           </div>
+
+          {(madrugada || semIntervalo) && (
+            <Aviso tom="alerta" className="mt-4">
+              <p className="font-medium">Isto desliga uma proteção do número.</p>
+              <ul className="mt-1.5 space-y-1 text-sm">
+                {madrugada && (
+                  <li>
+                    Atender das {inicio}h às {fim}h inclui horário em que ninguém espera ser
+                    procurado. Mensagem de campanha de madrugada é o tipo de coisa que vira
+                    denúncia — e o tipo de coisa que faz a pessoa bloquear o número.
+                  </li>
+                )}
+                {semIntervalo && (
+                  <li>
+                    Intervalo de {intervalo}s entre abordagens é praticamente nenhum. É o espaçamento
+                    que impede o mesmo número de parecer disparo — a rampa dos primeiros dias ainda
+                    segura o pior caso, mas depois dela não sobra proteção.
+                  </li>
+                )}
+              </ul>
+              <p className="mt-1.5 text-sm">
+                Dá para salvar assim. Só não dá para dizer depois que ninguém avisou.
+              </p>
+            </Aviso>
+          )}
         </Bloco>
 
 

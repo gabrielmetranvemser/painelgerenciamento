@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { unstable_cache } from 'next/cache';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
+import { ETIQUETA_CANDIDATOS } from '@/lib/cache';
 import { Cartao, cx } from '@/components/ui';
 import { textoDoAceite } from '@/lib/consentimento';
 import { ROTULO_CARGO, type CargoEleitoral, type Municipio } from '@/lib/tipos-banco';
@@ -19,19 +21,49 @@ type CandidatoPublico = {
   ativo: boolean;
 };
 
-async function buscar(slug: string) {
-  const supabase = criarClienteAdmin();
-  const { data } = await supabase
-    .from('candidatos')
-    .select(
-      'id, slug, nome_urna, cargo, numero, partido_sigla, coligacao, cnpj_campanha, ' +
-      'responsavel_material, slogan, chamada, cor_tema, cor_fundo, cor_superficie, ' +
-      'foto_url, fundo_url, tema, ativo',
-    )
-    .eq('slug', slug)
-    .maybeSingle();
-  return (data as CandidatoPublico | null) ?? null;
-}
+/**
+ * ⚠️ Esta é a página mais aberta do sistema: qualquer pessoa da internet a
+ * abre, ela não tem login e é o destino do botão no site de cada candidato.
+ *
+ * Antes, cada visita disparava DUAS consultas com a chave de serviço — a do
+ * candidato e a lista inteira dos 52 municípios, que não muda nunca. Numa
+ * enxurrada de acessos (ou num ataque barato de recarregar a página), isso
+ * esgota a conexão do banco e derruba junto o painel de quem está trabalhando.
+ *
+ * O cache é de DADOS, não de página: a página continua dinâmica, o que deixa de
+ * ir ao banco é a consulta. Um minuto é o bastante para segurar rajada e curto
+ * o bastante para o gestor ver a edição dele quase na hora — e as ações de
+ * Candidatos invalidam a etiqueta na hora em que salvam, então nem esse minuto
+ * costuma existir.
+ */
+const buscar = unstable_cache(
+  async (slug: string) => {
+    const supabase = criarClienteAdmin();
+    const { data } = await supabase
+      .from('candidatos')
+      .select(
+        'id, slug, nome_urna, cargo, numero, partido_sigla, coligacao, cnpj_campanha, ' +
+        'responsavel_material, slogan, chamada, cor_tema, cor_fundo, cor_superficie, ' +
+        'foto_url, fundo_url, tema, ativo',
+      )
+      .eq('slug', slug)
+      .maybeSingle();
+    return (data as CandidatoPublico | null) ?? null;
+  },
+  ['candidato-publico'],
+  { revalidate: 60, tags: [ETIQUETA_CANDIDATOS] },
+);
+
+/** Os 52 municípios de Rondônia. Lista fechada: só muda por migration. */
+const municipiosDeRondonia = unstable_cache(
+  async () => {
+    const supabase = criarClienteAdmin();
+    const { data } = await supabase.from('municipios').select('*').order('nome');
+    return (data ?? []) as Municipio[];
+  },
+  ['municipios'],
+  { revalidate: 86_400 },
+);
 
 /**
  * O título e a descrição saem do próprio candidato.
@@ -69,9 +101,7 @@ export default async function PaginaDoCandidato({
   // para separar as três.
   if (!candidato?.ativo) notFound();
 
-  const supabase = criarClienteAdmin();
-  const { data: municipios } = await supabase.from('municipios').select('*').order('nome');
-
+  const municipios = await municipiosDeRondonia();
   const aceite = textoDoAceite(candidato);
 
   return (
@@ -112,7 +142,7 @@ export default async function PaginaDoCandidato({
         <FormularioCandidato
           slug={candidato.slug}
           aceite={aceite}
-          municipios={(municipios ?? []) as Municipio[]}
+          municipios={municipios}
         />
       </Cartao>
 

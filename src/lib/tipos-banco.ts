@@ -96,6 +96,12 @@ export type Lista = {
   total_bloqueados: number;
   total_invalidos: number;
   ativa: boolean;
+  /**
+   * Quando a importação chegou ao fim. Nulo significa que a aba foi fechada no
+   * meio — parte da planilha entrou na fila e o resto não. A tela de importar
+   * avisa enquanto isso estiver assim.
+   */
+  concluida_em: string | null;
   criado_por: string | null;
   criado_em: string;
 };
@@ -163,6 +169,18 @@ export type Alerta = {
   tipo: string;
   chip_id: string | null;
   atendente_id: string | null;
+  /**
+   * O cadastro que originou o alerta, quando há um. É o que dá ao gestor um
+   * botão em vez de um texto solto: sem ele, "número bloqueado tentou voltar"
+   * seria um aviso sobre o qual não dá para agir.
+   */
+  captacao_id: string | null;
+  /**
+   * O contato que originou o alerta. Hoje só o pedido de revisão de um
+   * "Pediu saída" o usa — é ele que dá ao gestor um botão que devolve a pessoa
+   * para a conversa em vez de um texto sobre o qual não dá para agir.
+   */
+  contato_id: string | null;
   detalhe: string | null;
   resolvido_em: string | null;
   criado_em: string;
@@ -174,6 +192,11 @@ export type Captacao = {
   nome: string | null;
   telefone_e164: string | null;
   chave_dedup: string | null;
+  /**
+   * Pseudônimo do telefone. Sobrevive à purga de 48h, e é por ele que a purga
+   * alcança esta linha e que o gestor liga um cadastro à lista de bloqueio.
+   */
+  telefone_hmac: string | null;
   municipio_id: number | null;
   /** A linha montada a partir das partes. É o que os relatórios leem. */
   endereco: string | null;
@@ -417,6 +440,12 @@ export type SaudeChip = {
   pct_saida: number | null; pct_invalido: number | null;
   pct_sem_resposta: number | null; pct_clique: number | null;
   farol: 'verde' | 'amarelo' | 'vermelho' | 'sem_dados';
+  /**
+   * Conversas distintas na última hora. É o quarto sinal do termômetro de
+   * docs/03-OPERACAO.md §7 — o único que é medida direta, e por isso o único
+   * que acende o farol mesmo num chip ainda sem histórico.
+   */
+  conversas_hora: number;
 };
 
 export type DesempenhoAtendente = {
