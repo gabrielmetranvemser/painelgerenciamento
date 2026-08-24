@@ -2,6 +2,15 @@
 -- AUTOSSUFICIENTE: cria os próprios dados e dá ROLLBACK.
 begin;
 
+-- ⚠️ A janela de horário abre para o teste inteiro (revertida pelo rollback).
+--
+-- As travas de verdade recusam envio fora do horário de operação, então esta
+-- suíte só passava entre 9h e 20h de Porto Velho: rodá-la às 21h devolvia uma
+-- parede de ❌ que não eram falhas. Um teste que só roda no horário comercial é
+-- um teste que ninguém roda antes de subir código à noite — que é exatamente
+-- quando se sobe código.
+update public.config set hora_inicio = 0, hora_fim = 24 where id = 1;
+
 do $$
 declare
   v_a uuid := gen_random_uuid();   -- atende Fed + Gov
@@ -113,6 +122,13 @@ begin
   end if;
 
   -- ── 6. Material enviado marca a trilha ───────────────────────────────────
+  -- Envelhece a permissão: desde a migration 330300 o intervalo mínimo também
+  -- vale para o material, e mandar a peça no mesmo segundo do "pode" é a rajada
+  -- que a trava existe para impedir. Aqui o que se mede é a trilha, não o
+  -- ritmo — por isso o relógio anda.
+  update public.interacoes set aberto_wa_em = now() - interval '600 seconds'
+   where contato_id = v_c and aberto_wa_em is not null;
+
   v_r := public.registrar_abertura(v_c, v_chip_a, 'material', 'material fed', null, v_fed);
   if (v_r->>'ok')::boolean
      and (select material_enviado_em is not null from public.contato_candidato

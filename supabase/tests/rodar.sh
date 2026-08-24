@@ -56,7 +56,39 @@ echo
 "${PSQL[@]}" -f supabase/tests/12_adicionar_contato.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
 
 echo
+"${PSQL[@]}" -f supabase/tests/13_altos.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
+
+echo
+"${PSQL[@]}" -f supabase/tests/14_medios.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
+
+echo
 echo "── Concorrência da fila ─────────────────────────────────────────────────"
+
+# ⚠️ Este é o único bloco que precisa de dados COMMITADOS — são várias conexões
+# ao mesmo tempo, e uma transação com rollback não é visível para as outras.
+#
+# Consequência chata: os outros arquivos abrem a janela de horário dentro da
+# própria transação, e este não pode. Sem tratamento, a suíte inteira só rodava
+# entre 9h e 20h de Porto Velho, porque as travas de verdade recusam envio fora
+# do horário — e ninguém sobe código às 9h da manhã.
+#
+# Então a janela é aberta de fato e devolvida por um `trap`, que dispara também
+# se o script morrer no meio. A janela original vai para variável de shell, não
+# para o banco: se o processo cair, o próprio trap devolve; e se a máquina
+# desligar no meio, a config fica ABERTA — por isso o aviso alto abaixo, para
+# ninguém descobrir isso no dia seguinte pelo comportamento do painel.
+JANELA=$("${PSQL[@]}" -At -c "select hora_inicio || ' ' || hora_fim from public.config where id = 1")
+JANELA_INI=${JANELA% *}
+JANELA_FIM=${JANELA#* }
+
+restaurar_janela() {
+  "${PSQL[@]}" -c "update public.config set hora_inicio = $JANELA_INI, hora_fim = $JANELA_FIM where id = 1" >/dev/null 2>&1
+}
+trap 'restaurar_janela' EXIT INT TERM
+
+echo "  (abrindo a janela de horário — ${JANELA_INI}h–${JANELA_FIM}h volta no fim)"
+"${PSQL[@]}" -c "update public.config set hora_inicio = 0, hora_fim = 24 where id = 1" >/dev/null
+
 "${PSQL[@]}" -f supabase/tests/99_limpeza.sql >/dev/null 2>&1
 if "${PSQL[@]}" -f supabase/tests/01_fixtures.sql >/dev/null 2>&1; then
   PGPASSWORD="" PSQL_URL="$SUPABASE_DB_URL" ./supabase/tests/concorrencia.sh || falhou=1
@@ -64,7 +96,9 @@ else
   echo "  ❌ não consegui criar os fixtures"; falhou=1
 fi
 "${PSQL[@]}" -f supabase/tests/99_limpeza.sql >/dev/null 2>&1
-echo "  (fixtures removidos)"
+restaurar_janela
+trap - EXIT INT TERM
+echo "  (fixtures removidos, janela de horário devolvida a ${JANELA_INI}h–${JANELA_FIM}h)"
 
 echo
 [ "$falhou" = 0 ] && echo "TUDO VERDE ✅" || { echo "HOUVE FALHA ❌"; exit 1; }

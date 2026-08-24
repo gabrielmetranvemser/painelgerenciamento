@@ -1,17 +1,25 @@
 'use client';
 
 import Papa from 'papaparse';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { Aviso, Botao, Campo, Cartao } from '@/components/ui';
-import { analisarLinhas, emBlocos, sugerirMapa, type Analise, type MapaColunas } from '@/lib/importacao';
+import {
+  analisarLinhas, decodificarPlanilha, emBlocos, sugerirMapa,
+  type Analise, type MapaColunas,
+} from '@/lib/importacao';
 import type { OrigemContato } from '@/lib/tipos-banco';
-import { conferirBloco, criarLista, finalizarLista, importarBloco } from './acoes';
+import {
+  conferirBloco, conferirMunicipios, criarLista, finalizarLista, importarBloco,
+  listasInacabadas,
+} from './acoes';
 
 const BLOCO = 500;
 
 type Etapa = 'arquivo' | 'mapear' | 'conferir' | 'importando' | 'pronto';
 
 type Conferencia = { jaExistem: number; bloqueados: number };
+type Cidades = { semCasar: number; exemplos: string[] };
+type Inacabada = { id: string; rotulo: string; total_importados: number; criado_em: string };
 type Totais = { importados: number; duplicados: number; bloqueados: number };
 
 const MOTIVO_LEGIVEL: Record<string, string> = {
@@ -40,35 +48,72 @@ export function Importador() {
 
   const [analise, setAnalise] = useState<Analise | null>(null);
   const [conferencia, setConferencia] = useState<Conferencia | null>(null);
+  const [cidades, setCidades] = useState<Cidades | null>(null);
+  const [inacabadas, setInacabadas] = useState<Inacabada[]>([]);
   const [progresso, setProgresso] = useState(0);
   const [totais, setTotais] = useState<Totais | null>(null);
 
-  function lerArquivo(f: File) {
+  // Importação que morreu no meio deixa contatos na fila e ninguém sabendo.
+  // O aviso aparece na próxima vez que alguém abre esta tela.
+  useEffect(() => {
+    listasInacabadas().then(setInacabadas).catch(() => {});
+  }, []);
+
+  /**
+   * Lê o arquivo à mão, em vez de entregar o `File` direto ao Papa.
+   *
+   * Quem decide encoding e formato é `decodificarPlanilha`, em src/lib — está
+   * lá, e não aqui, porque são as duas armadilhas mais silenciosas da
+   * importação (CSV do Excel em Windows-1252 e .xlsx disfarçado) e elas
+   * precisam de teste, não de confiança.
+   */
+  async function lerArquivo(f: File) {
     setErro(null);
     setArquivo(f);
     setRotulo((r) => r || f.name.replace(/\.[^.]+$/, ''));
 
-    Papa.parse<Record<string, string>>(f, {
+    let bytes: ArrayBuffer;
+    try {
+      bytes = await f.arrayBuffer();
+    } catch {
+      setErro('Não consegui abrir o arquivo.');
+      return;
+    }
+
+    const leitura = decodificarPlanilha(bytes);
+    if (!leitura.ok) {
+      setErro(
+        leitura.problema === 'planilha_binaria'
+          ? 'Isto é uma planilha do Excel (.xlsx), não um CSV. No Excel: Arquivo → Salvar como → ' +
+            '"CSV UTF-8 (delimitado por vírgulas)". No Google Planilhas: Arquivo → Fazer download ' +
+            '→ Valores separados por vírgulas.'
+          : 'O arquivo chegou vazio.',
+      );
+      return;
+    }
+
+    const res = Papa.parse<Record<string, string>>(leitura.texto, {
       header: true,
       skipEmptyLines: 'greedy',
-      complete: (res) => {
-        const campos = res.meta.fields ?? [];
-        if (campos.length === 0 || res.data.length === 0) {
-          setErro('Não consegui ler nenhuma linha. O arquivo precisa ser CSV com uma linha de cabeçalho.');
-          return;
-        }
-        setColunas(campos);
-        setLinhas(res.data);
-        const palpite = sugerirMapa(campos);
-        setMapa({
-          telefone: palpite.telefone ?? '',
-          nome: 'nome' in palpite ? palpite.nome : null,
-          municipio: 'municipio' in palpite ? palpite.municipio : null,
-        });
-        setEtapa('mapear');
-      },
-      error: () => setErro('Não consegui abrir o arquivo.'),
+      // O CSV que o Excel em português gera é separado por ponto e vírgula.
+      delimitersToGuess: [';', ',', '\t', '|'],
     });
+
+    const campos = res.meta.fields ?? [];
+    if (campos.length === 0 || res.data.length === 0) {
+      setErro('Não consegui ler nenhuma linha. O arquivo precisa ser CSV com uma linha de cabeçalho.');
+      return;
+    }
+
+    setColunas(campos);
+    setLinhas(res.data);
+    const palpite = sugerirMapa(campos);
+    setMapa({
+      telefone: palpite.telefone ?? '',
+      nome: 'nome' in palpite ? palpite.nome : null,
+      municipio: 'municipio' in palpite ? palpite.municipio : null,
+    });
+    setEtapa('mapear');
   }
 
   function conferir() {
@@ -90,6 +135,12 @@ export function Importador() {
           bloqueados += r.bloqueados;
         }
         setConferencia({ jaExistem, bloqueados });
+
+        // Rede de segurança do encoding: se a cidade não casa, o relatório por
+        // município nasce vazio e ninguém percebe.
+        const nomes = a.validas.map((l) => l.municipioNome).filter((n): n is string => !!n);
+        setCidades(nomes.length > 0 ? await conferirMunicipios(nomes) : null);
+
         setEtapa('conferir');
       } catch (e) {
         setErro(e instanceof Error ? e.message : 'Falha ao conferir.');
@@ -112,6 +163,7 @@ export function Importador() {
           entregueEm: origem === 'lista_fria' ? entregueEm : null,
           arquivoNome: arquivo?.name ?? null,
           totalLinhas: analise.totalLinhas,
+          totalInvalidos: analise.invalidas,
         });
         if (!lista.ok) {
           setErro(lista.erro);
@@ -130,7 +182,7 @@ export function Importador() {
           setProgresso(Math.round(((i + 1) / blocos.length) * 100));
         }
 
-        await finalizarLista(lista.id, { ...soma, invalidos: analise.invalidas });
+        await finalizarLista(lista.id);
         setTotais(soma);
         setEtapa('pronto');
       } catch (e) {
@@ -178,12 +230,37 @@ export function Importador() {
     <div className="space-y-5">
       {erro && <Aviso tom="erro">{erro}</Aviso>}
 
+      {inacabadas.length > 0 && (
+        <Aviso tom="alerta">
+          <p className="font-medium">
+            {inacabadas.length === 1
+              ? 'Uma importação não chegou ao fim.'
+              : `${inacabadas.length} importações não chegaram ao fim.`}
+          </p>
+          <p className="mt-1 text-sm">
+            A aba foi fechada no meio. O que já tinha entrado <strong>está na fila e vai ser
+            atendido</strong> — o que falta é o resto do arquivo. Importe a mesma planilha de
+            novo: quem já entrou é reconhecido e não duplica.
+          </p>
+          <ul className="mt-2 space-y-1 text-sm">
+            {inacabadas.map((l) => (
+              <li key={l.id}>
+                <strong>{l.rotulo}</strong> · {l.total_importados.toLocaleString('pt-BR')} entraram ·{' '}
+                {new Date(l.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+              </li>
+            ))}
+          </ul>
+        </Aviso>
+      )}
+
       {/* 1. Arquivo */}
       <Cartao className="p-6">
         <h2 className="mb-1 font-semibold">1. O arquivo</h2>
         <p className="mb-4 text-sm text-suave">
-          CSV com uma linha de cabeçalho. No Excel ou no Google Planilhas:
-          <strong> Arquivo → Baixar → CSV</strong>.
+          CSV com uma linha de cabeçalho. No Excel: <strong>Arquivo → Salvar como → CSV UTF-8</strong>.
+          No Google Planilhas: <strong>Arquivo → Fazer download → CSV</strong>. Arquivo
+          <code className="mx-1 rounded bg-fundo px-1 py-0.5 text-xs">.xlsx</code> não serve — o
+          sistema avisa se você escolher um.
         </p>
         <input
           type="file"
@@ -284,6 +361,24 @@ export function Importador() {
               ['Inválidas', analise.invalidas, 'text-suave'],
             ]}
           />
+
+          {cidades && cidades.semCasar > 0 && (
+            <div className="mt-5 rounded-lg border border-alerta/40 bg-alerta/5 p-4">
+              <p className="mb-1 text-sm font-medium text-alerta">
+                {cidades.semCasar.toLocaleString('pt-BR')} linha(s) com cidade que não existe na
+                lista de Rondônia
+              </p>
+              <p className="text-xs leading-relaxed text-suave">
+                Essas pessoas entram normalmente, mas caem em &ldquo;(não informado)&rdquo; no
+                relatório por município — que é o que mostra onde a campanha está pegando. Se os
+                exemplos abaixo estiverem com os acentos quebrados, o arquivo foi salvo no
+                encoding errado: reexporte como <strong>CSV UTF-8</strong>.
+              </p>
+              <p className="mt-2 text-xs text-suave">
+                Exemplos: {cidades.exemplos.map((e) => `“${e}”`).join(' · ')}
+              </p>
+            </div>
+          )}
 
           {analise.invalidas > 0 && (
             <div className="mt-5 rounded-lg border border-borda bg-fundo p-4">

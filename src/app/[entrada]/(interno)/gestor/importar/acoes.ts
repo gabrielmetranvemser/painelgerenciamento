@@ -24,6 +24,12 @@ export type DadosLista = {
   entregueEm?: string | null;
   arquivoNome?: string | null;
   totalLinhas: number;
+  /**
+   * Já se sabe antes de gravar a primeira linha — sai da análise do arquivo.
+   * Gravar agora, e não no fim, é o que faz a lista contar a verdade mesmo se a
+   * aba fechar no meio.
+   */
+  totalInvalidos: number;
 };
 
 /**
@@ -44,6 +50,7 @@ export async function criarLista(dados: DadosLista): Promise<{ ok: true; id: str
       entregue_em: dados.entregueEm || null,
       arquivo_nome: dados.arquivoNome ?? null,
       total_linhas: dados.totalLinhas,
+      total_invalidos: dados.totalInvalidos,
       criado_por: gestorId,
     })
     .select('id')
@@ -138,27 +145,85 @@ export async function importarBloco(
   if (error) throw new Error(error.message);
 
   const importados = data?.length ?? 0;
-  return {
+  const totais = {
     importados,
     duplicados: paraInserir.length - importados,
     bloqueados: setBloqueados.size,
   };
+
+  // Soma AQUI, não no fim. Ver a migration 20260823340400: os totais da lista
+  // são a rastreabilidade da base, e uma aba fechada no meio deixava metade dos
+  // contatos na fila com a lista dizendo que importou zero.
+  await supabase.rpc('somar_totais_lista', {
+    p_lista_id: listaId,
+    p_importados: totais.importados,
+    p_duplicados: totais.duplicados,
+    p_bloqueados: totais.bloqueados,
+  });
+
+  return totais;
+}
+
+/**
+ * Quantos nomes de cidade da planilha NÃO casaram com a lista fechada de
+ * municípios.
+ *
+ * Existe como rede de segurança de encoding. Um CSV salvo pelo Excel em
+ * português vem em Windows-1252, e lido como UTF-8 "Ji-Paraná" vira
+ * "Ji-Paran?" — que não casa com município nenhum. O relatório por cidade, que
+ * é o que orienta onde a campanha põe o pé, cai inteiro em "(não informado)" e
+ * ninguém percebe, porque a importação termina dizendo que deu tudo certo.
+ *
+ * O leitor de arquivo já tenta corrigir o encoding sozinho. Isto é o que avisa
+ * quando ele não conseguiu.
+ */
+export async function conferirMunicipios(
+  nomes: string[],
+): Promise<{ semCasar: number; exemplos: string[] }> {
+  await exigirGestorOuFalhar();
+  const supabase = criarClienteAdmin();
+  const { data: municipios } = await supabase.from('municipios').select('id, nome');
+
+  const exemplos: string[] = [];
+  let semCasar = 0;
+
+  for (const nome of nomes) {
+    if (casarMunicipio(nome, municipios ?? []) !== null) continue;
+    semCasar++;
+    if (exemplos.length < 5 && !exemplos.includes(nome)) exemplos.push(nome);
+  }
+
+  return { semCasar, exemplos };
 }
 
 /** Fecha a lista com os totais, para o relatório e para a auditoria. */
-export async function finalizarLista(
-  listaId: string,
-  totais: { importados: number; duplicados: number; bloqueados: number; invalidos: number },
-) {
+/**
+ * Fecha a lista.
+ *
+ * Não grava mais totais: eles já foram somados bloco a bloco. O que esta função
+ * faz é carimbar que a importação chegou ao fim — é `concluida_em` nulo que
+ * denuncia, na próxima abertura da tela, uma importação que morreu no meio.
+ */
+export async function finalizarLista(listaId: string) {
   await exigirGestorOuFalhar();
   const supabase = criarClienteAdmin();
   await supabase
     .from('listas')
-    .update({
-      total_importados: totais.importados,
-      total_duplicados: totais.duplicados,
-      total_bloqueados: totais.bloqueados,
-      total_invalidos: totais.invalidos,
-    })
+    .update({ concluida_em: new Date().toISOString() })
     .eq('id', listaId);
+}
+
+/** Importações que começaram e não terminaram. A tela avisa o gestor. */
+export async function listasInacabadas(): Promise<
+  { id: string; rotulo: string; total_importados: number; criado_em: string }[]
+> {
+  await exigirGestorOuFalhar();
+  const supabase = criarClienteAdmin();
+  const { data } = await supabase
+    .from('listas')
+    .select('id, rotulo, total_importados, criado_em')
+    .is('concluida_em', null)
+    .order('criado_em', { ascending: false })
+    .limit(5);
+  return data ?? [];
 }

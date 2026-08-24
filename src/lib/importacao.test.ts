@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { analisarLinhas, casarMunicipio, emBlocos, sugerirMapa } from './importacao';
+import {
+  analisarLinhas, casarMunicipio, decodificarPlanilha, emBlocos, sugerirMapa,
+} from './importacao';
 
 const MAPA = { nome: 'Nome', telefone: 'Telefone', municipio: 'Cidade' };
 
@@ -195,5 +197,68 @@ describe('emBlocos', () => {
     expect(emBlocos([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
     expect(emBlocos([], 500)).toEqual([]);
     expect(emBlocos([1], 500)).toEqual([[1]]);
+  });
+});
+
+/**
+ * A leitura do arquivo.
+ *
+ * As duas armadilhas cobertas aqui são silenciosas: uma corrompe o relatório
+ * por município sem avisar, a outra manda o gestor procurar o problema no lugar
+ * errado. Ver `decodificarPlanilha`.
+ */
+describe('decodificarPlanilha', () => {
+  /** O que o Excel em português grava: um byte por acento, tabela 1252. */
+  function comoExcelPtBr(texto: string): ArrayBuffer {
+    const mapa: Record<string, number> = {
+      'á': 0xe1, 'â': 0xe2, 'ã': 0xe3, 'à': 0xe0, 'é': 0xe9, 'ê': 0xea,
+      'í': 0xed, 'ó': 0xf3, 'ô': 0xf4, 'õ': 0xf5, 'ú': 0xfa, 'ç': 0xe7,
+      'Á': 0xc1, 'É': 0xc9, 'Ã': 0xc3, 'Ç': 0xc7,
+    };
+    const bytes = [...texto].map((c) => mapa[c] ?? c.charCodeAt(0));
+    return new Uint8Array(bytes).buffer;
+  }
+
+  const utf8 = (t: string) => new TextEncoder().encode(t).buffer as ArrayBuffer;
+
+  it('lê UTF-8 sem mexer em nada', () => {
+    const r = decodificarPlanilha(utf8('Nome;Cidade\nMaria;Ji-Paraná\n'));
+    expect(r.ok && r.texto).toContain('Ji-Paraná');
+    expect(r.ok && r.latin).toBe(false);
+  });
+
+  it('salva o CSV que o Excel em português gera, em Windows-1252', () => {
+    // Sem o segundo decodificador, "Ji-Paraná" viraria "Ji-Paran\uFFFD" e a
+    // cidade não casaria com município nenhum.
+    const r = decodificarPlanilha(comoExcelPtBr('Nome;Cidade\nMaria;Ji-Paraná\n'));
+    expect(r.ok && r.texto).toContain('Ji-Paraná');
+    expect(r.ok && r.latin).toBe(true);
+    expect(r.ok && r.texto).not.toContain('\uFFFD');
+  });
+
+  it('acerta os municípios com apóstrofo, que são metade da lista de Rondônia', () => {
+    const r = decodificarPlanilha(comoExcelPtBr("Cidade\nEspigão d'Oeste\nAlvorada d'Oeste\n"));
+    expect(r.ok && r.texto).toContain("Espigão d'Oeste");
+  });
+
+  it('reconhece .xlsx pela assinatura de zip, sem depender da extensão', () => {
+    const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00]).buffer;
+    expect(decodificarPlanilha(zip)).toEqual({ ok: false, problema: 'planilha_binaria' });
+  });
+
+  it('tira o BOM, que grudaria no nome da primeira coluna', () => {
+    const r = decodificarPlanilha(utf8('\uFEFFTelefone;Nome\n69999990000;Maria\n'));
+    expect(r.ok && r.texto.startsWith('Telefone')).toBe(true);
+  });
+
+  it('arquivo vazio é recusado com motivo, não parseado', () => {
+    expect(decodificarPlanilha(utf8('   \n'))).toEqual({ ok: false, problema: 'vazio' });
+  });
+
+  it('o texto decodificado casa com a lista fechada de municípios', () => {
+    // O teste que fecha o ciclo: é este casamento que a corrupção quebrava.
+    const r = decodificarPlanilha(comoExcelPtBr('Ji-Paraná'));
+    const municipios = [{ id: 24, nome: 'Ji-Paraná' }];
+    expect(casarMunicipio(r.ok ? r.texto : '', municipios)).toBe(24);
   });
 });

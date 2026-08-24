@@ -2,6 +2,15 @@
 -- AUTOSSUFICIENTE: cria os próprios dados e dá ROLLBACK.
 begin;
 
+-- ⚠️ A janela de horário abre para o teste inteiro (revertida pelo rollback).
+--
+-- As travas de verdade recusam envio fora do horário de operação, então esta
+-- suíte só passava entre 9h e 20h de Porto Velho: rodá-la às 21h devolvia uma
+-- parede de ❌ que não eram falhas. Um teste que só roda no horário comercial é
+-- um teste que ninguém roda antes de subir código à noite — que é exatamente
+-- quando se sobe código.
+update public.config set hora_inicio = 0, hora_fim = 24 where id = 1;
+
 do $$
 declare
   v_uid   uuid := gen_random_uuid();
@@ -58,6 +67,15 @@ begin
   end if;
 
   -- ── 2. Corrigir um "Pediu saída" clicado por engano ───────────────────────
+  -- ⚠️ O comportamento MUDOU na migration 20260823340300, e a mudança é a
+  -- correção de um achado da auditoria: até então o próprio atendente apagava o
+  -- bloqueio, e o gestor só era avisado depois do fato.
+  --
+  -- O caso real continua tendo saída — a tecla "2" marca "Pediu saída" e é fácil
+  -- apertar sem querer —, mas ela passa pelo gestor: o atendente é recusado, um
+  -- alerta com o contato em anexo vai para a tela de Suporte, e é lá que o
+  -- bloqueio é desfeito. Mandar mensagem para quem pediu saída é multa POR
+  -- MENSAGEM; a decisão não pode ficar com quem tem pressa.
   perform public.registrar_resultado(v_c, 'pediu_saida');
   if not exists (select 1 from public.bloqueios b
                   join public.contatos c on c.telefone_hmac = b.telefone_hmac where c.id = v_c) then
@@ -65,20 +83,26 @@ begin
   end if;
 
   v_r := public.registrar_resultado(v_c, 'autorizou');
-  if (v_r->>'ok')::boolean
-     and not exists (select 1 from public.bloqueios b
-                      join public.contatos c on c.telefone_hmac = b.telefone_hmac where c.id = v_c)
-     and exists (select 1 from public.alertas where tipo = 'saida_corrigida') then
-    raise notice '  ✅ 2. erro de clique em "Pediu saída" é reversível, com alerta ao gestor';
-  else raise warning '  ❌ 2. não reverteu o bloqueio: %', v_r; v_falhas := v_falhas + 1;
+  if v_r->>'motivo' = 'saida_so_o_gestor_desfaz'
+     and exists (select 1 from public.bloqueios b
+                  join public.contatos c on c.telefone_hmac = b.telefone_hmac where c.id = v_c)
+     and exists (select 1 from public.alertas
+                  where tipo = 'saida_para_revisar' and contato_id = v_c) then
+    raise notice '  ✅ 2. o atendente não desfaz o bloqueio; o gestor recebe o pedido';
+  else raise warning '  ❌ 2. o atendente desfez o bloqueio sozinho: %', v_r; v_falhas := v_falhas + 1;
   end if;
 
   -- ── 3. Descadastro feito PELA PESSOA não se desfaz ────────────────────────
   -- Um é engano do atendente; o outro é a vontade de quem recebeu a mensagem.
+  --
+  -- O bloqueio do teste 2 continua de pé (é justamente o que ele passou a
+  -- provar), então aqui só se troca a ORIGEM — inserir de novo bateria na chave
+  -- primária de `bloqueios`.
   update public.contatos set status = 'pediu_saida' where id = v_c;
-  insert into public.bloqueios (telefone_hmac, motivo, origem, contato_id, apagar_em)
-  select telefone_hmac, 'clicou em não quero receber', 'landing', v_c, now() + interval '48 hours'
-    from public.contatos where id = v_c;
+  update public.bloqueios b
+     set origem = 'landing', motivo = 'clicou em não quero receber'
+    from public.contatos c
+   where c.id = v_c and b.telefone_hmac = c.telefone_hmac;
 
   v_r := public.registrar_resultado(v_c, 'autorizou');
   if v_r->>'motivo' = 'saida_pedida_pela_pessoa'
@@ -87,7 +111,9 @@ begin
     raise notice '  ✅ 3. descadastro feito pela própria pessoa NÃO é reversível pelo atendente';
   else raise warning '  ❌ 3. atendente desfez o descadastro da pessoa: %', v_r; v_falhas := v_falhas + 1;
   end if;
-  delete from public.bloqueios where contato_id = v_c;
+  delete from public.bloqueios b using public.contatos c
+   where c.id = v_c and b.telefone_hmac = c.telefone_hmac;
+  delete from public.alertas where contato_id = v_c;
   update public.contatos set status = 'autorizou' where id = v_c;
 
   -- ── 4. Pedido de kit ──────────────────────────────────────────────────────

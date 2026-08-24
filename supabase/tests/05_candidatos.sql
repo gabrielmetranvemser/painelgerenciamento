@@ -2,6 +2,15 @@
 -- AUTOSSUFICIENTE: cria os próprios dados e dá ROLLBACK.
 begin;
 
+-- ⚠️ A janela de horário abre para o teste inteiro (revertida pelo rollback).
+--
+-- As travas de verdade recusam envio fora do horário de operação, então esta
+-- suíte só passava entre 9h e 20h de Porto Velho: rodá-la às 21h devolvia uma
+-- parede de ❌ que não eram falhas. Um teste que só roda no horário comercial é
+-- um teste que ninguém roda antes de subir código à noite — que é exatamente
+-- quando se sobe código.
+update public.config set hora_inicio = 0, hora_fim = 24 where id = 1;
+
 do $$
 declare
   v_uid  uuid := gen_random_uuid();
