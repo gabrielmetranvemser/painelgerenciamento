@@ -1,0 +1,21 @@
+-- =============================================================================
+-- Nova origem: a pessoa chamou o atendente primeiro
+-- =============================================================================
+-- Todo dia alguém manda mensagem para o número do atendente por conta própria —
+-- viu o santinho, um vizinho passou o número, achou o perfil. Esse contato não
+-- existia no sistema: ou o atendente o deixava fora da conta (e o trabalho não
+-- aparecia em lugar nenhum), ou o cadastrava como 'site', o que é mentira.
+--
+-- E é mentira que a própria pessoa lê: a frase de {{origem}} na Permissão sai do
+-- valor desta coluna. Com 'site' a mensagem diria "você deixou seu contato no
+-- site pedindo o material" para quem nunca abriu o site. A origem é afirmação de
+-- fato sobre a procedência do dado — ver 20260823250300.
+--
+-- 'chamou' é QUENTE: não é 'lista_fria', então a fila já o coloca à frente sem
+-- precisar de mudança nenhuma em `pegar_proximo_contato` nem em `fila_status`.
+--
+-- ⚠️ Esta migration não faz mais nada de propósito. O Postgres não deixa USAR um
+-- valor de enum na mesma transação em que ele é criado, e o `db push` roda um
+-- arquivo por transação. Quem usa 'chamou' é a migration seguinte.
+
+alter type public.origem_contato add value if not exists 'chamou';

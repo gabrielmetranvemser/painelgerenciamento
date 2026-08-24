@@ -2,11 +2,12 @@
 
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { enderecoBase } from '@/lib/endereco';
+import { hashTelefone } from '@/lib/hmac';
 import { montarTexto, primeiroNomeDe } from '@/lib/mensagem-etapas';
-import { urlWhatsApp } from '@/lib/telefone';
+import { normalizarTelefone, urlWhatsApp, type MotivoInvalido } from '@/lib/telefone';
 import type {
   CargoEleitoral, EntregaDoContato, EtapaMsg, FilaStatus, OrigemContato,
-  RespostaAbertura, RespostaFila, RespostaResultado, Resultado,
+  RespostaAbertura, RespostaAdicionarContato, RespostaFila, RespostaResultado, Resultado,
 } from '@/lib/tipos-banco';
 
 export type MensagemPronta = {
@@ -239,6 +240,60 @@ export async function sinalizarChip(chipId: string, detalhe?: string) {
   });
   if (error) throw new Error(error.message);
   return data as { ok: boolean; motivo?: string };
+}
+
+/**
+ * Explicação de telefone recusado, na voz de quem vai ler: o atendente com a
+ * conversa aberta do lado, não o gestor conferindo planilha.
+ */
+const EXPLICACAO_TELEFONE: Record<MotivoInvalido, string> = {
+  fixo: 'Esse é um telefone fixo — não tem WhatsApp.',
+  ddd_invalido: 'Esse DDD não existe. Confira o número.',
+  curto: 'Faltam dígitos. Copie o número com DDD.',
+  longo: 'Número com dígitos demais. Confira.',
+  formato: 'Isso não parece um celular brasileiro.',
+  vazio: 'Cole o número com DDD.',
+};
+
+/**
+ * Cadastra alguém que chamou o atendente primeiro.
+ *
+ * O HMAC é calculado AQUI, no servidor, porque a chave secreta não está no
+ * Postgres nem pode chegar ao navegador — o mesmo caminho da importação. Todo o
+ * resto (bloqueio, dedup, quem fica com quem) é decidido dentro da RPC: o
+ * frontend não tem escrita em `contatos` e não é ele que decide nada disso.
+ */
+export async function adicionarContato(dados: {
+  nome: string;
+  telefone: string;
+  chipId: string;
+  municipioId?: number | null;
+  candidatoId?: string | null;
+}): Promise<RespostaAdicionarContato> {
+  const telefone = normalizarTelefone(dados.telefone);
+  if (!telefone.valido) {
+    return {
+      ok: false,
+      motivo: 'telefone_invalido',
+      detalhe: EXPLICACAO_TELEFONE[telefone.motivo],
+    };
+  }
+
+  const { hash, versao } = hashTelefone(telefone.chaveDedup);
+  const supabase = await criarClienteServidor();
+
+  const { data, error } = await supabase.rpc('adicionar_contato', {
+    p_nome: dados.nome.trim() || null,
+    p_telefone_e164: telefone.e164,
+    p_chave_dedup: telefone.chaveDedup,
+    p_telefone_hmac: hash,
+    p_hmac_versao: versao,
+    p_chip_id: dados.chipId,
+    p_municipio_id: dados.municipioId ?? null,
+    p_candidato_id: dados.candidatoId ?? null,
+  });
+  if (error) throw new Error(error.message);
+  return data as RespostaAdicionarContato;
 }
 
 /** Grava o município que a pessoa informou na conversa. */

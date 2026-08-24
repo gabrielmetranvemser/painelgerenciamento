@@ -53,6 +53,9 @@ echo
 "${PSQL[@]}" -f supabase/tests/11_suporte.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
 
 echo
+"${PSQL[@]}" -f supabase/tests/12_adicionar_contato.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
+
+echo
 echo "── Concorrência da fila ─────────────────────────────────────────────────"
 "${PSQL[@]}" -f supabase/tests/99_limpeza.sql >/dev/null 2>&1
 if "${PSQL[@]}" -f supabase/tests/01_fixtures.sql >/dev/null 2>&1; then
