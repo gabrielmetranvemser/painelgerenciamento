@@ -55,6 +55,17 @@ export function FormularioCandidato({
     <form action={acao} className="space-y-4">
       <input type="hidden" name="slug" value={slug} />
 
+      {/* Armadilha para robô. Não é `type="hidden"` de propósito: script bom
+          ignora campo escondido por tipo, mas preenche campo de texto comum.
+          `aria-hidden` + `tabIndex={-1}` tiram do leitor de tela e do Tab, então
+          nenhuma pessoa — nem quem navega por teclado — chega até ele. */}
+      <div aria-hidden className="absolute left-[-9999px] top-0 h-0 w-0 overflow-hidden">
+        <label>
+          Apelido
+          <input type="text" name="apelido" tabIndex={-1} autoComplete="off" />
+        </label>
+      </div>
+
       <Campo rotulo="Seu nome" name="nome" required autoComplete="name" placeholder="Nome e sobrenome" />
       <Campo
         rotulo="Seu WhatsApp"

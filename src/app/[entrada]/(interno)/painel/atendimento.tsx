@@ -1,13 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle, Check, CircleSlash, Clock, Flame, Loader2, MessageSquare, PackageOpen,
   Send, Siren, Snowflake, SkipForward, Star,
 } from 'lucide-react';
 import { Aviso, Avatar, Botao, Cartao, EtiquetaOrigem, Pilula, Selecao, Vidro, cx } from '@/components/ui';
-import { CHAVE_CHIP, useChipSalvo } from '@/components/chip-salvo';
+import { guardarChip, useChipSalvo } from '@/components/chip-salvo';
 import { ComoAgir } from '@/components/como-agir';
 import { formatarExibicao } from '@/lib/telefone';
 import {
@@ -52,13 +53,25 @@ const ROTULO_RESULTADO: Record<Resultado, string> = {
 /** Nome da janela do WhatsApp: reaproveita a mesma aba em vez de abrir 30. */
 const JANELA_WA = 'whatsapp-atendimento';
 
+/**
+ * As etapas em que o intervalo vale — as mesmas de `etapa_de_abordagem()` no
+ * banco. As outras são resposta a quem acabou de escrever, e fazer o atendente
+ * esperar para responder é o que faz ELE parecer robô.
+ *
+ * Isto aqui é espelho da trava, não a trava: quem decide é o servidor.
+ */
+const ETAPAS_DE_ABORDAGEM: EtapaMsg[] = ['permissao', 'material', 'convite_grupo'];
+
 export function Atendimento({
-  primeiroNome, chips, municipios, filaInicial,
+  primeiroNome, chips, municipios, filaInicial, aguardandoInicial, rotaMeusContatos,
 }: {
   primeiroNome: string;
   chips: Chip[];
   municipios: Municipio[];
   filaInicial: FilaStatus | null;
+  /** Conversas abertas esperando resposta, no carregamento da página. */
+  aguardandoInicial: number;
+  rotaMeusContatos: string;
 }) {
   const [chipEscolhido, setChipEscolhido] = useState<string | null>(null);
   const chipSalvo = useChipSalvo();
@@ -70,6 +83,8 @@ export function Atendimento({
   const [espera, setEspera] = useState(filaInicial?.segundos_espera ?? 0);
   const [municipioId, setMunicipioId] = useState<number | ''>('');
   const [encaminhamento, setEncaminhamento] = useState('');
+  const [confirmandoSaida, setConfirmandoSaida] = useState(false);
+  const [aguardando, setAguardando] = useState(aguardandoInicial);
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
@@ -90,7 +105,7 @@ export function Atendimento({
 
   function trocarChip(id: string) {
     setChipEscolhido(id);
-    window.localStorage.setItem(CHAVE_CHIP, id);
+    guardarChip(id);
   }
 
   const atualizarFila = useCallback(async () => {
@@ -152,21 +167,42 @@ export function Atendimento({
     });
   }
 
+  /**
+   * Abre a conversa — só DEPOIS de o servidor autorizar.
+   *
+   * ⚠️ A ordem aqui é a correção de um defeito real: antes, `window.open` com a
+   * URL do WhatsApp vinha primeiro e o `await` do servidor vinha depois. Quando
+   * a resposta era "não" — pessoa bloqueada, fora do horário, dia da eleição —
+   * a janela já estava aberta com o texto pronto, e a única coisa entre aquilo
+   * e um envio indevido era o atendente ler o aviso vermelho na aba de trás.
+   *
+   * `window.open` continua síncrono no clique, senão o navegador trata como
+   * pop-up e bloqueia. O truque é abrir com URL VAZIA: uma janela nomeada que
+   * já exista não é navegada nesse caso, então a aba de WhatsApp em uso não é
+   * atropelada, e é só depois do "ok" que ela recebe o endereço.
+   */
   function abrirConversa() {
     if (!contato || !mensagem) return;
-    // window.open precisa ser síncrono no clique, senão o navegador bloqueia.
-    window.open(mensagem.urlWhatsApp, JANELA_WA);
+    const janela = window.open('', JANELA_WA);
     setErro(null);
     const enviada = mensagem;
     iniciar(async () => {
       const r = await registrarAbertura(
-        contato.id, chipId, enviada.etapa, enviada.texto, enviada.variacaoId,
+        contato.id, chipId, enviada.etapa, enviada.variacaoId,
         enviada.candidato?.id ?? null,
       );
       if (!r.ok) {
-        setErro(`O sistema não registrou o envio: ${r.motivo}. Não continue — fale com o gestor.`);
+        // Não navega: o texto não chega ao WhatsApp.
+        setErro(
+          MOTIVO_ENVIO[r.motivo] ??
+          `O sistema não registrou o envio: ${r.motivo}. Não envie nada — fale com o gestor.`,
+        );
+        // Teto e intervalo mudam com o tempo: a tela precisa mostrar a espera.
+        await atualizarFila();
         return;
       }
+      if (janela && !janela.closed) janela.location.href = enviada.urlWhatsApp;
+      else window.open(enviada.urlWhatsApp, JANELA_WA);
       setFila(r.fila);
       setEspera(r.fila.segundos_espera);
 
@@ -186,15 +222,38 @@ export function Atendimento({
     });
   }
 
+  /**
+   * Marca o resultado.
+   *
+   * "Pediu saída" pede confirmação, e só ele. Os outros quatro se corrigem à
+   * vontade no perfil do contato; este cria bloqueio permanente e agenda o
+   * apagamento dos dados, e desde a migration 340300 desfazê-lo passou a
+   * depender do gestor. Com atalho de teclado no meio de 30 conversas por dia,
+   * um "2" apertado sem querer custava caro demais para ser um clique só.
+   */
   function marcar(resultado: Resultado) {
     if (!contato || fase !== 'aberta') return;
     if (resultado === 'encaminhado' && !encaminhamento.trim()) {
       setErro('Escreva em uma linha o que a pessoa pediu, para a equipe saber o que encaminhar.');
       return;
     }
+    if (resultado === 'pediu_saida' && !confirmandoSaida) {
+      setConfirmandoSaida(true);
+      setErro(null);
+      return;
+    }
+    setConfirmandoSaida(false);
     setErro(null);
     iniciar(async () => {
-      const r = await registrarResultado(contato.id, resultado, null, encaminhamento);
+      // O campo livre só acompanha "Encaminhar". Antes ia em todo resultado:
+      // quem digitasse uma anotação e depois clicasse em "Pediu saída" gravava
+      // texto livre na ficha de alguém que acabou de pedir para sair — e o campo
+      // livre é o único lugar do sistema onde caberia, por engano, uma anotação
+      // que não pode existir.
+      const r = await registrarResultado(
+        contato.id, resultado, municipioId || null,
+        resultado === 'encaminhado' ? encaminhamento : null,
+      );
       if (!r.ok) { setErro(`Não consegui gravar o resultado: ${r.motivo}`); return; }
 
       // Autorizou: entra na entrega, uma mensagem por candidato declarado.
@@ -224,7 +283,7 @@ export function Atendimento({
     setErro(null); setMensagem(null);
     iniciar(async () => {
       const m = await prepararMensagem(contato.id, chipId, 'material', candidatoId);
-      if (!m.ok) { setErro(MOTIVO_ENTREGA[m.motivo] ?? `Não consegui montar a mensagem (${m.motivo}).`); return; }
+      if (!m.ok) { setErro(MOTIVO_ENVIO[m.motivo] ?? `Não consegui montar a mensagem (${m.motivo}).`); return; }
       setMensagem(m);
       setTimeout(() => botaoAbrir.current?.focus(), 60);
     });
@@ -232,6 +291,7 @@ export function Atendimento({
 
   function limparEBuscar() {
     setContato(null); setMensagem(null); setEntregas([]); setFase('ocioso');
+    setConfirmandoSaida(false);
     buscarProximo();
   }
 
@@ -247,6 +307,7 @@ export function Atendimento({
     iniciar(async () => {
       const r = await pularContato(id, chipId);
       if (!r.ok) { setErro(`Não consegui soltar este contato: ${r.motivo}`); return; }
+      if (r.destino === 'aguardando_resposta') setAguardando((n) => n + 1);
       setAviso(r.destino === 'aguardando_resposta'
         ? 'Você já tinha falado com essa pessoa, então ela ficou em Meus contatos aguardando resposta.'
         : 'Contato devolvido para a fila. Ele não volta para você nas próximas 2 horas.');
@@ -314,6 +375,7 @@ export function Atendimento({
       <div className="min-w-0 space-y-5">
         <Barra
           primeiroNome={primeiroNome} fila={fila} chips={vivos} chipId={chipId}
+          aguardando={aguardando} rotaMeusContatos={rotaMeusContatos}
           aoTrocarChip={trocarChip}
           aoSinalizar={() => iniciar(async () => { await sinalizarChip(chipId); await atualizarFila(); })}
         />
@@ -357,7 +419,8 @@ export function Atendimento({
         {contato && fase !== 'ocioso' && (
           <CartaoAtendimento
             contato={contato} mensagem={mensagem} fase={fase} ocupado={ocupado}
-            entregas={entregas} refBotao={botaoAbrir}
+            entregas={entregas} refBotao={botaoAbrir} espera={espera}
+            confirmandoSaida={confirmandoSaida}
             municipios={municipios} municipioId={municipioId}
             encaminhamento={encaminhamento}
             aoMudarMunicipio={(id) => {
@@ -379,8 +442,14 @@ export function Atendimento({
   );
 }
 
-/** Motivos que o servidor devolve na entrega, em português de gente. */
-const MOTIVO_ENTREGA: Record<string, string> = {
+/**
+ * Motivos que o servidor devolve, em português de gente.
+ *
+ * Serve tanto para a montagem da mensagem quanto para a hora de abrir a
+ * conversa: as duas funções do banco recusam pelos mesmos motivos, e ter dois
+ * dicionários faria uma delas cair no texto cru mais cedo ou mais tarde.
+ */
+const MOTIVO_ENVIO: Record<string, string> = {
   candidato_nao_declarado:
     'Esta pessoa não foi avisada deste candidato na primeira mensagem, então não dá para mandar o material dele. ' +
     'Ela só autorizou o que estava escrito lá.',
@@ -392,14 +461,23 @@ const MOTIVO_ENTREGA: Record<string, string> = {
   contato_bloqueado: 'Esta pessoa pediu para sair. Não dá para mandar mais nada.',
   modelo_ausente: 'Não existe modelo de material cadastrado. Fale com o gestor.',
   sem_variacao: 'O modelo de material está sem texto. Fale com o gestor.',
+  dia_bloqueado: 'Hoje é dia bloqueado — não se fala com ninguém. Nada foi enviado.',
+  fora_de_horario: 'O horário de atendimento acabou. Nada foi enviado; continue amanhã.',
+  chip_indisponivel: 'Seu número está pausado ou foi desativado. Nada foi enviado — fale com o gestor.',
+  teto_atingido: 'Você chegou ao limite de conversas deste número hoje. Nada foi enviado.',
+  intervalo: 'Ainda falta o intervalo entre uma abordagem e outra. Nada foi enviado — espere a contagem.',
+  dados_apagados: 'Os dados desta pessoa já foram apagados. Não há para quem mandar.',
+  contato_nao_e_seu: 'Este contato não está mais com você. Busque o próximo.',
+  chip_nao_e_seu: 'Esse número não está no seu cadastro. Fale com o gestor.',
 };
 
 /* ── Barra de contadores ─────────────────────────────────────────────────── */
 
 function Barra({
-  primeiroNome, fila, chips, chipId, aoTrocarChip, aoSinalizar,
+  primeiroNome, fila, chips, chipId, aguardando, rotaMeusContatos, aoTrocarChip, aoSinalizar,
 }: {
   primeiroNome: string; fila: FilaStatus | null; chips: Chip[]; chipId: string;
+  aguardando: number; rotaMeusContatos: string;
   aoTrocarChip: (id: string) => void; aoSinalizar: () => void;
 }) {
   const feito = fila ? fila.enviados_hoje : 0;
@@ -426,6 +504,17 @@ function Barra({
           <Contador rotulo="Frios" valor={fila?.frios_na_fila ?? 0} cor="text-frio" icone={<Snowflake size={12} />} />
           <Contador rotulo="Hoje" valor={feito} />
         </div>
+
+        {aguardando > 0 && (
+          <Link href={rotaMeusContatos}
+                className="flex w-full items-center gap-2 rounded-2xl border border-borda bg-superficie-alta px-3.5 py-2.5 text-sm transition-colors hover:border-borda-forte sm:w-auto">
+            <Clock size={14} className="shrink-0 text-suave" />
+            <span className="tabular font-semibold">{aguardando}</span>
+            <span className="text-suave">
+              {aguardando === 1 ? 'esperando resposta' : 'esperando resposta'}
+            </span>
+          </Link>
+        )}
 
         <div className="flex w-full items-center gap-2 border-t border-borda pt-4 sm:w-auto sm:border-0 sm:pt-0">
         {chips.length > 1 && (
@@ -525,11 +614,15 @@ function Travado({ fila, espera }: { fila: FilaStatus; espera: number }) {
 
 function CartaoAtendimento({
   contato, mensagem, fase, ocupado, entregas, refBotao, municipios, municipioId, encaminhamento,
-  aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoMarcar, aoProximo, aoPular,
-  aoPrepararMaterial,
+  espera, confirmandoSaida, aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoMarcar,
+  aoProximo, aoPular, aoPrepararMaterial,
 }: {
   contato: ContatoDaFila; mensagem: MensagemPronta | null; fase: Fase; ocupado: boolean;
   entregas: EntregaDoContato[];
+  /** Segundos que faltam do intervalo. Trava os botões de abordagem. */
+  espera: number;
+  /** "Pediu saída" armado, esperando o segundo clique. */
+  confirmandoSaida: boolean;
   refBotao: React.RefObject<HTMLButtonElement | null>;
   municipios: Municipio[]; municipioId: number | ''; encaminhamento: string;
   aoMudarMunicipio: (id: number | '') => void;
@@ -541,6 +634,13 @@ function CartaoAtendimento({
   const titulo = mensagem?.candidato
     ? `Material de ${mensagem.candidato.nome}`
     : (mensagem ? TITULO_ETAPA[mensagem.etapa] ?? 'Mensagem' : '');
+
+  // O servidor recusa abordagem dentro do intervalo. A tela desabilita antes,
+  // para o atendente não clicar num botão que só devolve erro — e para a
+  // rajada de material (um por candidato) sair espaçada, que é a razão de o
+  // intervalo existir.
+  const noIntervalo = espera > 0;
+  const travadoPorIntervalo = noIntervalo && !!mensagem && ETAPAS_DE_ABORDAGEM.includes(mensagem.etapa);
 
   return (
     <Cartao className="overflow-hidden" elevado>
@@ -557,7 +657,8 @@ function CartaoAtendimento({
       </header>
 
       {fase === 'entrega' && (
-        <Entrega entregas={entregas} ocupado={ocupado} escolhido={mensagem?.candidato?.id ?? null}
+        <Entrega entregas={entregas} ocupado={ocupado} espera={espera}
+                 escolhido={mensagem?.candidato?.id ?? null}
                  aoPreparar={aoPrepararMaterial} />
       )}
 
@@ -577,32 +678,63 @@ function CartaoAtendimento({
           </div>
 
           <div className="border-t border-borda px-6 py-5">
-            <Botao ref={refBotao} tamanho="g" className="w-full" onClick={aoAbrir} disabled={ocupado}>
+            <Botao ref={refBotao} tamanho="g" className="w-full" onClick={aoAbrir}
+                   disabled={ocupado || travadoPorIntervalo}>
               {ocupado
                 ? <><Loader2 size={17} className="animate-spin" /> Registrando…</>
-                : <><Send size={17} /> Abrir conversa no WhatsApp</>}
+                : travadoPorIntervalo
+                  ? <><Clock size={17} /> Aguarde {espera}s para abrir</>
+                  : <><Send size={17} /> Abrir conversa no WhatsApp</>}
             </Botao>
+            {travadoPorIntervalo && (
+              <p className="mt-2 text-center text-xs leading-relaxed text-suave">
+                O intervalo entre uma abordagem e outra vale também para o material. Emendar
+                mensagens seguidas do mesmo número é o padrão que o WhatsApp derruba.
+              </p>
+            )}
           </div>
         </>
       )}
 
       {fase === 'aberta' && (
-        <div className="border-t border-borda px-6 py-5">
-          <p className="mb-3.5 text-sm font-semibold">Depois de conversar, marque o resultado:</p>
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-            {RESULTADOS.map((r, i) => (
-              <Botao key={r} variante={r === 'pediu_saida' ? 'perigo' : 'neutro'}
-                     onClick={() => aoMarcar(r)} disabled={ocupado}
-                     className="justify-between !rounded-2xl py-3">
-                <span>{ROTULO_RESULTADO[r]}</span>
-                <kbd className="rounded-md border border-borda bg-fundo px-1.5 py-0.5 font-sans text-[10px] text-suave">
-                  {i + 1}
-                </kbd>
-              </Botao>
-            ))}
+        <div className="space-y-4 border-t border-borda px-6 py-5">
+          {/* A cidade fica AQUI, e não só na entrega. Ela costuma aparecer no
+              meio da conversa ("sou de Ji-Paraná"), muito antes de se saber o
+              desfecho — e antes ficava perdida sempre que a pessoa não
+              autorizava, que é a maioria das conversas. */}
+          <Selecao rotulo="Se ela disse de onde é, marque aqui" value={municipioId}
+                   onChange={(e) => aoMudarMunicipio(e.target.value ? Number(e.target.value) : '')}>
+            <option value="">Não informou</option>
+            {municipios.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
+          </Selecao>
+
+          <div>
+            <p className="mb-3.5 text-sm font-semibold">Depois de conversar, marque o resultado:</p>
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+              {RESULTADOS.map((r, i) => {
+                const armado = r === 'pediu_saida' && confirmandoSaida;
+                return (
+                  <Botao key={r} variante={r === 'pediu_saida' ? 'perigo' : 'neutro'}
+                         onClick={() => aoMarcar(r)} disabled={ocupado}
+                         className="justify-between !rounded-2xl py-3">
+                    <span>{armado ? 'Confirmar saída' : ROTULO_RESULTADO[r]}</span>
+                    <kbd className="rounded-md border border-borda bg-fundo px-1.5 py-0.5 font-sans text-[10px] text-suave">
+                      {i + 1}
+                    </kbd>
+                  </Botao>
+                );
+              })}
+            </div>
+
+            {confirmandoSaida && (
+              <p className="mt-2.5 text-xs leading-relaxed text-perigo">
+                Clique de novo para confirmar. &ldquo;Pediu saída&rdquo; bloqueia o número para
+                sempre e apaga os dados em 48h — e desfazer depois depende do gestor.
+              </p>
+            )}
           </div>
 
-          <label className="mt-4 block">
+          <label className="block">
             <span className="text-xs leading-relaxed text-suave">
               Se for encaminhar, escreva em uma linha o que a pessoa pediu.
               Não escreva em quem ela vota — isso não pode ser registrado.
@@ -613,6 +745,25 @@ function CartaoAtendimento({
               className="mt-2 w-full rounded-2xl border border-borda bg-superficie-alta px-4 py-2.5 text-sm placeholder:text-tenue"
             />
           </label>
+
+          {/* ⚠️ O desfecho mais COMUM de uma abordagem não é nenhum dos cinco
+              botões acima: é a pessoa não responder na hora. Esse caminho existia
+              só como um link de 12px no rodapé do cartão, ao lado de cinco botões
+              grandes — então o atendente com pressa marcava um resultado
+              qualquer para poder seguir, e o relatório passava a medir uma
+              conversa que não aconteceu. */}
+          <div className="border-t border-borda pt-4">
+            <Botao variante="neutro" tamanho="g" className="w-full" onClick={aoPular}
+                   disabled={ocupado}>
+              {ocupado
+                ? <><Loader2 size={16} className="animate-spin" /> Soltando…</>
+                : <><Clock size={16} /> Ainda não respondeu — buscar próximo</>}
+            </Botao>
+            <p className="mt-2 text-center text-xs leading-relaxed text-suave">
+              A conversa fica aberta em <strong>Meus contatos</strong>. Quando ela responder, você
+              marca o resultado por lá.
+            </p>
+          </div>
         </div>
       )}
 
@@ -633,10 +784,11 @@ function CartaoAtendimento({
         </div>
       )}
 
-      {/* Sair deste contato sem encerrar. A fila devolve sempre quem está na
-          sua mão, então sem esta saída quem abriu um contato e não vai falar
-          com ele agora pede o próximo e recebe o mesmo, indefinidamente. */}
-      {fase !== 'entrega' && fase !== 'seguimento' && (
+      {/* Antes de abrir a conversa, soltar o contato o devolve para a FILA —
+          outra pessoa pode pegar. Depois de aberta é outra coisa, e por isso o
+          botão grande lá em cima: ali a conversa já existe e ninguém mais pode
+          reabordar quem já foi abordado. */}
+      {fase === 'permissao' && (
         <div className="border-t border-borda px-6 py-4 text-center">
           <button type="button" onClick={aoPular} disabled={ocupado}
                   className="inline-flex items-center gap-1.5 text-xs text-suave transition-colors hover:text-texto disabled:opacity-45">
@@ -658,9 +810,9 @@ function CartaoAtendimento({
  * aparece, porque ela nunca foi avisada dele.
  */
 function Entrega({
-  entregas, ocupado, escolhido, aoPreparar,
+  entregas, ocupado, espera, escolhido, aoPreparar,
 }: {
-  entregas: EntregaDoContato[]; ocupado: boolean; escolhido: string | null;
+  entregas: EntregaDoContato[]; ocupado: boolean; espera: number; escolhido: string | null;
   aoPreparar: (candidatoId: string) => void;
 }) {
   if (entregas.length === 0) {
@@ -685,14 +837,16 @@ function Entrega({
       <p className="mb-4 text-xs leading-relaxed text-suave">
         {faltam === 0
           ? 'Tudo entregue. Pode seguir para o próximo contato.'
-          : 'Mande um de cada vez e espere a resposta. Emendar vários materiais seguidos é o que derruba número.'}
+          : espera > 0
+            ? `Um de cada vez: o próximo material libera em ${espera}s. Emendar vários seguidos é o que derruba número.`
+            : 'Mande um de cada vez e espere a resposta. Emendar vários materiais seguidos é o que derruba número.'}
       </p>
 
       <div className="space-y-2">
         {entregas.map((c) => {
           const enviado = c.material_enviado_em !== null;
           const semPeca = c.materiais === 0;
-          const bloqueado = ocupado || semPeca || !c.ativo;
+          const bloqueado = ocupado || semPeca || !c.ativo || espera > 0;
           return (
             <div key={c.candidato_id}
                  className={cx(
@@ -722,7 +876,9 @@ function Entrega({
 
               <Botao variante={enviado ? 'neutro' : 'principal'} tamanho="p"
                      disabled={bloqueado} onClick={() => aoPreparar(c.candidato_id)}>
-                {enviado ? 'Mandar de novo' : 'Preparar material'}
+                {espera > 0
+                  ? `aguarde ${espera}s`
+                  : enviado ? 'Mandar de novo' : 'Preparar material'}
               </Botao>
             </div>
           );

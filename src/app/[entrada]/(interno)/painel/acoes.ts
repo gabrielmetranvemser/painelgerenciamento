@@ -1,5 +1,6 @@
 'use server';
 
+import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { enderecoBase } from '@/lib/endereco';
 import { hashTelefone } from '@/lib/hmac';
@@ -126,6 +127,19 @@ export async function prepararMensagem(
     timezone: r.timezone,
   });
 
+  // ⚠️ O texto é gravado AQUI, no servidor, no mesmo instante em que é montado
+  // — e é este mesmo texto que vai para a tela e para a URL do WhatsApp.
+  //
+  // Antes ele viajava até o navegador e voltava como parâmetro de
+  // `registrarAbertura`, o que punha a prova de auditoria na mão de quem tinha
+  // interesse em falsificá-la. Ver a migration 20260823350100.
+  await supabase.rpc('gravar_texto_preparado', {
+    p_contato_id: contatoId,
+    p_etapa: etapa,
+    p_candidato_id: candidatoId ?? null,
+    p_texto: texto,
+  });
+
   return {
     ok: true,
     etapa,
@@ -172,12 +186,18 @@ export async function carregarEntregas(contatoId: string): Promise<EntregaDoCont
   return (data ?? []) as EntregaDoContato[];
 }
 
-/** Marca que a conversa foi aberta. Idempotente: duplo clique não conta 2x. */
+/**
+ * Marca que a conversa foi aberta. Idempotente: duplo clique não conta 2x.
+ *
+ * ⚠️ NÃO recebe o texto. Ele já está gravado desde `prepararMensagem`, escrito
+ * pelo servidor — se esta função voltasse a aceitá-lo, o navegador voltaria a
+ * poder registrar uma coisa e mandar outra. `p_texto` vai nulo de propósito: o
+ * `coalesce` do banco preserva o que foi preparado.
+ */
 export async function registrarAbertura(
   contatoId: string,
   chipId: string,
   etapa: EtapaMsg,
-  texto: string,
   variacaoId: string,
   candidatoId?: string | null,
 ): Promise<RespostaAbertura> {
@@ -186,7 +206,7 @@ export async function registrarAbertura(
     p_contato_id: contatoId,
     p_chip_id: chipId,
     p_etapa: etapa,
-    p_texto: texto,
+    p_texto: null,
     p_variacao_id: variacaoId,
     p_candidato_id: candidatoId ?? null,
   });
@@ -259,9 +279,22 @@ const EXPLICACAO_TELEFONE: Record<MotivoInvalido, string> = {
  * Cadastra alguém que chamou o atendente primeiro.
  *
  * O HMAC é calculado AQUI, no servidor, porque a chave secreta não está no
- * Postgres nem pode chegar ao navegador — o mesmo caminho da importação. Todo o
- * resto (bloqueio, dedup, quem fica com quem) é decidido dentro da RPC: o
- * frontend não tem escrita em `contatos` e não é ele que decide nada disso.
+ * Postgres nem pode chegar ao navegador — o mesmo caminho da importação.
+ *
+ * ⚠️ E é por isso que a chamada vai com a `service_role`, e não com a sessão do
+ * atendente. Enquanto a RPC era executável por `authenticated`, qualquer pessoa
+ * com o DevTools aberto podia chamá-la passando um HMAC inventado: a checagem
+ * da lista de bloqueio não achava nada e o número de quem tinha pedido saída
+ * voltava para a fila. Um identificador de telefone que o servidor calcula não
+ * pode entrar por uma porta que o navegador alcança. Ver a migration
+ * 20260823330200.
+ *
+ * `p_atendente_id` é explícito porque, sob service_role, `auth.uid()` é nulo
+ * dentro da função — e quem resolve quem é o atendente é esta função aqui, pela
+ * sessão, não pelo que o formulário mandar.
+ *
+ * Todo o resto (bloqueio, dedup, quem fica com quem) continua decidido dentro
+ * da RPC.
  */
 export async function adicionarContato(dados: {
   nome: string;
@@ -279,11 +312,21 @@ export async function adicionarContato(dados: {
     };
   }
 
-  const { hash, versao } = hashTelefone(telefone.chaveDedup);
-  const supabase = await criarClienteServidor();
+  const sessao = await criarClienteServidor();
+  const { data: { user } } = await sessao.auth.getUser();
+  if (!user) return { ok: false, motivo: 'usuario_inativo' };
 
+  const { hash, versao } = hashTelefone(telefone.chaveDedup);
+  const nome = dados.nome.trim() || null;
+
+  const supabase = criarClienteAdmin();
   const { data, error } = await supabase.rpc('adicionar_contato', {
-    p_nome: dados.nome.trim() || null,
+    p_atendente_id: user.id,
+    p_nome: nome,
+    // A mesma função que monta o nome de todo mundo que veio de planilha.
+    // Dentro do Postgres isto era `split_part(nome, ' ', 1)`, que mandava
+    // "Bom dia, JOSE!" para quem se chamava JOSE DA SILVA.
+    p_primeiro_nome: primeiroNomeDe(nome),
     p_telefone_e164: telefone.e164,
     p_chave_dedup: telefone.chaveDedup,
     p_telefone_hmac: hash,

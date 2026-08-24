@@ -2,6 +2,15 @@
 -- AUTOSSUFICIENTE: cria os próprios dados e dá ROLLBACK.
 begin;
 
+-- ⚠️ A janela de horário abre para o teste inteiro (revertida pelo rollback).
+--
+-- As travas de verdade recusam envio fora do horário de operação, então esta
+-- suíte só passava entre 9h e 20h de Porto Velho: rodá-la às 21h devolvia uma
+-- parede de ❌ que não eram falhas. Um teste que só roda no horário comercial é
+-- um teste que ninguém roda antes de subir código à noite — que é exatamente
+-- quando se sobe código.
+update public.config set hora_inicio = 0, hora_fim = 24 where id = 1;
+
 do $$
 declare
   v_uid    uuid := gen_random_uuid();
@@ -46,7 +55,10 @@ begin
 
   -- ── 1. Contato novo nasce QUENTE, na mão de quem cadastrou ───────────────
   v_r := public.adicionar_contato(
-    'Maria da Silva', '5569300000901', '6930000901', 'hmac-add-0901', 1, v_chip, null, v_cand);
+    p_atendente_id => v_uid, p_nome => 'Maria da Silva', p_primeiro_nome => 'Maria',
+    p_telefone_e164 => '5569930000901', p_chave_dedup => '6930000901',
+    p_telefone_hmac => 'hmac-add-0901', p_hmac_versao => 1,
+    p_chip_id => v_chip, p_municipio_id => null, p_candidato_id => v_cand);
 
   if (v_r->>'ok')::boolean
      and v_r->'contato'->>'origem' = 'chamou'
@@ -70,7 +82,10 @@ begin
   -- ── 3. Cadastrar o MESMO número de novo não duplica ──────────────────────
   -- Duplicar aqui é o caminho mais curto para dois atendentes na mesma pessoa.
   v_r := public.adicionar_contato(
-    'Maria da Silva', '5569300000901', '6930000901', 'hmac-add-0901', 1, v_chip, null, v_cand);
+    p_atendente_id => v_uid, p_nome => 'Maria da Silva', p_primeiro_nome => 'Maria',
+    p_telefone_e164 => '5569930000901', p_chave_dedup => '6930000901',
+    p_telefone_hmac => 'hmac-add-0901', p_hmac_versao => 1,
+    p_chip_id => v_chip, p_municipio_id => null, p_candidato_id => v_cand);
 
   if (v_r->>'ok')::boolean
      and (v_r->>'ja_existia')::boolean
@@ -86,7 +101,10 @@ begin
     json_build_object('sub', v_outro, 'role', 'authenticated')::text, true);
 
   v_r := public.adicionar_contato(
-    'Maria', '5569300000901', '6930000901', 'hmac-add-0901', 1, v_chip2, null, null);
+    p_atendente_id => v_outro, p_nome => 'Maria', p_primeiro_nome => 'Maria',
+    p_telefone_e164 => '5569930000901', p_chave_dedup => '6930000901',
+    p_telefone_hmac => 'hmac-add-0901', p_hmac_versao => 1,
+    p_chip_id => v_chip2, p_municipio_id => null, p_candidato_id => null);
 
   select atendente_id::text into v_status from public.contatos where id = v_id;
 
@@ -107,7 +125,10 @@ begin
   values ('hmac-add-0902', 'teste', 'landing', now() + interval '48 hours');
 
   v_r := public.adicionar_contato(
-    'Quem Saiu', '5569300000902', '6930000902', 'hmac-add-0902', 1, v_chip, null, null);
+    p_atendente_id => v_uid, p_nome => 'Quem Saiu', p_primeiro_nome => 'Quem',
+    p_telefone_e164 => '5569930000902', p_chave_dedup => '6930000902',
+    p_telefone_hmac => 'hmac-add-0902', p_hmac_versao => 1,
+    p_chip_id => v_chip, p_municipio_id => null, p_candidato_id => null);
 
   if not (v_r->>'ok')::boolean
      and v_r->>'motivo' = 'numero_bloqueado'
@@ -127,10 +148,13 @@ begin
 
   insert into public.contatos (lista_id, origem, nome, telefone_e164, chave_dedup, telefone_hmac, status)
   values ((select id from public.listas where rotulo = 'Lista do teste'),
-          'lista_fria', 'Da Lista', '5569300000903', '6930000903', 'hmac-add-0903', 'na_fila');
+          'lista_fria', 'Da Lista', '5569930000903', '6930000903', 'hmac-add-0903', 'na_fila');
 
   v_r := public.adicionar_contato(
-    'Da Lista', '5569300000903', '6930000903', 'hmac-add-0903', 1, v_chip, null, null);
+    p_atendente_id => v_uid, p_nome => 'Da Lista', p_primeiro_nome => 'Da Lista',
+    p_telefone_e164 => '5569930000903', p_chave_dedup => '6930000903',
+    p_telefone_hmac => 'hmac-add-0903', p_hmac_versao => 1,
+    p_chip_id => v_chip, p_municipio_id => null, p_candidato_id => null);
 
   select origem::text, status::text into v_origem, v_status
     from public.contatos where telefone_hmac = 'hmac-add-0903';
@@ -142,10 +166,13 @@ begin
 
   -- ── 7. Contato SEM lista e sem dono vira 'chamou' ────────────────────────
   insert into public.contatos (origem, nome, telefone_e164, chave_dedup, telefone_hmac, status)
-  values ('site', 'Sem Dono', '5569300000904', '6930000904', 'hmac-add-0904', 'na_fila');
+  values ('site', 'Sem Dono', '5569930000904', '6930000904', 'hmac-add-0904', 'na_fila');
 
   v_r := public.adicionar_contato(
-    'Sem Dono', '5569300000904', '6930000904', 'hmac-add-0904', 1, v_chip, null, null);
+    p_atendente_id => v_uid, p_nome => 'Sem Dono', p_primeiro_nome => 'Sem Dono',
+    p_telefone_e164 => '5569930000904', p_chave_dedup => '6930000904',
+    p_telefone_hmac => 'hmac-add-0904', p_hmac_versao => 1,
+    p_chip_id => v_chip, p_municipio_id => null, p_candidato_id => null);
 
   select origem::text into v_origem from public.contatos where telefone_hmac = 'hmac-add-0904';
 
@@ -159,7 +186,10 @@ begin
   update public.usuarios set termo_aceito_em = null where id = v_uid;
 
   v_r := public.adicionar_contato(
-    'Nao Vai', '5569300000905', '6930000905', 'hmac-add-0905', 1, v_chip, null, null);
+    p_atendente_id => v_uid, p_nome => 'Nao Vai', p_primeiro_nome => 'Nao',
+    p_telefone_e164 => '5569930000905', p_chave_dedup => '6930000905',
+    p_telefone_hmac => 'hmac-add-0905', p_hmac_versao => 1,
+    p_chip_id => v_chip, p_municipio_id => null, p_candidato_id => null);
 
   if not (v_r->>'ok')::boolean and v_r->>'motivo' = 'termo_nao_aceito' then
     raise notice '  ✅ 8. sem termo aceito o botão recusa';
@@ -212,6 +242,67 @@ begin
   then
     raise notice '  ✅ 11. o histórico devolve as partes para reabrir o formulário';
   else raise warning '  ❌ 11. %', v_r->'pedido_kit'; v_falhas := v_falhas + 1;
+  end if;
+
+  -- ── 12. A função saiu do alcance do navegador ────────────────────────────
+  -- ⚠️ Enquanto `authenticated` podia executá-la, qualquer atendente com o
+  -- DevTools aberto chamava esta RPC passando um HMAC inventado: a checagem da
+  -- lista de bloqueio não achava nada e o número de quem tinha pedido saída
+  -- voltava para a fila. Quem calcula o HMAC é o servidor Node — e a porta
+  -- precisa ser só dele.
+  if not has_function_privilege('authenticated', 'public.adicionar_contato(uuid,text,text,text,text,text,int,uuid,smallint,uuid)', 'EXECUTE')
+     and not has_function_privilege('anon', 'public.adicionar_contato(uuid,text,text,text,text,text,int,uuid,smallint,uuid)', 'EXECUTE')
+     and has_function_privilege('service_role', 'public.adicionar_contato(uuid,text,text,text,text,text,int,uuid,smallint,uuid)', 'EXECUTE')
+  then
+    raise notice '  ✅ 12. só o servidor executa adicionar_contato (authenticated e anon fora)';
+  else raise warning '  ❌ 12. adicionar_contato ainda é chamável pelo navegador';
+    v_falhas := v_falhas + 1;
+  end if;
+
+  -- ── 13. Telefone e chave de dedup têm de combinar ────────────────────────
+  -- Defesa em profundidade: mesmo que alguém chegue até aqui, um payload em que
+  -- a `chave_dedup` protege um número diferente do que vai ser chamado no
+  -- WhatsApp morre na porta. Era assim que se furava o UNIQUE do dedup e se
+  -- criava um segundo registro de um número que já é de outro atendente.
+  v_r := public.adicionar_contato(
+    p_atendente_id => v_uid, p_nome => 'Incoerente', p_primeiro_nome => 'Incoerente',
+    p_telefone_e164 => '5569930000901',   -- termina em 30000901
+    p_chave_dedup   => '6999999999',      -- termina em 99999999
+    p_telefone_hmac => 'hmac-add-forjado', p_hmac_versao => 1,
+    p_chip_id => v_chip, p_municipio_id => null, p_candidato_id => null);
+
+  if not (v_r->>'ok')::boolean and v_r->>'motivo' = 'telefone_invalido'
+     and not exists (select 1 from public.contatos where telefone_hmac = 'hmac-add-forjado')
+  then
+    raise notice '  ✅ 13. e164 que não bate com a chave de dedup é recusado';
+  else raise warning '  ❌ 13. aceitou telefone incoerente: %', v_r; v_falhas := v_falhas + 1;
+  end if;
+
+  -- ── 14. Formato da chave e do e164 ───────────────────────────────────────
+  v_r := public.adicionar_contato(
+    p_atendente_id => v_uid, p_nome => 'Torto', p_primeiro_nome => 'Torto',
+    p_telefone_e164 => '5569930000906', p_chave_dedup => 'abc',
+    p_telefone_hmac => 'hmac-add-torto', p_hmac_versao => 1,
+    p_chip_id => v_chip, p_municipio_id => null, p_candidato_id => null);
+
+  if not (v_r->>'ok')::boolean and v_r->>'motivo' = 'telefone_invalido' then
+    raise notice '  ✅ 14. chave de dedup fora do formato é recusada';
+  else raise warning '  ❌ 14. aceitou chave torta: %', v_r; v_falhas := v_falhas + 1;
+  end if;
+
+  -- ── 15. O primeiro nome vem pronto do servidor ───────────────────────────
+  -- Dentro do Postgres isto era `split_part(nome, ' ', 1)`, que fazia
+  -- "JOSE DA SILVA" virar "JOSE" e a mensagem sair "Bom dia, JOSE!" — o
+  -- sotaque de lista que `primeiroNomeDe` existe justamente para apagar.
+  v_r := public.adicionar_contato(
+    p_atendente_id => v_uid, p_nome => 'JOSE DA SILVA', p_primeiro_nome => 'Jose',
+    p_telefone_e164 => '5569930000907', p_chave_dedup => '6930000907',
+    p_telefone_hmac => 'hmac-add-0907', p_hmac_versao => 1,
+    p_chip_id => v_chip, p_municipio_id => null, p_candidato_id => null);
+
+  if (v_r->>'ok')::boolean and v_r->'contato'->>'primeiro_nome' = 'Jose' then
+    raise notice '  ✅ 15. o primeiro nome gravado é o que o servidor calculou';
+  else raise warning '  ❌ 15. %', v_r; v_falhas := v_falhas + 1;
   end if;
 
   if v_falhas = 0 then raise notice '  ADICIONAR CONTATO: tudo verde ✅';

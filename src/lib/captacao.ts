@@ -13,7 +13,30 @@ import { primeiroNomeDe } from '@/lib/mensagem';
  * Este é o caminho que o Doc 1 §7 chama de a peça mais valiosa do projeto:
  * troca lead ruim (lista fria) por lead bom (consentimento gravado, com data,
  * hora e IP), e o contato entra na fila QUENTE, atendida antes de tudo.
+ *
+ * ⚠️ É TAMBÉM a única porta do sistema aberta para a internet inteira. Tudo que
+ * entra por aqui foi digitado por um desconhecido e não passou por login nenhum.
+ * Duas regras saem disso e não se negociam:
+ *
+ *   1. Cadastro NÃO desfaz bloqueio. Ver `registrarCaptacao`, item 2.
+ *   2. Toda resposta ao navegador é a MESMA — sucesso. Recusa por limite, por
+ *      armadilha ou por bloqueio devolvem exatamente a tela de "obrigado", pelo
+ *      mesmo motivo que `descadastrar_por_token` devolve igual para token que
+ *      existe e token que não existe: resposta diferente vira oráculo, e um
+ *      oráculo aqui responde "este número está na lista de bloqueio?".
  */
+
+/** Cadastros que um mesmo IP pode fazer numa janela de 10 minutos. */
+const LIMITE_POR_IP = 8;
+const JANELA_MINUTOS = 10;
+
+/**
+ * Reenvio do mesmo número, para o mesmo candidato, dentro deste prazo, é
+ * clique duplo — não cadastro novo. Curto de propósito: quem preencheu o
+ * formulário e voltou depois para pedir também o material impresso precisa
+ * conseguir.
+ */
+const REPIQUE_MS = 60_000;
 
 export type DadosCaptacao = {
   origem: 'site' | 'kit';
@@ -54,6 +77,48 @@ export async function registrarCaptacao(dados: DadosCaptacao): Promise<Resultado
   const supabase = criarClienteAdmin();
   const { hash, versao } = hashTelefone(telefone.chaveDedup);
   const primeiroNome = primeiroNomeDe(dados.nome);
+  const obrigado: ResultadoCaptacao = { ok: true, primeiroNome: primeiroNome ?? dados.nome };
+
+  // 0. Limite por IP. Vem antes de qualquer escrita: o ponto é não deixar uma
+  //    enchente virar linha no banco nem contato na fila.
+  const { data: tentativa } = await supabase.rpc('registrar_tentativa_captacao', {
+    p_ip: dados.ip,
+    p_limite: LIMITE_POR_IP,
+    p_janela_min: JANELA_MINUTOS,
+  });
+  const limite = tentativa as { ok: boolean; contagem: number; primeira_recusa: boolean } | null;
+
+  if (limite && !limite.ok) {
+    // Um aviso por janela, não um por cadastro recusado: mil alertas iguais
+    // escondem o alerta que importa.
+    if (limite.primeira_recusa) {
+      await supabase.from('alertas').insert({
+        tipo: 'captacao_em_excesso',
+        detalhe:
+          `O IP ${dados.ip ?? 'desconhecido'} passou de ${LIMITE_POR_IP} cadastros em ` +
+          `${JANELA_MINUTOS} minutos e os seguintes foram recusados. Pode ser uma enchente ` +
+          'de leads falsos — confira a lista de contatos novos antes de os atendentes ' +
+          'começarem o dia.',
+      });
+    }
+    return obrigado;
+  }
+
+  // 0.1 Clique duplo. Nem grava de novo, nem responde diferente.
+  //     `candidato_id` entra por `is` quando é nulo: no PostgREST, `eq.null`
+  //     não casa com NULL nenhum e a trava passaria batido.
+  const busca = supabase
+    .from('captacoes')
+    .select('id')
+    .eq('chave_dedup', telefone.chaveDedup)
+    .gte('criado_em', new Date(Date.now() - REPIQUE_MS).toISOString())
+    .limit(1);
+
+  const { data: repique } = await (dados.candidatoId
+    ? busca.eq('candidato_id', dados.candidatoId)
+    : busca.is('candidato_id', null));
+
+  if (repique && repique.length > 0) return obrigado;
 
   // 1. O consentimento é gravado SEMPRE, com data, hora e IP. É a prova de que
   //    a pessoa pediu — o oposto exato da lista fria.
@@ -64,6 +129,9 @@ export async function registrarCaptacao(dados: DadosCaptacao): Promise<Resultado
       nome: dados.nome,
       telefone_e164: telefone.e164,
       chave_dedup: telefone.chaveDedup,
+      // O identificador que sobrevive à purga de 48h. É por ele que a purga
+      // alcança esta linha e que o gestor liga um pedido à lista de bloqueio.
+      telefone_hmac: hash,
       municipio_id: dados.municipioId,
       // A linha montada continua sendo gravada porque é o que o relatório, a
       // exportação e a busca de entregas leem — e é o que mantém os pedidos
@@ -84,11 +152,19 @@ export async function registrarCaptacao(dados: DadosCaptacao): Promise<Resultado
     .single();
 
   // 2. Estava bloqueado?
-  //    Quem pediu saída antes e agora preenche o formulário está dando um
-  //    consentimento NOVO, explícito, com data, hora e IP — evidência mais
-  //    forte que o pedido antigo, e negar seria não entregar o que a pessoa
-  //    está pedindo agora. Removemos o bloqueio e deixamos alerta para o gestor
-  //    conseguir auditar que isso aconteceu.
+  //
+  //    ⚠️ AQUI O SISTEMA PARA. Esta versão do código APAGAVA o bloqueio,
+  //    entendendo que um cadastro novo é consentimento mais forte que o pedido
+  //    de saída antigo. O raciocínio só se sustenta se quem preencheu for a
+  //    dona do número — e este formulário não prova isso em lugar nenhum: não
+  //    há código por SMS, não há confirmação, não há nada. Bastava saber o
+  //    número de alguém para devolvê-lo à fila QUENTE, e envio depois do pedido
+  //    de saída é multa POR MENSAGEM.
+  //
+  //    O cadastro continua gravado — é a prova de que alguém pediu, e é o que o
+  //    gestor lê para decidir. Mas o contato não nasce, não volta para a fila e
+  //    não autoriza candidato nenhum. Quem libera é o gestor, à mão, na tela de
+  //    Suporte (`liberarBloqueio`).
   const { data: bloqueio } = await supabase
     .from('bloqueios')
     .select('telefone_hmac')
@@ -96,13 +172,18 @@ export async function registrarCaptacao(dados: DadosCaptacao): Promise<Resultado
     .maybeSingle();
 
   if (bloqueio) {
-    await supabase.from('bloqueios').delete().eq('telefone_hmac', hash);
     await supabase.from('alertas').insert({
-      tipo: 'bloqueio_removido_por_optin',
+      tipo: 'optin_de_bloqueado',
+      captacao_id: captacao?.id ?? null,
       detalhe:
-        `Número estava bloqueado e voltou por cadastro próprio com aceite ` +
-        `explícito (captação ${captacao?.id ?? '?'}, IP ${dados.ip ?? 'desconhecido'}).`,
+        'Um número que pediu saída foi cadastrado de novo pelo formulário público. ' +
+        'Ele continua bloqueado e NÃO entrou na fila. Se a pessoa realmente voltou a ' +
+        'procurar a campanha, libere aqui; na dúvida, não libere — o cadastro sozinho ' +
+        `não prova quem preencheu. (IP ${dados.ip ?? 'desconhecido'})`,
     });
+    // Mesma resposta do sucesso: a tela não pode dizer se o número está ou não
+    // na lista de bloqueio.
+    return obrigado;
   }
 
   // 3. Contato na fila QUENTE. A busca é pelo HMAC, o único identificador que
@@ -171,7 +252,7 @@ export async function registrarCaptacao(dados: DadosCaptacao): Promise<Resultado
       );
   }
 
-  return { ok: true, primeiroNome: primeiroNome ?? dados.nome };
+  return obrigado;
 }
 
 /** Primeiro IP da cadeia de proxies. */
