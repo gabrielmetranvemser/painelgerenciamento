@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { ChevronDown, LifeBuoy } from 'lucide-react';
+import { Cartao, cx } from '@/components/ui';
 
 /**
  * Os 13 casos de docs/03-OPERACAO.md §6, com a resposta pronta para copiar e
@@ -60,19 +62,54 @@ function Copiar({ texto }: { texto: string }) {
   );
 }
 
+/**
+ * ⚠️ Este bloco é consultado NO MEIO de uma conversa, com a pessoa esperando
+ * resposta do outro lado. Duas coisas se aprenderam vendo o painel em uso:
+ *
+ * 1. Ele não parecia clicável. Era um retângulo com um título e um texto cinza
+ *    à direita — igual ao cartão de regras logo acima, que é só leitura. Quem
+ *    não soubesse que abre, não abria. Agora tem seta, muda no hover e o
+ *    cursor vira mãozinha.
+ *
+ * 2. Ele não parecia importante. Fechado, dizia "Como agir · 13 casos", o que
+ *    não conta para que serve. Agora diz o que tem dentro — resposta pronta
+ *    para o que a pessoa acabar de escrever — e leva o acento da campanha,
+ *    porque é a única coisa da lateral que se USA em vez de ler.
+ */
 export function ComoAgir() {
   const [aberto, setAberto] = useState(false);
 
   return (
-    <section className="rounded-xl border border-borda bg-superficie">
+    <Cartao className="overflow-hidden">
       <button
         type="button"
         onClick={() => setAberto((v) => !v)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
+        className={cx(
+          'flex w-full cursor-pointer items-start gap-3 px-4 py-3.5 text-left',
+          'transition-colors hover:bg-superficie-alta',
+        )}
         aria-expanded={aberto}
       >
-        <span className="text-sm font-semibold">Como agir</span>
-        <span className="text-xs text-suave">{aberto ? 'esconder' : `${CASOS.length} casos`}</span>
+        <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-acento/12 text-acento">
+          <LifeBuoy size={15} />
+        </span>
+
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">Como agir</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-suave">
+            {aberto
+              ? 'Toque para esconder'
+              : `Resposta pronta para os ${CASOS.length} casos mais comuns`}
+          </span>
+        </span>
+
+        <ChevronDown
+          size={16}
+          className={cx(
+            'mt-1 shrink-0 text-suave transition-transform duration-200',
+            aberto && 'rotate-180',
+          )}
+        />
       </button>
 
       {aberto && (
@@ -96,6 +133,6 @@ export function ComoAgir() {
           ))}
         </ol>
       )}
-    </section>
+    </Cartao>
   );
 }

@@ -56,7 +56,15 @@ export default async function LayoutPainel({
           </div>
         </div>
       </header>
-      <main className="surgir mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">{children}</main>
+      {/* ⚠️ `pb-28` não é respiro estético: é espaço para o botão flutuante.
+          Ele é `fixed bottom-5` com 3,5rem de altura, então tampava o fim da
+          página — e no painel lateral do Chrome, onde a coluna da direita
+          empilha embaixo de tudo, quem ficava tampado era justamente o "Como
+          agir", que é o bloco consultado no meio da conversa. Some ainda a
+          barra de socorro da extensão, que também é fixa no rodapé. */}
+      <main className="surgir mx-auto w-full max-w-6xl flex-1 px-4 pb-28 pt-6 sm:px-6">
+        {children}
+      </main>
 
       <NovoContato
         chips={(chips ?? []) as Chip[]}
