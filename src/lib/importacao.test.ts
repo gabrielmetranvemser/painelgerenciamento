@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import Papa from 'papaparse';
 import {
-  analisarLinhas, casarMunicipio, decodificarPlanilha, emBlocos, sugerirMapa,
+  analisarLinhas, casarMunicipio, decodificarPlanilha, emBlocos, modeloCsv, sugerirMapa,
 } from './importacao';
 
 const MAPA = { nome: 'Nome', telefone: 'Telefone', municipio: 'Cidade' };
@@ -260,5 +261,71 @@ describe('decodificarPlanilha', () => {
     const r = decodificarPlanilha(comoExcelPtBr('Ji-Paraná'));
     const municipios = [{ id: 24, nome: 'Ji-Paraná' }];
     expect(casarMunicipio(r.ok ? r.texto : '', municipios)).toBe(24);
+  });
+});
+
+/**
+ * O modelo que o gestor baixa.
+ *
+ * Este teste passa o modelo pelo caminho REAL da importação — decodificar,
+ * parsear, analisar — em vez de conferir o texto dele. Um modelo que o próprio
+ * sistema recusaria seria pior que modelo nenhum: mandaria o gestor arrumar uma
+ * planilha que já estava certa.
+ */
+describe('modeloCsv', () => {
+  const MUNICIPIOS = [
+    { id: 37, nome: 'Porto Velho' },
+    { id: 24, nome: 'Ji-Paraná' },
+    { id: 52, nome: 'Vilhena' },
+  ];
+
+  function importar(csv: string) {
+    const bytes = new TextEncoder().encode(csv).buffer as ArrayBuffer;
+    const leitura = decodificarPlanilha(bytes);
+    if (!leitura.ok) throw new Error(`modelo recusado: ${leitura.problema}`);
+    const res = Papa.parse<Record<string, string>>(leitura.texto, {
+      header: true, skipEmptyLines: 'greedy', delimitersToGuess: [';', ',', '\t', '|'],
+    });
+    return { campos: res.meta.fields ?? [], linhas: res.data };
+  }
+
+  it('o próprio sistema reconhece as colunas do modelo sozinho', () => {
+    const { campos } = importar(modeloCsv());
+    // Sem isto o gestor baixaria o modelo e ainda teria de mapear na mão.
+    expect(sugerirMapa(campos)).toEqual({
+      telefone: 'telefone', nome: 'nome', municipio: 'municipio',
+    });
+  });
+
+  it('as três linhas do modelo entram válidas', () => {
+    const { campos, linhas } = importar(modeloCsv());
+    const a = analisarLinhas(linhas, sugerirMapa(campos) as never);
+    expect(a.totalLinhas).toBe(3);
+    expect(a.validas).toHaveLength(3);
+    expect(a.invalidas).toBe(0);
+    expect(a.duplicadasNoArquivo).toBe(0);
+  });
+
+  it('os três formatos de telefone do modelo chegam ao mesmo formato final', () => {
+    const { campos, linhas } = importar(modeloCsv());
+    const a = analisarLinhas(linhas, sugerirMapa(campos) as never);
+    // (69) 99999-0001 · 69 98888-0002 · 5569977770003 — escritos de três jeitos
+    // de propósito, para o modelo mostrar que padronizar antes é desnecessário.
+    expect(a.validas.map((l) => l.e164))
+      .toEqual(['5569999990001', '5569988880002', '5569977770003']);
+  });
+
+  it('os municípios do modelo casam com a lista fechada de Rondônia', () => {
+    const { campos, linhas } = importar(modeloCsv());
+    const a = analisarLinhas(linhas, sugerirMapa(campos) as never);
+    expect(a.validas.map((l) => casarMunicipio(l.municipioNome, MUNICIPIOS)))
+      .toEqual([37, 24, 52]);
+  });
+
+  it('abre em colunas no Excel em português: BOM, ponto e vírgula e CRLF', () => {
+    const csv = modeloCsv();
+    expect(csv.startsWith('\uFEFF')).toBe(true);
+    expect(csv).toContain(';');
+    expect(csv).toContain('\r\n');
   });
 });

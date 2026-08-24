@@ -8,6 +8,51 @@
  */
 import { normalizarTelefone, type MotivoInvalido } from './telefone';
 import { primeiroNomeDe } from './mensagem';
+import { BOM } from './csv';
+
+/**
+ * As três colunas que a importação usa. Não há uma quarta.
+ *
+ * ⚠️ Vale dizer o que NÃO entra, porque é a pergunta que sempre aparece:
+ * **não existe e-mail, endereço, idade nem observação.** Não é omissão da tela
+ * — não existe coluna para nada disso em tabela nenhuma do sistema. O
+ * atendimento é por WhatsApp, e dado pessoal que ninguém vai usar é dado
+ * pessoal guardado à toa.
+ *
+ * Qualquer outra coluna da planilha é ignorada em silêncio, sem erro: a
+ * planilha que chega costuma vir com dez colunas de outro sistema, e recusar o
+ * arquivo por causa delas seria obrigar o gestor a limpar à mão o que o
+ * programa sabe ignorar sozinho.
+ */
+export const COLUNAS_DO_MODELO = ['nome', 'telefone', 'municipio'] as const;
+
+/**
+ * O modelo que o gestor baixa antes de montar a planilha.
+ *
+ * As três linhas de exemplo não são enfeite — cada uma prova uma coisa:
+ *
+ *   • os três telefones estão em formatos DIFERENTES, porque o sistema aceita
+ *     qualquer um e ninguém precisa padronizar antes;
+ *   • os municípios vão acentuados, porque é assim que casam com a lista
+ *     fechada de Rondônia — e porque abrir o modelo com o acento certo é a
+ *     forma mais curta de mostrar que o arquivo tem de ser UTF-8;
+ *   • sai com BOM, ponto e vírgula e CRLF: o mesmo formato que a exportação
+ *     usa, e o único que o Excel em português abre em colunas separadas em vez
+ *     de despejar tudo numa só.
+ *
+ * Há um teste que passa este modelo pelo caminho REAL de importação e confere
+ * que as três linhas entram válidas. Se alguém mexer no formato aceito, o
+ * modelo quebra junto — que é exatamente o que se quer.
+ */
+export function modeloCsv(): string {
+  const linhas = [
+    'nome;telefone;municipio',
+    'Maria de Souza;(69) 99999-0001;Porto Velho',
+    'José da Silva;69 98888-0002;Ji-Paraná',
+    'Ana Lima;5569977770003;Vilhena',
+  ];
+  return BOM + linhas.join('\r\n') + '\r\n';
+}
 
 export type ProblemaArquivo =
   /** É um zip: .xlsx, .ods ou .numbers renomeado. */

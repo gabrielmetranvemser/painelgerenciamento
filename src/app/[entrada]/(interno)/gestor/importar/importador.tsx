@@ -2,9 +2,10 @@
 
 import Papa from 'papaparse';
 import { useEffect, useState, useTransition } from 'react';
+import { Download } from 'lucide-react';
 import { Aviso, Botao, Campo, Cartao } from '@/components/ui';
 import {
-  analisarLinhas, decodificarPlanilha, emBlocos, sugerirMapa,
+  analisarLinhas, decodificarPlanilha, emBlocos, modeloCsv, sugerirMapa,
   type Analise, type MapaColunas,
 } from '@/lib/importacao';
 import type { OrigemContato } from '@/lib/tipos-banco';
@@ -262,6 +263,9 @@ export function Importador() {
           <code className="mx-1 rounded bg-fundo px-1 py-0.5 text-xs">.xlsx</code> não serve — o
           sistema avisa se você escolher um.
         </p>
+
+        <QueColunas />
+
         <input
           type="file"
           accept=".csv,text/csv,text/plain"
@@ -413,6 +417,76 @@ export function Importador() {
           </div>
         </Cartao>
       )}
+    </div>
+  );
+}
+
+/**
+ * O que a planilha precisa ter — e o modelo para baixar.
+ *
+ * ⚠️ Isto existe porque a pergunta chegava sempre na mesma ordem: "o que dá
+ * para importar? nome? número? e-mail?". A tela pedia um CSV e não dizia de
+ * quê, então o gestor montava a planilha adivinhando — e descobria o que
+ * faltava só depois de subir o arquivo.
+ *
+ * O modelo baixado é gerado pela mesma função que os testes passam pelo caminho
+ * real de importação. Um modelo que o próprio sistema recusaria seria pior que
+ * modelo nenhum.
+ */
+function QueColunas() {
+  function baixar() {
+    const blob = new Blob([modeloCsv()], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'modelo-importacao.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="mb-4 rounded-2xl border border-borda bg-fundo p-4">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <p className="mr-auto text-sm font-semibold">O sistema usa três colunas</p>
+        <Botao variante="neutro" tamanho="p" onClick={baixar}>
+          <Download size={13} /> Baixar modelo
+        </Botao>
+      </div>
+
+      <dl className="space-y-2.5 text-xs">
+        <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+          <dt className="w-24 shrink-0 font-mono font-semibold text-texto">telefone</dt>
+          <dd className="min-w-0 flex-1 text-suave">
+            <span className="font-medium text-acento">obrigatória</span> · celular com DDD, em
+            qualquer formato: <span className="text-texto">(69) 99999-0000</span>,{' '}
+            <span className="text-texto">69999990000</span> ou{' '}
+            <span className="text-texto">5569999990000</span>. Telefone fixo é recusado — não tem
+            WhatsApp.
+          </dd>
+        </div>
+        <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+          <dt className="w-24 shrink-0 font-mono font-semibold text-texto">nome</dt>
+          <dd className="min-w-0 flex-1 text-suave">
+            opcional · só o primeiro nome entra na mensagem. Sem ele, a mensagem sai sem nome em
+            vez de sair quebrada.
+          </dd>
+        </div>
+        <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+          <dt className="w-24 shrink-0 font-mono font-semibold text-texto">municipio</dt>
+          <dd className="min-w-0 flex-1 text-suave">
+            opcional · um dos 52 de Rondônia. É o que faz o relatório por cidade existir; o que não
+            casar é avisado antes de gravar.
+          </dd>
+        </div>
+      </dl>
+
+      <p className="mt-3 border-t border-borda pt-3 text-xs leading-relaxed text-suave">
+        <strong className="text-texto">Não existe e-mail, endereço nem observação.</strong> Não é
+        limitação desta tela — não existe campo para isso em lugar nenhum do sistema, porque o
+        atendimento é por WhatsApp e dado que ninguém vai usar é dado guardado à toa.{' '}
+        <strong className="text-texto">A ordem das colunas não importa</strong> e qualquer coluna a
+        mais é ignorada sem erro: pode subir a planilha como ela veio.
+      </p>
     </div>
   );
 }
