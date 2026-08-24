@@ -1,11 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle, Check, CircleSlash, Clock, Flame, Loader2, MessageSquare, PackageOpen,
   Send, Siren, Snowflake, SkipForward, Star,
 } from 'lucide-react';
 import { Aviso, Avatar, Botao, Cartao, EtiquetaOrigem, Pilula, Selecao, Vidro, cx } from '@/components/ui';
+import { CHAVE_CHIP, useChipSalvo } from '@/components/chip-salvo';
 import { ComoAgir } from '@/components/como-agir';
 import { formatarExibicao } from '@/lib/telefone';
 import {
@@ -49,25 +51,6 @@ const ROTULO_RESULTADO: Record<Resultado, string> = {
 
 /** Nome da janela do WhatsApp: reaproveita a mesma aba em vez de abrir 30. */
 const JANELA_WA = 'whatsapp-atendimento';
-const CHAVE_CHIP = 'chip';
-
-/**
- * Lê o chip salvo sem causar remontagem nem divergência de hidratação.
- * useSyncExternalStore é o mecanismo que o React prevê para armazenamento
- * externo: no servidor devolve null, no cliente o valor guardado.
- */
-function assinarArmazenamento(aoMudar: () => void) {
-  window.addEventListener('storage', aoMudar);
-  return () => window.removeEventListener('storage', aoMudar);
-}
-
-function useChipSalvo(): string | null {
-  return useSyncExternalStore(
-    assinarArmazenamento,
-    () => window.localStorage.getItem(CHAVE_CHIP),
-    () => null,
-  );
-}
 
 export function Atendimento({
   primeiroNome, chips, municipios, filaInicial,
@@ -91,6 +74,9 @@ export function Atendimento({
   const [aviso, setAviso] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
   const botaoAbrir = useRef<HTMLButtonElement>(null);
+  const router = useRouter();
+  const caminho = usePathname();
+  const novo = useSearchParams().get('novo');
 
   const vivos = chips.filter((c) => c.status !== 'morto');
   const valido = (id: string | null) => (id && vivos.some((c) => c.id === id) ? id : null);
@@ -139,8 +125,10 @@ export function Atendimento({
   }, [fase, atualizarFila]);
 
   function buscarProximo() {
-    setErro(null);
+    // `setErro` fica DENTRO da transição para esta função poder ser chamada de
+    // um efeito (a chegada pelo `?novo=`) sem disparar renderização em cascata.
     iniciar(async () => {
+      setErro(null);
       const r = await pegarProximo(chipId);
       setFila(r.fila);
       setEspera(r.fila.segundos_espera);
@@ -265,6 +253,34 @@ export function Atendimento({
       limparEBuscar();
     });
   }
+
+  /**
+   * Chegou do botão "Adicionar contato" (`?novo=`): já abre a conversa.
+   *
+   * Não consome ninguém da fila. O contato acabou de ser criado EM ATENDIMENTO
+   * para este atendente, e `pegar_proximo_contato` devolve o que já está na mão
+   * antes de olhar a fila — o mesmo caminho de quem recarrega a página.
+   *
+   * Lê pelo `useSearchParams`, e não uma vez na montagem, porque quem clica no
+   * botão flutuante quase sempre JÁ ESTÁ nesta tela: ali a navegação só troca o
+   * parâmetro, o componente não remonta, e um efeito de montagem nunca rodaria.
+   *
+   * O `ref` cobre a dupla execução do modo estrito e é zerado quando o
+   * parâmetro sai da URL — sem isso, cadastrar a MESMA pessoa de novo (que é o
+   * que acontece quando ela volta a escrever) não abriria a conversa.
+   */
+  const novoTratado = useRef<string | null>(null);
+  useEffect(() => {
+    if (!novo) { novoTratado.current = null; return; }
+    if (!chipId || novoTratado.current === novo) return;
+    novoTratado.current = novo;
+    // Tira da URL: recarregar depois não pode reabrir nada.
+    router.replace(caminho);
+    buscarProximo();
+    // buscarProximo depende de estado que muda a cada passo do atendimento;
+    // listá-lo aqui faria o efeito rodar de novo no meio da conversa.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [novo, chipId]);
 
   // Atalhos de teclado: são 30 conversas por dia, o mouse cansa.
   useEffect(() => {
