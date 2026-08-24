@@ -98,8 +98,12 @@ export default async function LayoutGestor({
     </div>
   );
 
+  // `flex-col` abaixo de `lg` não é detalhe de estilo: a barra estreita que o
+  // MenuLateral renderiza é IRMÃ do <main>. Numa linha, ela virava uma coluna ao
+  // lado do conteúdo e comia a largura — foi o que quebrou o painel lateral do
+  // Chrome, que abre com menos de 400px. Empilhada, ela volta a ser cabeçalho.
   return (
-    <div className="flex min-h-full">
+    <div className="flex min-h-full flex-col lg:flex-row">
       <MenuLateral
         grupos={grupos}
         titulo={
