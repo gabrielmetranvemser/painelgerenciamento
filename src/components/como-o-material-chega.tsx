@@ -1,5 +1,5 @@
-import { ArrowRight } from 'lucide-react';
-import { Cartao } from './ui';
+import { ArrowRight, Eye } from 'lucide-react';
+import { BotaoLink, Cartao } from './ui';
 
 /**
  * "Onde isso aparece para a pessoa?"
@@ -37,7 +37,7 @@ const PASSOS = [
   },
 ];
 
-export function ComoOMaterialChega() {
+export function ComoOMaterialChega({ previaHref }: { previaHref?: string }) {
   return (
     <Cartao className="p-6">
       <h3 className="mb-1 text-sm font-semibold">Onde isso aparece para a pessoa</h3>
@@ -61,6 +61,14 @@ export function ComoOMaterialChega() {
         ))}
       </ol>
 
+      {previaHref && (
+        <div className="mt-5">
+          <BotaoLink href={previaHref} variante="neutro" tamanho="p">
+            <Eye size={13} /> Ver como a pessoa vê
+          </BotaoLink>
+        </div>
+      )}
+
       <div className="mt-5 space-y-2 border-t border-borda pt-4 text-xs leading-relaxed text-suave">
         <p className="flex gap-2">
           <ArrowRight size={13} className="mt-0.5 shrink-0 text-tenue" />
@@ -77,7 +85,7 @@ export function ComoOMaterialChega() {
             <strong className="text-alerta">Não abra o link de um contato para testar.</strong> O
             sistema só descarta a pré-visualização automática do WhatsApp; você abrindo no
             navegador conta como clique de verdade, e o clique é a métrica mais confiável que a
-            campanha tem.
+            campanha tem.{previaHref ? ' Para conferir, use a prévia aqui de cima: ela não conta nada.' : ''}
           </span>
         </p>
       </div>
