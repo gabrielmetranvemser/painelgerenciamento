@@ -519,6 +519,7 @@ export type ContatoDoGestor = {
   candidato_origem_id: string | null;
   candidato_origem: string | null;
   lista: string | null;
+  lista_id: string | null;
   primeiro_contato_em: string | null;
   resultado_em: string | null;
   criado_em: string;

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
+import { buscarTudo } from '@/lib/supabase/paginar';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { ehChaveDoPainel } from '@/lib/rotas';
 import type { OrigemContato, StatusContato } from '@/lib/tipos-banco';
@@ -8,6 +9,16 @@ import { formatarCep } from '@/lib/cep';
 import { formatarExibicao } from '@/lib/telefone';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Um minuto, e não os 10 segundos padrão.
+ *
+ * O CSV da base inteira vai ao banco em blocos de 1.000 — é o único jeito de
+ * furar o corte silencioso do PostgREST. Com 3.700 contatos são 4 idas e ~3s;
+ * com 30 mil serão 30 idas, e aí o padrão da Vercel derrubaria o download no
+ * meio. Um arquivo cortado pela metade é pior que um erro: ninguém percebe.
+ */
+export const maxDuration = 60;
 
 /**
  * ⚠️ Os dois mapas são `Record<Tipo, string>`, não `Record<string, string>`.
@@ -73,11 +84,16 @@ export async function GET(
 
   switch (relatorio) {
     case 'contatos': {
-      const { data } = await supabase
-        .from('contatos')
-        .select('*, municipios(nome), usuarios(primeiro_nome), listas(rotulo)')
-        .order('criado_em', { ascending: false })
-        .limit(50000);
+      // ⚠️ Em blocos, e não `.limit(50000)`: o PostgREST corta em 1.000 sem
+      // dizer nada, e este arquivo é o que o gestor baixa quando quer a BASE
+      // INTEIRA. Saía com 1.000 linhas parecendo completo.
+      const data = await buscarTudo((de, ate) =>
+        supabase
+          .from('contatos')
+          .select('*, municipios(nome), usuarios(primeiro_nome), listas(rotulo)')
+          .order('criado_em', { ascending: false })
+          .range(de, ate),
+      );
 
       type L = Record<string, never> & {
         nome: string | null; telefone_e164: string | null; origem: string; status: string;
@@ -113,10 +129,16 @@ export async function GET(
       // O filtro é `itens is not null`, não `origem = 'kit'`: o pedido também
       // nasce do bloco que o atendente preenche durante a conversa, e ali a
       // origem do contato continua sendo a de onde ele veio.
-      const { data } = await supabase
-        .from('v_entregas')
-        .select('*')
-        .order('pedido_em', { ascending: true });
+      // Em blocos pelo mesmo motivo do relatório de contatos: esta é a
+      // planilha que a equipe leva para a rua, e faltar endereço nela é uma
+      // entrega que não acontece.
+      const data = await buscarTudo((de, ate) =>
+        supabase
+          .from('v_entregas')
+          .select('*')
+          .order('pedido_em', { ascending: true })
+          .range(de, ate),
+      );
 
       type L = {
         nome: string | null; telefone_e164: string | null; endereco: string | null;

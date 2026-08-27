@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { criarClienteServidor } from '@/lib/supabase/server';
+import { buscarTudo } from '@/lib/supabase/paginar';
 import { BotaoLink, Metrica, Titulo, Vazio } from '@/components/ui';
 import { rotas } from '@/lib/links-internos';
 import { Box, PackageCheck } from 'lucide-react';
@@ -17,13 +18,16 @@ export default async function PaginaEntregas({
   const { entrada } = await params;
   const supabase = await criarClienteServidor();
 
-  const { data } = await supabase
-    .from('v_entregas')
-    .select('*')
-    .order('pedido_em', { ascending: true })
-    .limit(2000);
-
-  const entregas = (data ?? []) as Entrega[];
+  // Em blocos: `.limit(2000)` era cortado em 1.000 pelo PostgREST sem aviso, e
+  // os quatro números do topo — inclusive "peças a separar" — saíam menores que
+  // a realidade. Contagem para a rua não pode ser palpite.
+  const entregas = await buscarTudo<Entrega>((de, ate) =>
+    supabase
+      .from('v_entregas')
+      .select('*')
+      .order('pedido_em', { ascending: true })
+      .range(de, ate),
+  );
   const pendentes = entregas.filter((e) => e.estado === 'pendente');
   const entregues = entregas.filter((e) => e.estado === 'entregue');
   const cancelados = entregas.filter((e) => e.estado === 'cancelado');
