@@ -9,6 +9,10 @@ import { formatarExibicao } from '@/lib/telefone';
 import type {
   Candidato, ContatoDoGestor, Lista, Municipio, StatusContato, Usuario,
 } from '@/lib/tipos-banco';
+// Num arquivo à parte porque a página, que roda no SERVIDOR, também precisa
+// deles — e o que sai de um módulo 'use client' chega lá como referência, não
+// como valor. Ver o cabeçalho de `recortes.ts`.
+import { RECORTES, type Contagens, type Filtros } from './recortes';
 
 const ROTULO_STATUS: Record<StatusContato, string> = {
   novo: 'Novo',
@@ -34,39 +38,6 @@ const COR_STATUS: Record<StatusContato, 'neutro' | 'acento' | 'quente' | 'frio' 
   encaminhado: 'quente',
   sem_resposta: 'neutro',
   perdido: 'neutro',
-};
-
-/**
- * Atalhos de leitura, na ordem em que o gestor pergunta.
- *
- * "Pendente" não é um status do banco: é a pergunta que o gestor faz de manhã —
- * quem já foi chamado e ainda não deu resposta. No banco isso é
- * `em_atendimento` com a primeira mensagem já enviada.
- *
- * ⚠️ As chaves são as mesmas que `contatos_do_gestor` conhece. Acrescentar uma
- * aqui sem acrescentar lá faz a aba nova cair silenciosamente em "todos".
- */
-export const RECORTES = [
-  { chave: 'todos', rotulo: 'Todos' },
-  { chave: 'pendentes', rotulo: 'Aguardando resposta' },
-  { chave: 'na_fila', rotulo: 'Ainda não chamados' },
-  { chave: 'autorizou', rotulo: 'Autorizaram' },
-  { chave: 'pediu_saida', rotulo: 'Pediram saída' },
-  { chave: 'kit', rotulo: 'Kit a entregar' },
-] as const;
-
-export type Recorte = (typeof RECORTES)[number]['chave'];
-export type Contagens = Record<Recorte, number>;
-
-export type Filtros = {
-  recorte: Recorte;
-  atendente: string;
-  candidato: string;
-  municipio: string;
-  origem: string;
-  /** Id da lista, ou `'sem'` para quem não veio de lista nenhuma. */
-  lista: string;
-  busca: string;
 };
 
 const dataHora = (iso: string | null) =>

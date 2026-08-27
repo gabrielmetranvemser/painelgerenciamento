@@ -5,7 +5,12 @@ import { rotas } from '@/lib/links-internos';
 import type {
   Candidato, ContatoDoGestor, Lista, Municipio, Usuario,
 } from '@/lib/tipos-banco';
-import { RECORTES, TabelaContatos, type Contagens, type Filtros, type Recorte } from './tabela';
+// ⚠️ Do arquivo de cliente vem SÓ o componente. Constante importada de um
+// módulo 'use client' chega aqui como referência para o navegador, não como
+// valor: foi assim que `RECORTES.some is not a function` derrubou esta tela em
+// produção. Ver o cabeçalho de `recortes.ts`.
+import { TabelaContatos } from './tabela';
+import { ehRecorte, type Contagens, type Filtros } from './recortes';
 
 export const metadata: Metadata = { title: 'Contatos' };
 export const dynamic = 'force-dynamic';
@@ -45,7 +50,7 @@ export default async function PaginaContatos({
   // SERVIDOR fazer o recorte. De brinde, a tela filtrada vira um link que o
   // gestor manda para alguém — e o botão "voltar" do navegador funciona.
   const filtros: Filtros = {
-    recorte: (RECORTES.some((r) => r.chave === q.recorte) ? q.recorte : 'todos') as Recorte,
+    recorte: ehRecorte(q.recorte) ? q.recorte : 'todos',
     atendente: q.atendente ?? '',
     candidato: q.candidato ?? '',
     municipio: q.municipio ?? '',
