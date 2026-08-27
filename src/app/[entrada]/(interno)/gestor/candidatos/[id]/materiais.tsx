@@ -18,10 +18,12 @@ const TIPOS: { valor: TipoMaterial; rotulo: string; icone: React.ReactNode }[] =
 ];
 
 export function Materiais({
-  candidatoId, materiais,
+  candidatoId, materiais, previaHref,
 }: {
   candidatoId: string;
   materiais: Material[];
+  /** Endereço da prévia. Vem da página porque só ela conhece a chave da URL. */
+  previaHref: string;
 }) {
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
@@ -66,7 +68,7 @@ export function Materiais({
       {/* A pergunta que sempre chega depois de cadastrar a primeira peça: "e
           onde isso aparece?". Fica AQUI, embaixo do formulário, porque é aqui
           que ela nasce. */}
-      <ComoOMaterialChega />
+      <ComoOMaterialChega previaHref={previaHref} />
 
       {!temCanal && (
         <Aviso tom="alerta" icone={<Radio size={16} />}>

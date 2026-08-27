@@ -87,7 +87,8 @@ export default async function PaginaCandidato({
             candidatoId={c.id} nomeUrna={c.nome_urna} atendentes={atendentes}
             disponiveis={disponiveis} entrada={entrada}
           />
-          <Materiais candidatoId={c.id} materiais={(materiais ?? []) as Material[]} />
+          <Materiais candidatoId={c.id} materiais={(materiais ?? []) as Material[]}
+                     previaHref={rotas(entrada).gestorCandidatoPrevia(c.id)} />
         </div>
       </div>
     </>
