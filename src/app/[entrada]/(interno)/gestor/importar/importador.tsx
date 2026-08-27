@@ -2,13 +2,14 @@
 
 import Papa from 'papaparse';
 import { useEffect, useState, useTransition } from 'react';
-import { Download } from 'lucide-react';
-import { Aviso, Botao, Campo, Cartao } from '@/components/ui';
+import { Check, Download, Plus } from 'lucide-react';
+import { Aviso, Botao, Campo, Cartao, cx } from '@/components/ui';
 import {
   analisarLinhas, decodificarPlanilha, emBlocos, modeloCsv, sugerirMapa,
   type Analise, type MapaColunas,
 } from '@/lib/importacao';
-import type { OrigemContato } from '@/lib/tipos-banco';
+import type { OrigemContato, Usuario } from '@/lib/tipos-banco';
+import { alternarAtendenteNaLista } from '../listas/acoes';
 import {
   conferirBloco, conferirMunicipios, criarLista, finalizarLista, importarBloco,
   listasInacabadas,
@@ -32,7 +33,9 @@ const MOTIVO_LEGIVEL: Record<string, string> = {
   formato: 'não parece celular brasileiro',
 };
 
-export function Importador() {
+type Atendente = Pick<Usuario, 'id' | 'primeiro_nome'>;
+
+export function Importador({ atendentes }: { atendentes: Atendente[] }) {
   const [etapa, setEtapa] = useState<Etapa>('arquivo');
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
@@ -53,6 +56,8 @@ export function Importador() {
   const [inacabadas, setInacabadas] = useState<Inacabada[]>([]);
   const [progresso, setProgresso] = useState(0);
   const [totais, setTotais] = useState<Totais | null>(null);
+  /** A lista recém-criada, para o último passo escolher quem vai atendê-la. */
+  const [listaId, setListaId] = useState<string | null>(null);
 
   // Importação que morreu no meio deixa contatos na fila e ninguém sabendo.
   // O aviso aparece na próxima vez que alguém abre esta tela.
@@ -184,6 +189,7 @@ export function Importador() {
         }
 
         await finalizarLista(lista.id);
+        setListaId(lista.id);
         setTotais(soma);
         setEtapa('pronto');
       } catch (e) {
@@ -201,13 +207,20 @@ export function Importador() {
         <h2 className="text-lg font-semibold">Importação concluída</h2>
         <Numeros
           itens={[
-            ['Entraram na fila', totais.importados, 'text-ok'],
+            // "Entraram na base", e não "entraram na fila": a fila é de quem
+            // tem a lista marcada, e isso é o passo seguinte desta tela.
+            ['Entraram na base', totais.importados, 'text-ok'],
             ['Já estavam na base', totais.duplicados, ''],
             ['Bloqueados (pediram saída)', totais.bloqueados, 'text-alerta'],
             ['Números inválidos', analise?.invalidas ?? 0, 'text-suave'],
           ]}
         />
-        <Botao className="mt-6" onClick={() => window.location.reload()}>
+
+        {listaId && (
+          <QuemAtende listaId={listaId} rotulo={rotulo} atendentes={atendentes} />
+        )}
+
+        <Botao className="mt-6" variante="neutro" onClick={() => window.location.reload()}>
           Importar outra lista
         </Botao>
       </Cartao>
@@ -523,6 +536,83 @@ function Numeros({ itens }: { itens: [string, number, string][] }) {
           <p className="text-xs text-suave">{rotulo}</p>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * O último passo da importação: quem atende esta lista.
+ *
+ * Está AQUI, e não só na tela de Listas, porque é aqui que o gestor está
+ * pensando no assunto. A planilha entra na base sem dono, e lista sem dono não
+ * vai para fila nenhuma — os contatos ficam guardados, sem serem chamados. Sem
+ * este passo, o defeito só aparece dias depois, quando um atendente diz que a
+ * fila dele está vazia com a base cheia.
+ *
+ * Estado local, e não `router.refresh()`: atualizar a página do servidor aqui
+ * jogaria a tela de volta para o passo 1 e o gestor perderia o resumo da
+ * importação que acabou de acontecer.
+ */
+function QuemAtende({
+  listaId, rotulo, atendentes,
+}: {
+  listaId: string;
+  rotulo: string;
+  atendentes: Atendente[];
+}) {
+  const [marcados, setMarcados] = useState<string[]>([]);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, iniciar] = useTransition();
+
+  if (atendentes.length === 0) {
+    return (
+      <Aviso tom="alerta" className="mt-6">
+        Não há atendente ativo cadastrado, então esta lista ainda não vai para fila nenhuma.
+        Crie as contas em Equipe → Atendentes e volte para marcar quem atende.
+      </Aviso>
+    );
+  }
+
+  return (
+    <div className="mt-6 rounded-2xl border border-borda bg-fundo p-4">
+      <p className="text-sm font-semibold">Quem vai atender “{rotulo}”?</p>
+      <p className="mt-1 text-xs leading-relaxed text-suave">
+        Enquanto ninguém estiver marcado, estes contatos ficam guardados sem entrar na fila de
+        ninguém. Marcar duas pessoas divide a lista entre elas — sem risco de as duas falarem com
+        a mesma pessoa. Dá para mudar depois em Base → Listas.
+      </p>
+
+      <ul className="mt-3 flex flex-wrap gap-2">
+        {atendentes.map((a) => {
+          const marcado = marcados.includes(a.id);
+          return (
+            <li key={a.id}>
+              <button
+                type="button"
+                disabled={ocupado}
+                aria-pressed={marcado}
+                onClick={() => iniciar(async () => {
+                  const r = await alternarAtendenteNaLista(listaId, a.id, !marcado);
+                  if (!r.ok) { setErro(r.erro); return; }
+                  setErro(null);
+                  setMarcados((m) => (marcado ? m.filter((x) => x !== a.id) : [...m, a.id]));
+                })}
+                className={cx(
+                  'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+                  marcado
+                    ? 'border-acento/40 bg-acento/12 text-acento'
+                    : 'border-borda bg-superficie text-suave hover:border-borda-forte hover:text-texto',
+                )}
+              >
+                {marcado ? <Check size={12} /> : <Plus size={12} />}
+                {a.primeiro_nome}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      {erro && <Aviso tom="erro" className="mt-3">{erro}</Aviso>}
     </div>
   );
 }

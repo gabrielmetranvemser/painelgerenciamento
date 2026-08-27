@@ -82,6 +82,17 @@ begin
     from public.usuarios u join public.chips c on c.atendente_id = u.id
    where c.rotulo = 'Chip Trava 2';
 
+  -- Uma lista ativa para os dois, mesmo sem nenhum contato deste arquivo estar
+  -- nela: desde que cada lista tem dono, "fila vazia" e "você não está em lista
+  -- nenhuma" viraram duas recusas diferentes. Sem isto, as travas que esperam
+  -- `fila_vazia` passariam a receber `sem_lista` — e uma delas mediria a
+  -- configuração do atendente em vez da trava que ela existe para provar.
+  insert into public.listas (origem, rotulo, entregue_por, entregue_em)
+  values ('lista_fria', 'Trava Lista', 'Fornecedor de Teste', current_date);
+  insert into public.atendente_listas (atendente_id, lista_id)
+  select x.id, (select id from public.listas where rotulo = 'Trava Lista')
+    from (values (v_uid), (v_uid2)) as x(id);
+
   select teto_diario, hora_inicio, hora_fim
     into v_cfg_teto, v_cfg_ini, v_cfg_fim from public.config where id = 1;
 

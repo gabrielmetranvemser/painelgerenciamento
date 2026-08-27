@@ -4,21 +4,26 @@ import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
-  AlertTriangle, Check, CircleSlash, Clock, Flame, Loader2, MessageSquare, PackageOpen,
+  AlertTriangle, Check, CircleSlash, Clock, Flame, Layers, Loader2, MessageSquare, PackageOpen,
   Send, Siren, Snowflake, SkipForward, Star,
 } from 'lucide-react';
-import { Aviso, Avatar, Botao, Cartao, EtiquetaOrigem, Pilula, Selecao, Vidro, cx } from '@/components/ui';
+import {
+  Aviso, Avatar, Botao, Cartao, EtiquetaLista, EtiquetaOrigem, Pilula, PontoLista, Selecao,
+  Vidro, cx,
+} from '@/components/ui';
 import { guardarChip, useChipSalvo } from '@/components/chip-salvo';
+import { guardarLista, useListaSalva } from '@/components/lista-salva';
 import { ComoAgir } from '@/components/como-agir';
 import { formatarExibicao } from '@/lib/telefone';
 import {
   RESULTADOS, ROTULO_CARGO, TEXTO_MOTIVO,
   type Chip, type ContatoDaFila, type EntregaDoContato, type EtapaMsg, type FilaStatus,
-  type Municipio, type Resultado,
+  type ListaDoAtendente, type Municipio, type Resultado,
 } from '@/lib/tipos-banco';
 import {
-  carregarEntregas, consultarFila, definirMunicipio, pegarProximo, prepararMensagem,
-  pularContato, registrarAbertura, registrarResultado, sinalizarChip, type MensagemPronta,
+  carregarEntregas, carregarMinhasListas, consultarFila, definirMunicipio, pegarProximo,
+  prepararMensagem, pularContato, registrarAbertura, registrarResultado, sinalizarChip,
+  type MensagemPronta,
 } from './acoes';
 
 type Fase = 'ocioso' | 'permissao' | 'aberta' | 'entrega' | 'seguimento';
@@ -63,7 +68,8 @@ const JANELA_WA = 'whatsapp-atendimento';
 const ETAPAS_DE_ABORDAGEM: EtapaMsg[] = ['permissao', 'material', 'convite_grupo'];
 
 export function Atendimento({
-  primeiroNome, chips, municipios, filaInicial, aguardandoInicial, rotaMeusContatos,
+  primeiroNome, chips, municipios, filaInicial, aguardandoInicial, listasIniciais,
+  rotaMeusContatos,
 }: {
   primeiroNome: string;
   chips: Chip[];
@@ -71,10 +77,15 @@ export function Atendimento({
   filaInicial: FilaStatus | null;
   /** Conversas abertas esperando resposta, no carregamento da página. */
   aguardandoInicial: number;
+  /** As listas que este atendente atende, com o que falta em cada uma. */
+  listasIniciais: ListaDoAtendente[];
   rotaMeusContatos: string;
 }) {
   const [chipEscolhido, setChipEscolhido] = useState<string | null>(null);
   const chipSalvo = useChipSalvo();
+  const [listas, setListas] = useState<ListaDoAtendente[]>(listasIniciais);
+  const [listaEscolhida, setListaEscolhida] = useState<string | null>(null);
+  const listaSalva = useListaSalva();
   const [fila, setFila] = useState<FilaStatus | null>(filaInicial);
   const [contato, setContato] = useState<ContatoDaFila | null>(null);
   const [mensagem, setMensagem] = useState<MensagemPronta | null>(null);
@@ -103,17 +114,47 @@ export function Atendimento({
   const morto = chipSalvo ? chips.find((c) => c.id === chipSalvo && c.status === 'morto') : undefined;
   const reserva = vivos.find((c) => c.papel === 'reserva') ?? vivos[0];
 
+  /**
+   * A lista escolhida, ou `null` para "todas".
+   *
+   * A escolha guardada só vale se a lista ainda for dele: o gestor pode ter
+   * tirado a lista ou pausado ela desde ontem, e insistir num id morto faria a
+   * tela pedir contato de uma lista que o servidor recusa a cada clique.
+   */
+  const listaValida = (id: string | null) => (id && listas.some((l) => l.id === id) ? id : null);
+  const listaId = listaValida(listaEscolhida) ?? listaValida(listaSalva);
+  const lista = listas.find((l) => l.id === listaId);
+
   function trocarChip(id: string) {
     setChipEscolhido(id);
     guardarChip(id);
   }
 
-  const atualizarFila = useCallback(async () => {
+  /**
+   * Reconsulta a fila.
+   *
+   * O parâmetro existe por causa da troca de lista: dentro do mesmo clique, o
+   * `listaId` fechado nesta função ainda é o ANTERIOR — o React só recalcula na
+   * renderização seguinte. Quem troca passa o novo id na mão; o resto chama sem
+   * argumento e usa o atual.
+   */
+  const atualizarFila = useCallback(async (lista: string | null = listaId) => {
     if (!chipId) return;
-    const f = await consultarFila(chipId);
+    const [f, ls] = await Promise.all([consultarFila(chipId, lista), carregarMinhasListas()]);
     setFila(f);
     setEspera(f.segundos_espera);
-  }, [chipId]);
+    // As contagens por lista envelhecem junto com a fila — inclusive por causa
+    // do trabalho dos colegas que atendem a mesma lista.
+    setListas(ls);
+  }, [chipId, listaId]);
+
+  function trocarLista(id: string | null) {
+    setListaEscolhida(id);
+    guardarLista(id);
+    // Reconsulta no próprio clique, e não num efeito: os contadores do topo
+    // passam a ser os daquela lista na hora.
+    iniciar(async () => { await atualizarFila(id); });
+  }
 
   // Contagem regressiva do intervalo entre conversas.
   useEffect(() => {
@@ -144,7 +185,7 @@ export function Atendimento({
     // um efeito (a chegada pelo `?novo=`) sem disparar renderização em cascata.
     iniciar(async () => {
       setErro(null);
-      const r = await pegarProximo(chipId);
+      const r = await pegarProximo(chipId, listaId);
       setFila(r.fila);
       setEspera(r.fila.segundos_espera);
       if (!r.ok) {
@@ -380,6 +421,12 @@ export function Atendimento({
           aoSinalizar={() => iniciar(async () => { await sinalizarChip(chipId); await atualizarFila(); })}
         />
 
+        <FaixaDeListas
+          listas={listas} escolhida={listaId}
+          bloqueada={ocupado || fase !== 'ocioso'}
+          aoEscolher={trocarLista}
+        />
+
         {morto && (
           <Aviso tom="erro" icone={<CircleSlash size={16} />}>
             <strong>Seu {morto.rotulo} foi desativado.</strong>{' '}
@@ -398,7 +445,13 @@ export function Atendimento({
           </Aviso>
         )}
 
-        {travado && <Travado fila={fila} espera={espera} />}
+        {travado && (
+          <Travado
+            fila={fila} espera={espera}
+            listaEscolhida={lista?.rotulo ?? null}
+            aoVerTodas={() => trocarLista(null)}
+          />
+        )}
 
         {!travado && fase === 'ocioso' && (
           <Cartao className="px-6 py-14 text-center" elevado>
@@ -558,7 +611,15 @@ function Contador({ rotulo, valor, cor, icone }: {
 
 /* ── Estado travado ──────────────────────────────────────────────────────── */
 
-function Travado({ fila, espera }: { fila: FilaStatus; espera: number }) {
+function Travado({
+  fila, espera, listaEscolhida, aoVerTodas,
+}: {
+  fila: FilaStatus;
+  espera: number;
+  /** O nome da lista sendo trabalhada, quando o atendente escolheu uma só. */
+  listaEscolhida: string | null;
+  aoVerTodas: () => void;
+}) {
   const total = fila.intervalo_seg || 1;
   const volta = 2 * Math.PI * 52;
   const restante = Math.max(0, Math.min(1, espera / total));
@@ -603,6 +664,27 @@ function Travado({ fila, espera }: { fila: FilaStatus; espera: number }) {
             <p className="mt-2 text-sm text-suave">
               Foram {fila.enviados_hoje} conversas hoje. Amanhã tem mais.
             </p>
+          )}
+          {fila.motivo === 'sem_lista' && (
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-suave">
+              A base tem contatos — eles é que estão em listas que ainda não são suas. Quem
+              escolhe é o gestor: peça a ele para marcar suas listas.
+            </p>
+          )}
+          {/* Fila vazia trabalhando UMA lista quase nunca quer dizer "acabou o
+              dia": quer dizer que aquela lista acabou. O caminho de volta tem
+              de estar aqui, e não escondido lá em cima. */}
+          {(fila.motivo === 'fila_vazia' || fila.motivo === 'lista_nao_e_sua') && listaEscolhida && (
+            <>
+              <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-suave">
+                {fila.motivo === 'lista_nao_e_sua'
+                  ? `A lista “${listaEscolhida}” não está mais com você.`
+                  : `Não há mais ninguém esperando em “${listaEscolhida}”. Suas outras listas continuam de pé.`}
+              </p>
+              <Botao className="mt-5" variante="neutro" onClick={aoVerTodas}>
+                <Layers size={15} /> Voltar para todas as listas
+              </Botao>
+            </>
           )}
         </>
       )}
@@ -653,7 +735,15 @@ function CartaoAtendimento({
             {contato.municipio && ` · ${contato.municipio}`}
           </p>
         </div>
-        <EtiquetaOrigem origem={contato.origem} />
+        <div className="flex flex-wrap items-center gap-2">
+          <EtiquetaOrigem origem={contato.origem} />
+          {/* De qual lista veio. Sem isto, quem atende três listas não sabe se
+              está falando com quem pediu o kit ou com quem um apoiador
+              indicou — e o tom da conversa é outro. */}
+          {contato.lista_id && contato.lista && (
+            <EtiquetaLista id={contato.lista_id} nome={contato.lista} />
+          )}
+        </div>
       </header>
 
       {fase === 'entrega' && (
@@ -924,5 +1014,101 @@ function Regras({ teto, inicio, fim }: { teto: number; inicio: number; fim: numb
         Escreva como você fala. Não prometa nada a ninguém e não discuta política com quem responde mal.
       </p>
     </Cartao>
+  );
+}
+
+/* ── As listas que este atendente atende ─────────────────────────────────── */
+
+/**
+ * Duas formas de trabalhar, na mesma faixa.
+ *
+ * AUTOMÁTICO (o padrão, "Todas"): a fila mistura as listas do atendente na
+ * ordem de sempre — quente antes de frio, mais antigo primeiro — e cada contato
+ * chega com a etiqueta da lista de onde veio.
+ *
+ * MANUAL: ele escolhe uma lista e só recebe dela. É o que serve para "hoje de
+ * manhã eu faço o bairro tal", sem depender de o gestor remontar a atribuição.
+ *
+ * A troca fica travada com um contato na mão de propósito: mudar a fila no meio
+ * de um atendimento não muda o contato que já está na tela, e um botão que
+ * parece não fazer nada é pior que um botão desabilitado com o motivo escrito.
+ */
+function FaixaDeListas({
+  listas, escolhida, bloqueada, aoEscolher,
+}: {
+  listas: ListaDoAtendente[];
+  escolhida: string | null;
+  bloqueada: boolean;
+  aoEscolher: (id: string | null) => void;
+}) {
+  // Sem lista nenhuma não há o que escolher — e o motivo `sem_lista` já explica
+  // a situação com todas as letras no lugar do cartão de espera.
+  if (listas.length === 0) return null;
+
+  const total = listas.reduce((n, l) => n + l.na_fila, 0);
+  const motivo = bloqueada ? 'Termine o contato atual para trocar de lista.' : undefined;
+
+  return (
+    <section aria-label="Suas listas" className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="mr-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-suave">
+          Suas listas
+        </p>
+
+        <BotaoDeLista
+          ativo={escolhida === null} bloqueada={bloqueada} titulo={motivo}
+          contagem={total} aoClicar={() => aoEscolher(null)}
+        >
+          <Layers size={12} /> Todas
+        </BotaoDeLista>
+
+        {listas.map((l) => (
+          <BotaoDeLista
+            key={l.id} ativo={escolhida === l.id} bloqueada={bloqueada} titulo={motivo}
+            contagem={l.na_fila} aoClicar={() => aoEscolher(l.id)}
+          >
+            <PontoLista id={l.id} />
+            <span className="max-w-[12rem] truncate">{l.rotulo}</span>
+          </BotaoDeLista>
+        ))}
+      </div>
+
+      <p className="text-xs leading-relaxed text-suave">
+        {escolhida === null
+          ? 'A fila mistura todas as suas listas, dos mais antigos para os mais novos. Cada contato chega com a etiqueta de onde veio.'
+          : 'Você está atendendo só esta lista. Volte para “Todas” quando quiser a fila inteira.'}
+      </p>
+    </section>
+  );
+}
+
+function BotaoDeLista({
+  children, contagem, ativo, bloqueada, titulo, aoClicar,
+}: {
+  children: React.ReactNode;
+  contagem: number;
+  ativo: boolean;
+  bloqueada: boolean;
+  titulo?: string;
+  aoClicar: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={aoClicar}
+      disabled={bloqueada}
+      title={titulo}
+      aria-pressed={ativo}
+      className={cx(
+        'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+        'disabled:cursor-not-allowed disabled:opacity-50',
+        ativo
+          ? 'border-acento/40 bg-acento/12 text-acento'
+          : 'border-borda bg-superficie text-suave enabled:hover:border-borda-forte enabled:hover:text-texto',
+      )}
+    >
+      {children}
+      <span className="tabular-nums opacity-70">{contagem.toLocaleString('pt-BR')}</span>
+    </button>
   );
 }

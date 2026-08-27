@@ -6,6 +6,7 @@ import { KeyRound, Power, UserPlus } from 'lucide-react';
 import { Avatar, Aviso, Botao, Campo, Cartao, Pilula, Selecao } from '@/components/ui';
 import type { Candidato, Usuario } from '@/lib/tipos-banco';
 import { ChapaDoAtendente, type ItemChapa } from './chapa-do-atendente';
+import { ListasDoAtendente, type ItemLista } from './listas-do-atendente';
 import { alternarAtivo, criarAtendente, redefinirSenha } from './acoes';
 
 function BotaoCriar() {
@@ -52,12 +53,14 @@ function Senha({ email, senha, entrada }: { email: string; senha: string; entrad
 }
 
 export function GerenciarAtendentes({
-  usuarios, entrada, candidatos, chapas,
+  usuarios, entrada, candidatos, chapas, listas, listasPorAtendente,
 }: {
   usuarios: Usuario[];
   entrada: string;
   candidatos: Candidato[];
   chapas: Record<string, ItemChapa[]>;
+  listas: ItemLista[];
+  listasPorAtendente: Record<string, string[]>;
 }) {
   const [estado, acao] = useActionState(criarAtendente, null);
   const [ocupado, iniciar] = useTransition();
@@ -128,11 +131,18 @@ export function GerenciarAtendentes({
           </div>
 
           {u.papel === 'atendente' && (
-            <ChapaDoAtendente
-              atendenteId={u.id}
-              chapa={chapas[u.id] ?? []}
-              candidatos={candidatos}
-            />
+            <>
+              <ChapaDoAtendente
+                atendenteId={u.id}
+                chapa={chapas[u.id] ?? []}
+                candidatos={candidatos}
+              />
+              <ListasDoAtendente
+                atendenteId={u.id}
+                listas={listas}
+                marcadas={listasPorAtendente[u.id] ?? []}
+              />
+            </>
           )}
           </Cartao>
         ))}

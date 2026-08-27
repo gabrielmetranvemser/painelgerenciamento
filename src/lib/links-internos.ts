@@ -22,6 +22,7 @@ export function rotas(entrada: string) {
     gestorCandidato: (id: string) => `${raiz}/gestor/candidatos/${id}`,
     gestorContatos: `${raiz}/gestor/contatos`,
     gestorEntregas: `${raiz}/gestor/entregas`,
+    gestorListas: `${raiz}/gestor/listas`,
     gestorImportar: `${raiz}/gestor/importar`,
     gestorAtendentes: `${raiz}/gestor/atendentes`,
     gestorChips: `${raiz}/gestor/chips`,

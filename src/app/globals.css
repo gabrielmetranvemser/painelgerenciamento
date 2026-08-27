@@ -43,6 +43,25 @@
   --quente:         #fb923c;   /* fila quente */
   --frio:           #7dd3fc;   /* fila fria  */
 
+  /* ── Cores das listas ───────────────────────────────────────────────────
+   * Estas NÃO significam nada. São só identificadores: um ponto colorido ao
+   * lado do nome da lista, para o atendente que atende três delas reconhecer
+   * de qual veio o contato sem ler.
+   *
+   * ⚠️ Por isso ficam FORA da paleta com significado (lima = positivo, âmbar =
+   * fila quente, azul-gelo = fila fria, rosa = perigo) e por isso só aparecem
+   * como ponto, nunca como preenchimento de etiqueta. Uma lista pintada de
+   * âmbar diria "fila quente" para quem lê a tela o dia inteiro.
+   *
+   * Seis bastam: o nome está sempre do lado, então a cor só precisa separar
+   * vizinhos, não identificar sozinha. */
+  --lista-1:        #a78bfa;   /* violeta   */
+  --lista-2:        #2dd4bf;   /* turquesa  */
+  --lista-3:        #e879f9;   /* fúcsia    */
+  --lista-4:        #818cf8;   /* índigo    */
+  --lista-5:        #c8a27a;   /* areia     */
+  --lista-6:        #94a3b8;   /* cinza-azulado */
+
   --brilho:         0 1px 0 0 rgba(255, 255, 255, 0.06) inset;
   --sombra:         0 1px 2px -1px rgb(0 0 0 / 0.7), 0 12px 32px -16px rgb(0 0 0 / 0.9);
   --sombra-alta:    0 2px 4px -2px rgb(0 0 0 / 0.7), 0 24px 56px -24px rgb(0 0 0 / 0.95);

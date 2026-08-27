@@ -21,6 +21,7 @@ const TABELAS = {
   alertas: 'Alerta', captacoes: 'Captacao',
   candidatos: 'Candidato', materiais: 'Material',
   atendente_candidatos: 'AtendenteCandidato', contato_candidato: 'ContatoCandidato',
+  atendente_listas: 'AtendenteLista',
   chamados: 'Chamado', chamado_mensagens: 'ChamadoMensagem', chamado_anexos: 'ChamadoAnexo',
 };
 

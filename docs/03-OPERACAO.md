@@ -177,6 +177,21 @@ Ao subir a planilha, o sistema mostra antes de importar:
 
 Só importa após confirmação. A lista fria **não importa sem o campo "lista entregue por"**.
 
+**Último passo da importação: quem atende.** A planilha entra na base sem dono, e
+lista sem dono não vai para fila nenhuma — os contatos ficam guardados, sem
+serem chamados. A própria tela de importação pergunta quem vai atender aquela
+lista; dá para mudar depois em **Base → Listas**, ou pelo cartão de cada pessoa
+em **Equipe → Atendentes**.
+
+Em Listas o gestor ainda renomeia e **pausa** uma lista. Pausada, ela sai da fila
+de todo mundo na hora e os contatos continuam no banco, intactos — é o botão
+para "essa planilha era ruim" ou "esse bairro fica para depois", sem apagar
+nada. Quem já está com um contato dela na mão termina a conversa.
+
+O número em âmbar ao lado de **Atendentes**, no menu, é quanta gente ativa está
+sem lista nenhuma. Enquanto ele não for zero, tem atendente sentado com a fila
+parada.
+
 ### Acompanhamento (todo dia)
 - contatos falados x pendentes
 - autorizações, saídas, sem resposta

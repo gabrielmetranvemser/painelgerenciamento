@@ -29,7 +29,7 @@ export type PapelChip = 'ativo' | 'reserva';
 export type MotivoFila =
   | 'ok' | 'termo_nao_aceito' | 'usuario_inativo' | 'chip_nao_e_seu'
   | 'chip_indisponivel' | 'dia_bloqueado' | 'fora_de_horario'
-  | 'teto_atingido' | 'intervalo' | 'fila_vazia';
+  | 'teto_atingido' | 'intervalo' | 'fila_vazia' | 'sem_lista' | 'lista_nao_e_sua';
 
 /** Resultados que o atendente pode marcar. */
 export const RESULTADOS = ['autorizou', 'pediu_saida', 'invalido', 'quer_ajudar', 'encaminhado'] as const;
@@ -104,6 +104,16 @@ export type Lista = {
   concluida_em: string | null;
   criado_por: string | null;
   criado_em: string;
+};
+
+/**
+ * `v_listas`: a lista com os números que a tela do gestor mostra. Contar no
+ * banco, e não no navegador, porque a base tem dezenas de milhares de linhas.
+ */
+export type ListaComContagem = Lista & {
+  contatos_total: number;
+  contatos_na_fila: number;
+  contatos_falados: number;
 };
 
 export type Contato = {
@@ -302,6 +312,19 @@ export type AtendenteCandidato = {
   vaga: number;
   /** O citado na primeira mensagem. No máximo um por atendente. */
   principal: boolean;
+  criado_em: string;
+};
+
+/**
+ * Quais listas cada atendente atende.
+ *
+ * Ausência de linha NÃO quer dizer "recebe tudo": quer dizer "não recebe nada
+ * de lista". Quem se cadastrou sozinho (`contatos.lista_id is null`) continua
+ * caindo para todo mundo — ver a migration `listas_por_atendente`.
+ */
+export type AtendenteLista = {
+  atendente_id: string;
+  lista_id: string;
   criado_em: string;
 };
 
@@ -563,7 +586,18 @@ export type ContatoDaFila = {
   status: StatusContato;
   municipio: string | null;
   municipio_id: number | null;
+  /** De que lista este contato veio. Nulo em quem se cadastrou sozinho. */
+  lista_id: string | null;
+  lista: string | null;
   claim_expira_em: string;
+};
+
+/** Uma lista que o atendente atende, com quanto ainda falta nela. */
+export type ListaDoAtendente = {
+  id: string;
+  rotulo: string;
+  origem: OrigemContato;
+  na_fila: number;
 };
 
 export type RespostaFila =
@@ -613,4 +647,8 @@ export const TEXTO_MOTIVO: Record<MotivoFila, string> = {
   teto_atingido: 'Você já fez todas as conversas de hoje. Pare por aqui.',
   intervalo: 'Aguarde o intervalo entre conversas.',
   fila_vazia: 'Não há mais contatos na fila.',
+  // Curto de propósito: no painel esta frase é o TÍTULO do cartão de espera, e
+  // o detalhe vem no parágrafo de baixo.
+  sem_lista: 'Você ainda não está em nenhuma lista.',
+  lista_nao_e_sua: 'Essa lista não é sua. Volte para “Todas as listas”.',
 };

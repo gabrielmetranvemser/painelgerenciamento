@@ -7,7 +7,7 @@ import { hashTelefone } from '@/lib/hmac';
 import { montarTexto, primeiroNomeDe } from '@/lib/mensagem-etapas';
 import { normalizarTelefone, urlWhatsApp, type MotivoInvalido } from '@/lib/telefone';
 import type {
-  CargoEleitoral, EntregaDoContato, EtapaMsg, FilaStatus, OrigemContato,
+  CargoEleitoral, EntregaDoContato, EtapaMsg, FilaStatus, ListaDoAtendente, OrigemContato,
   RespostaAbertura, RespostaAdicionarContato, RespostaFila, RespostaResultado, Resultado,
 } from '@/lib/tipos-banco';
 
@@ -31,19 +31,46 @@ export type CandidatoDaChapa = {
   principal: boolean;
 };
 
-/** Pede o próximo contato. Todas as travas são revalidadas no servidor. */
-export async function pegarProximo(chipId: string): Promise<RespostaFila> {
+/**
+ * Pede o próximo contato. Todas as travas são revalidadas no servidor.
+ *
+ * `listaId` é a lista que o atendente escolheu trabalhar; nulo mistura todas as
+ * listas dele. Quem confere se aquela lista é mesmo dele é o banco — passar o
+ * id daqui não autoriza nada.
+ */
+export async function pegarProximo(chipId: string, listaId?: string | null): Promise<RespostaFila> {
   const supabase = await criarClienteServidor();
-  const { data, error } = await supabase.rpc('pegar_proximo_contato', { p_chip_id: chipId });
+  const { data, error } = await supabase.rpc('pegar_proximo_contato', {
+    p_chip_id: chipId,
+    p_lista_id: listaId ?? null,
+  });
   if (error) throw new Error(error.message);
   return data as RespostaFila;
 }
 
-export async function consultarFila(chipId: string): Promise<FilaStatus> {
+export async function consultarFila(chipId: string, listaId?: string | null): Promise<FilaStatus> {
   const supabase = await criarClienteServidor();
-  const { data, error } = await supabase.rpc('fila_status', { p_chip_id: chipId });
+  const { data, error } = await supabase.rpc('fila_status', {
+    p_chip_id: chipId,
+    p_lista_id: listaId ?? null,
+  });
   if (error) throw new Error(error.message);
   return data as FilaStatus;
+}
+
+/**
+ * As listas deste atendente, com quantos contatos ainda esperam em cada uma.
+ *
+ * Serve às duas formas de trabalhar: no automático mostra QUAIS listas ele
+ * atende (a fila mistura todas); no manual é o cardápio de onde ele escolhe
+ * uma. Os números vêm do mesmo critério que a fila usa para entregar — contador
+ * que promete contato e botão que não entrega é o defeito clássico daqui.
+ */
+export async function carregarMinhasListas(): Promise<ListaDoAtendente[]> {
+  const supabase = await criarClienteServidor();
+  const { data, error } = await supabase.rpc('minhas_listas');
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ListaDoAtendente[];
 }
 
 type RespostaPreparar = {

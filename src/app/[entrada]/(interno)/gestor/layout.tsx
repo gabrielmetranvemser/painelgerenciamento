@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import {
-  Contact, FileBarChart, Gauge, Headphones, LifeBuoy, LogOut, MessageSquareText,
+  Contact, FileBarChart, Gauge, Headphones, Layers, LifeBuoy, LogOut, MessageSquareText,
   PackageOpen, Settings, Smartphone, Upload, Users, Vote,
 } from 'lucide-react';
 import { criarClienteServidor } from '@/lib/supabase/server';
@@ -28,10 +28,16 @@ export default async function LayoutGestor({
   // O contador do menu: o que está esperando alguém olhar. Sem ele, o gestor
   // só descobre um risco jurídico se lembrar de abrir a tela.
   const supabase = await criarClienteServidor();
-  const { data: resumo } = await supabase
-    .from('v_resumo')
-    .select('chamados_abertos, juridicos_abertos, alertas_abertos')
-    .single();
+  const [{ data: resumo }, { count: semLista }] = await Promise.all([
+    supabase
+      .from('v_resumo')
+      .select('chamados_abertos, juridicos_abertos, alertas_abertos')
+      .single(),
+    // Atendente ativo sem nenhuma lista não recebe contato de lista nenhuma —
+    // ele fica sentado o turno inteiro achando que a base acabou. O número no
+    // menu é o que faz o gestor descobrir isso antes do atendente.
+    supabase.from('v_atendentes_sem_lista').select('id', { count: 'exact', head: true }),
+  ]);
 
   const chamados = resumo?.chamados_abertos ?? 0;
   const juridicos = resumo?.juridicos_abertos ?? 0;
@@ -65,13 +71,19 @@ export default async function LayoutGestor({
     {
       titulo: 'Equipe',
       itens: [
-        { href: r.gestorAtendentes, rotulo: 'Atendentes', icone: <Users size={15} /> },
+        {
+          href: r.gestorAtendentes,
+          rotulo: 'Atendentes',
+          icone: <Users size={15} />,
+          aviso: semLista ?? 0,
+        },
         { href: r.gestorChips, rotulo: 'Números', icone: <Smartphone size={15} /> },
       ],
     },
     {
       titulo: 'Base',
       itens: [
+        { href: r.gestorListas, rotulo: 'Listas', icone: <Layers size={15} /> },
         { href: r.gestorImportar, rotulo: 'Importar', icone: <Upload size={15} /> },
         { href: r.gestorConfiguracao, rotulo: 'Configuração', icone: <Settings size={15} /> },
       ],
