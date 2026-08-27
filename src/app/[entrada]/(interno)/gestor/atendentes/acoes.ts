@@ -78,3 +78,63 @@ export async function redefinirSenha(id: string): Promise<{ ok: boolean; senha?:
   const { error } = await supabase.auth.admin.updateUserById(id, { password: senha });
   return error ? { ok: false } : { ok: true, senha };
 }
+
+export type ResultadoRenomear = { ok: true } | { ok: false; erro: string };
+
+/**
+ * Troca o primeiro nome de quem já está cadastrado.
+ *
+ * ⚠️ Não é só rótulo de tela: é o nome que a PESSOA DO OUTRO LADO lê. A
+ * primeira mensagem diz "Aqui é o Lucas", e a partir do próximo envio ela passa
+ * a dizer o nome novo — quem já foi abordado continua com o antigo no histórico
+ * da conversa dele, e é por isso que a tela avisa antes.
+ *
+ * O limite de 2 a 40 caracteres é `check` da tabela; aqui a validação existe
+ * para o erro sair em português em vez de "violates check constraint".
+ */
+export async function renomearAtendente(id: string, primeiroNome: string): Promise<ResultadoRenomear> {
+  await exigirGestorOuFalhar();
+
+  const nome = primeiroNome.trim();
+  if (nome.length < 2) return { ok: false, erro: 'Escreva o primeiro nome (pelo menos 2 letras).' };
+  if (nome.length > 40) return { ok: false, erro: 'Nome muito longo (máximo 40 caracteres).' };
+
+  const supabase = criarClienteAdmin();
+  const { error } = await supabase.from('usuarios').update({ primeiro_nome: nome }).eq('id', id);
+  if (error) return { ok: false, erro: error.message };
+
+  revalidatePath('/gestor/atendentes');
+  return { ok: true };
+}
+
+/**
+ * O e-mail de cada conta, que é por onde a pessoa entra.
+ *
+ * ⚠️ Ele mora em `auth.users`, não em `public.usuarios` — a tela do gestor não
+ * tinha como mostrá-lo, e quem perdia o e-mail de um atendente ficava sem saber
+ * qual conta redefinir.
+ *
+ * `listUsers` vem paginado e o padrão é 50 por página: com a equipe crescendo,
+ * pedir uma página só faria os últimos sumirem da tela em silêncio — o mesmo
+ * defeito do corte de 1.000 linhas do PostgREST. Por isso o laço, que avança
+ * enquanto vier página cheia.
+ */
+export async function emailsDasContas(): Promise<Record<string, string>> {
+  await exigirGestorOuFalhar();
+  const supabase = criarClienteAdmin();
+
+  const POR_PAGINA = 200;
+  const emails: Record<string, string> = {};
+
+  for (let pagina = 1; pagina <= 50; pagina++) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page: pagina, perPage: POR_PAGINA });
+    if (error) throw new Error(error.message);
+
+    for (const u of data.users) {
+      if (u.email) emails[u.id] = u.email;
+    }
+    if (data.users.length < POR_PAGINA) break;
+  }
+
+  return emails;
+}

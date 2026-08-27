@@ -1,13 +1,81 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useActionState, useState, useTransition } from 'react';
 import { useFormStatus } from 'react-dom';
-import { KeyRound, Power, UserPlus } from 'lucide-react';
+import { Check, KeyRound, Pencil, Power, UserPlus } from 'lucide-react';
 import { Avatar, Aviso, Botao, Campo, Cartao, Pilula, Selecao } from '@/components/ui';
 import type { Candidato, Usuario } from '@/lib/tipos-banco';
 import { ChapaDoAtendente, type ItemChapa } from './chapa-do-atendente';
 import { ListasDoAtendente, type ItemLista } from './listas-do-atendente';
-import { alternarAtivo, criarAtendente, redefinirSenha } from './acoes';
+import { alternarAtivo, criarAtendente, redefinirSenha, renomearAtendente } from './acoes';
+
+/**
+ * O nome, e o lápis que troca.
+ *
+ * ⚠️ Não é rótulo de tela: é o nome que a pessoa do outro lado lê na mensagem
+ * ("Aqui é o Lucas"). Por isso o aviso embaixo do campo — trocar aqui muda o
+ * que sai daqui para a frente, e não o que já foi enviado.
+ */
+function Nome({ usuario }: { usuario: Usuario }) {
+  const [editando, setEditando] = useState(false);
+  const [nome, setNome] = useState(usuario.primeiro_nome);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, iniciar] = useTransition();
+  const router = useRouter();
+
+  if (!editando) {
+    return (
+      <p className="flex items-center gap-2 text-sm font-semibold">
+        <span className="truncate">{usuario.primeiro_nome}</span>
+        {usuario.papel === 'gestor' && <Pilula cor="acento">gestor</Pilula>}
+        <button type="button" title="Trocar o nome"
+                onClick={() => { setNome(usuario.primeiro_nome); setEditando(true); }}
+                className="shrink-0 text-suave transition-colors hover:text-texto">
+          <Pencil size={12} />
+        </button>
+      </p>
+    );
+  }
+
+  return (
+    <form
+      className="space-y-1.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        iniciar(async () => {
+          const r = await renomearAtendente(usuario.id, nome);
+          if (r.ok) { setErro(null); setEditando(false); router.refresh(); } else setErro(r.erro);
+        });
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <input
+          autoFocus
+          value={nome}
+          onChange={(e) => setNome(e.target.value)}
+          onKeyDown={(e) => {
+            // Esc desfaz: quem abriu por engano não fica preso entre salvar um
+            // nome errado e recarregar a página.
+            if (e.key !== 'Escape') return;
+            setNome(usuario.primeiro_nome);
+            setErro(null);
+            setEditando(false);
+          }}
+          aria-label="Primeiro nome"
+          className="w-40 rounded-xl border border-borda-forte bg-superficie-alta px-3 py-1.5 text-sm font-semibold text-texto"
+        />
+        <Botao type="submit" tamanho="p" disabled={ocupado}><Check size={13} /> Salvar</Botao>
+      </div>
+      {erro
+        ? <p className="text-xs text-perigo">{erro}</p>
+        : <p className="text-xs leading-relaxed text-suave">
+            É o nome que aparece na mensagem que a pessoa recebe. Vale das próximas mensagens em
+            diante; as já enviadas ficam como foram.
+          </p>}
+    </form>
+  );
+}
 
 function BotaoCriar() {
   const { pending } = useFormStatus();
@@ -53,7 +121,7 @@ function Senha({ email, senha, entrada }: { email: string; senha: string; entrad
 }
 
 export function GerenciarAtendentes({
-  usuarios, entrada, candidatos, chapas, listas, listasPorAtendente,
+  usuarios, entrada, candidatos, chapas, listas, listasPorAtendente, emails,
 }: {
   usuarios: Usuario[];
   entrada: string;
@@ -61,6 +129,8 @@ export function GerenciarAtendentes({
   chapas: Record<string, ItemChapa[]>;
   listas: ItemLista[];
   listasPorAtendente: Record<string, string[]>;
+  /** id da conta → e-mail de acesso. Vem de `auth.users`, não de `usuarios`. */
+  emails: Record<string, string>;
 }) {
   const [estado, acao] = useActionState(criarAtendente, null);
   const [ocupado, iniciar] = useTransition();
@@ -105,9 +175,11 @@ export function GerenciarAtendentes({
           <div className="flex flex-wrap items-center gap-3 px-5 py-4">
             <Avatar nome={u.primeiro_nome} fotoUrl={u.foto_url} tamanho="m" />
             <div className="mr-auto min-w-0">
-              <p className="flex items-center gap-2 text-sm font-semibold">
-                {u.primeiro_nome}
-                {u.papel === 'gestor' && <Pilula cor="acento">gestor</Pilula>}
+              <Nome usuario={u} />
+              <p className="truncate text-xs text-suave">
+                {/* O e-mail é por onde a pessoa entra. Sem ele na tela, quem
+                    esquecia qual conta era de quem redefinia a senha errada. */}
+                {emails[u.id] ?? <span className="text-tenue">(sem e-mail de acesso)</span>}
               </p>
               <p className="text-xs text-suave">
                 {u.termo_aceito_em
