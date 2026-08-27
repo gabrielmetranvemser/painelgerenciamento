@@ -1,11 +1,17 @@
 /**
- * Valida TODOS os textos de mensagem que estão no banco contra o validador de
- * blocos travados.
+ * Passa TODOS os textos de mensagem que estão no banco pelo validador.
  *
- * O editor do gestor já valida no salvamento, mas isso não cobre texto que
- * entrou por migration nem regra que mudou depois. Se o validador ficar mais
- * exigente e ninguém revalidar o que já está gravado, o atendente descobre o
- * problema no meio do turno — com a mensagem travando na cara dele.
+ * O editor do gestor já aponta o que há enquanto ele digita, mas isso não cobre
+ * texto que entrou por migration nem regra que mudou depois.
+ *
+ * ⚠️ O que DERRUBA este script encolheu junto com as regras: só falha o que
+ * sairia quebrado na mão da pessoa (texto vazio, variável que não existe). As
+ * regras de conteúdo — declarar a chapa, a frase de parar e apagar, sem link na
+ * Permissão — viraram decisão do gestor, e um relatório que reprovasse a
+ * escolha dele a cada `npm run test:tudo` seria a mesma trava, só que num lugar
+ * onde ele não pode responder. Elas continuam LISTADAS aqui, e é para isso que
+ * o resumo do fim existe: para alguém olhar de vez em quando e perguntar se
+ * ainda é o que a campanha quer.
  */
 import { createClient } from '@supabase/supabase-js';
 import { config as carregarEnv } from 'dotenv';
@@ -34,8 +40,11 @@ if (error) {
 type Linha = { id: string; texto: string; ordem: number; modelos: { etapa: Etapa } | null };
 const variacoes = (data ?? []) as unknown as Linha[];
 
-let bloqueios = 0;
+let quebrados = 0;
+let riscos = 0;
 let avisos = 0;
+
+const MARCA = { impede: '❌', risco: '🔴', aviso: '⚠️ ' } as const;
 
 for (const v of variacoes) {
   const etapa = v.modelos?.etapa;
@@ -46,18 +55,25 @@ for (const v of variacoes) {
 
   console.log(`\n${etapa} · variação ${v.ordem}`);
   for (const p of problemas) {
-    console.log(`  ${p.bloqueia ? '❌' : '⚠️ '} ${p.mensagem}`);
-    if (p.bloqueia) bloqueios++;
+    console.log(`  ${MARCA[p.nivel]} ${p.mensagem}`);
+    if (p.nivel === 'impede') quebrados++;
+    else if (p.nivel === 'risco') riscos++;
     else avisos++;
   }
   if (!podeSalvar(problemas)) {
-    console.log('     ↳ este texto NÃO poderia ser salvo pelo gestor hoje.');
+    console.log('     ↳ este texto sai QUEBRADO para a pessoa. Não é escolha de escrita.');
   }
 }
 
 console.log();
-if (bloqueios > 0) {
-  console.log(`❌ ${bloqueios} problema(s) que impedem salvar, em ${variacoes.length} textos ativos.`);
+if (quebrados > 0) {
+  console.log(`❌ ${quebrados} texto(s) que sairiam quebrados, em ${variacoes.length} ativos.`);
   process.exit(1);
 }
-console.log(`✅ ${variacoes.length} textos ativos, nenhum bloqueio${avisos ? ` (${avisos} aviso(s))` : ''}`);
+
+// Risco não derruba: é escolha do gestor, e ele já a viu em vermelho na tela em
+// que escreveu. Aqui ela só fica visível para quem revisa a operação.
+const resumo = [riscos && `${riscos} em vermelho`, avisos && `${avisos} aviso(s)`]
+  .filter(Boolean)
+  .join(' · ');
+console.log(`✅ ${variacoes.length} textos ativos, nenhum quebrado${resumo ? ` (${resumo})` : ''}`);

@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
-import { Aviso, Botao, Cartao } from '@/components/ui';
-import { montarTexto, validarModelo, VARIAVEIS_CONHECIDAS } from '@/lib/mensagem';
+import { Aviso, Botao, Cartao, cx } from '@/components/ui';
+import { ehGrave, montarTexto, validarModelo, VARIAVEIS_CONHECIDAS } from '@/lib/mensagem';
 import type { EtapaMsg, Modelo, Variacao } from '@/lib/tipos-banco';
 import { adicionarVariacao, alternarVariacao, salvarVariacao } from './acoes';
 
@@ -16,11 +16,19 @@ const TITULO: Record<EtapaMsg, string> = {
   convite_grupo: 'Convite ao canal',
 };
 
+/**
+ * O que a campanha recomenda para cada etapa.
+ *
+ * "Recomenda", e não "exige": desde que as regras deixaram de trancar a tela,
+ * este texto seria uma promessa falsa se continuasse dizendo "precisa". Quem
+ * escreve tem de saber que pode escrever à sua maneira — e por que a
+ * recomendação existe.
+ */
 const EXPLICACAO: Partial<Record<EtapaMsg, string>> = {
   permissao:
-    'Sem link e sem emoji. Precisa declarar a chapa com {{candidatos}}, usar {{origem}} para dizer como você chegou no contato — a frase muda conforme a pessoa ter vindo da lista ou do site — e oferecer parar e apagar. Rotaciona entre as variações para o mesmo número não repetir o texto.',
+    'O texto recomendado não tem link nem emoji, declara a chapa com {{candidatos}}, usa {{origem}} para dizer como você chegou no contato — a frase muda conforme a pessoa ter vindo da lista ou do site — e oferece parar e apagar. Escreva do seu jeito: o que faltar aparece em vermelho aqui embaixo, com o motivo, e a decisão é sua. Rotaciona entre as variações para o mesmo número não repetir o texto.',
   material:
-    'Precisa conter {{link}} — é dele que sai a única métrica confiável do projeto.',
+    'O recomendado traz {{link}} — é dele que sai a única métrica confiável do projeto — e diz de quem é a peça, com {{candidato}}, {{cargo}} e {{numero}}.',
 };
 
 type Props = {
@@ -77,17 +85,32 @@ function useValidacao(etapa: EtapaMsg, texto: string, exemplo: Props['exemplo'])
       agora: new Date(),
       timezone: exemplo.timezone,
     });
-    return { problemas, previa, bloqueado: problemas.some((p) => p.bloqueia) };
+    return {
+      problemas,
+      previa,
+      // Só o que sairia quebrado impede. Risco e aviso aparecem e não travam.
+      impedido: problemas.some((p) => p.nivel === 'impede'),
+      temRisco: problemas.some((p) => p.nivel === 'risco'),
+    };
   }, [etapa, texto, exemplo]);
 }
 
+/**
+ * O que o editor tem a dizer sobre o texto.
+ *
+ * Vermelho é o que custa caro — a defesa jurídica da campanha ou a saúde do
+ * número — e âmbar é orientação de ofício. Nenhum dos dois impede salvar; o
+ * único que impede é texto que sairia quebrado, e esse diz isso com todas as
+ * letras, para ninguém confundir "você decide" com "não dá".
+ */
 function Problemas({ lista }: { lista: ReturnType<typeof validarModelo> }) {
   if (lista.length === 0) return null;
   return (
     <ul className="mt-2 space-y-1">
       {lista.map((p, i) => (
-        <li key={i} className={`text-xs ${p.bloqueia ? 'text-perigo' : 'text-alerta'}`}>
-          {p.bloqueia ? '✕' : '!'} {p.mensagem}
+        <li key={i} className={cx('text-xs', ehGrave(p) ? 'text-perigo' : 'text-alerta')}>
+          {ehGrave(p) ? '✕' : '!'} {p.mensagem}
+          {p.nivel === 'impede' && <strong> Isso impede salvar.</strong>}
         </li>
       ))}
     </ul>
@@ -112,7 +135,7 @@ function EditorVariacao({
   const [erro, setErro] = useState<string | null>(null);
   const [salvo, setSalvo] = useState(false);
   const [ocupado, iniciar] = useTransition();
-  const { problemas, previa, bloqueado } = useValidacao(etapa, texto, exemplo);
+  const { problemas, previa, impedido, temRisco } = useValidacao(etapa, texto, exemplo);
   const mudou = texto !== variacao.texto;
 
   return (
@@ -145,16 +168,21 @@ function EditorVariacao({
 
       {erro && <Aviso tom="erro" className="mt-2">{erro}</Aviso>}
 
-      <div className="mt-3 flex items-center gap-3">
-        <Botao tamanho="p" disabled={!mudou || bloqueado || ocupado}
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <Botao tamanho="p" disabled={!mudou || impedido || ocupado}
           onClick={() => iniciar(async () => {
             const r = await salvarVariacao(variacao.id, etapa, texto);
             if (r.ok) { setSalvo(true); } else { setErro(r.erro); }
           })}>
-          {ocupado ? 'Salvando…' : 'Salvar'}
+          {/* "Mesmo assim" é o único atrito que sobrou: nomeia a escolha sem
+              tirá-la de quem responde pela campanha. */}
+          {ocupado ? 'Salvando…' : temRisco && !impedido ? 'Salvar mesmo assim' : 'Salvar'}
         </Botao>
         {salvo && !mudou && <span className="text-xs text-ok">salvo ✓</span>}
-        {mudou && bloqueado && <span className="text-xs text-perigo">corrija para poder salvar</span>}
+        {mudou && impedido && <span className="text-xs text-perigo">corrija para poder salvar</span>}
+        {mudou && !impedido && temRisco && (
+          <span className="text-xs text-suave">os pontos em vermelho ficam por sua conta</span>
+        )}
       </div>
     </Cartao>
   );
@@ -165,7 +193,7 @@ function NovaVariacao({ modeloId, etapa, exemplo }: { modeloId: string; etapa: E
   const [texto, setTexto] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
-  const { problemas, previa, bloqueado } = useValidacao(etapa, texto, exemplo);
+  const { problemas, previa, impedido, temRisco } = useValidacao(etapa, texto, exemplo);
 
   if (!aberto) {
     return (
@@ -192,12 +220,12 @@ function NovaVariacao({ modeloId, etapa, exemplo }: { modeloId: string; etapa: E
       {texto.trim() && (<><Problemas lista={problemas} /><Previa texto={previa} /></>)}
       {erro && <Aviso tom="erro" className="mt-2">{erro}</Aviso>}
       <div className="mt-3 flex gap-2">
-        <Botao tamanho="p" disabled={!texto.trim() || bloqueado || ocupado}
+        <Botao tamanho="p" disabled={!texto.trim() || impedido || ocupado}
           onClick={() => iniciar(async () => {
             const r = await adicionarVariacao(modeloId, etapa, texto);
             if (r.ok) { setTexto(''); setAberto(false); } else { setErro(r.erro); }
           })}>
-          Adicionar
+          {temRisco && !impedido ? 'Adicionar mesmo assim' : 'Adicionar'}
         </Botao>
         <Botao tamanho="p" variante="fantasma" onClick={() => { setAberto(false); setTexto(''); }}>
           Cancelar

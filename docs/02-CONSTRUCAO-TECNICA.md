@@ -471,7 +471,18 @@ ao montar a mensagem de uma etapa para um chip:
 
 **Variáveis:** `{{saudacao}}` (por hora), `{{primeiro_nome}}`, `{{nome}}` (do atendente), `{{candidato}}`, `{{cargo}}`, `{{numero}}`, `{{link}}`, `{{link_grupo}}`, `{{municipio}}`.
 
-**Blocos travados** (a Permissão e o Material só salvam se contiverem): `{{candidato}}` + `{{cargo}}` na mesma frase, a menção de que o contato veio de um apoiador, e a frase de parar/apagar. Validar no editor do gestor.
+**Blocos recomendados** na Permissão e no Material: `{{candidato}}` + `{{cargo}}` na mesma frase, a menção de como o contato chegou (`{{origem}}`), a declaração da chapa (`{{candidatos}}`) e a frase de parar/apagar.
+
+⚠️ **Recomendados, não obrigatórios — e isso mudou.** Até a versão de agosto o editor RECUSAVA salvar o texto que não os contivesse. A intenção era boa e o efeito, não: mensagem de campanha precisa soar de gente, e regra que tranca a tela empurra toda a operação para o mesmo texto engessado.
+
+Hoje o editor aponta cada falta em vermelho, com o motivo por extenso, e o botão passa a dizer *"Salvar mesmo assim"*. Quem decide correr um risco da campanha é quem responde por ela.
+
+**O que ainda impede salvar** — e só isso, no editor e na Server Action:
+
+- texto vazio;
+- variável que não existe: ela sairia crua no WhatsApp de um eleitor (`Oi {{primero_nome}}`), e quem escreveu não teria como perceber.
+
+Não é escolha de escrita: é texto quebrado. `npm run textos` segue o mesmo corte — lista tudo, derruba só o que sairia quebrado.
 
 ---
 

@@ -165,7 +165,7 @@ Os 13 casos, cada um com resposta pronta para copiar e qual botão marcar. Enqua
 
 ### Preparação (uma vez)
 - [ ] cadastrar os atendentes (nome + e-mail)
-- [ ] escrever/editar os textos das mensagens (respeitando os blocos travados)
+- [ ] escrever/editar os textos das mensagens (o editor aponta o que falta; a decisão é sua)
 - [ ] definir teto, horário e o dia bloqueado (eleição)
 - [ ] cadastrar o destino dos links (material e canal)
 - [ ] subir a lista fria (com "entregue por" + data) e as origens quentes
@@ -217,7 +217,9 @@ Vermelho em qualquer eixo → pausar o chip 24–48h e trocar para o reserva.
 ## 8. Textos iniciais dos modelos
 
 > Regras dos textos: sem link e sem emoji na Permissão; sem áudio; no máximo quatro linhas; material como texto/link (nunca "encaminhado").
-> Blocos travados na Permissão e no Material: `{{candidato}}`+`{{cargo}}` na mesma frase; a menção de que veio de um apoiador; a frase de parar/apagar.
+> Blocos recomendados na Permissão e no Material: `{{candidato}}`+`{{cargo}}` na mesma frase; a menção de como o contato chegou; a frase de parar/apagar.
+>
+> O editor aponta o que falta em vermelho e explica por quê, mas **não impede salvar** — escreva do jeito que soa de gente. Só texto vazio ou com variável inexistente é recusado, porque sairia quebrado na mão da pessoa.
 
 **Permissão — variação 1**
 > {{saudacao}}, {{primeiro_nome}}! Tudo bem? Aqui é {{nome}}. Tô ajudando o(a) {{candidato}} nessa eleição pra {{cargo}}, e um apoiador dele(a) me passou seu contato. Posso te mandar o material aqui? Se não quiser, me fala que eu paro por aqui e apago seu número, tranquilo.
