@@ -54,4 +54,17 @@ select
   (select id from public.listas where rotulo = 'teste-lista-fria')
 from generate_series(1, 10) g;
 
+-- A lista de teste é de TODOS os atendentes de teste.
+--
+-- Desde que cada lista passou a ter dono, atendente sem lista marcada não
+-- recebe contato de lista nenhuma — e sem estas linhas os testes de
+-- concorrência mediam o vazio: dez atendentes disparando ao mesmo tempo e todos
+-- recebendo `sem_lista`, o que passaria por "ninguém pegou o mesmo contato".
+insert into public.atendente_listas (atendente_id, lista_id)
+select u.id, (select id from public.listas where rotulo = 'teste-lista-fria')
+  from public.usuarios u
+ where u.id in (
+   select id from auth.users where email like 'teste-atendente-%@painel.local'
+ );
+
 commit;

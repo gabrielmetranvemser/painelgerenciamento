@@ -60,6 +60,16 @@ begin
     (v_a, v_gov, 'governador',       1, false),
     (v_b, v_sen, 'senador',          1, false);
 
+  -- Uma lista ativa para os dois. Este arquivo é sobre ROTEAMENTO por
+  -- candidato, e desde que cada lista tem dono um atendente sem lista recebe
+  -- `sem_lista` no lugar de `fila_vazia` — o que faria o teste 10 medir a
+  -- configuração da pessoa em vez do roteamento que ele existe para provar.
+  insert into public.listas (origem, rotulo, entregue_por, entregue_em)
+  values ('lista_fria', 'Cons Lista', 'Fornecedor de Teste', current_date);
+  insert into public.atendente_listas (atendente_id, lista_id)
+  select x.id, (select id from public.listas where rotulo = 'Cons Lista')
+    from (values (v_a), (v_b)) as x(id);
+
   insert into public.contatos (origem, nome, primeiro_nome, telefone_e164, chave_dedup,
                                telefone_hmac, status, atendente_id, chip_id, claim_expira_em)
   values ('lista_fria', 'Cons Contato', 'Cons', '5569300000001', '6930000001',

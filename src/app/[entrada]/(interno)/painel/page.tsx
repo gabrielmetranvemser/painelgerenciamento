@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { exigirAtendente } from '@/lib/sessao';
 import { rotas } from '@/lib/links-internos';
-import type { Chip, FilaStatus, Municipio } from '@/lib/tipos-banco';
+import type { Chip, FilaStatus, ListaDoAtendente, Municipio } from '@/lib/tipos-banco';
 import { Atendimento } from './atendimento';
 
 export const metadata: Metadata = { title: 'Atender' };
@@ -12,7 +12,8 @@ export default async function PaginaPainel({ params }: { params: Promise<{ entra
   const usuario = await exigirAtendente(entrada);
   const supabase = await criarClienteServidor();
 
-  const [{ data: chips }, { data: municipios }, { count: aguardando }] = await Promise.all([
+  const [{ data: chips }, { data: municipios }, { count: aguardando }, { data: listas }] =
+    await Promise.all([
     // Traz os mortos também: o atendente precisa ser AVISADO de que o número
     // caiu, não descobrir sozinho que ele sumiu do seletor.
     supabase
@@ -31,6 +32,10 @@ export default async function PaginaPainel({ params }: { params: Promise<{ entra
       .eq('atendente_id', usuario.id)
       .eq('status', 'em_atendimento')
       .not('primeiro_contato_em', 'is', null),
+    // As listas que ele atende. Vêm já na primeira renderização porque a tela
+    // precisa delas antes do primeiro clique: é o que responde "o que eu estou
+    // atendendo hoje?".
+    supabase.rpc('minhas_listas'),
   ]);
 
   const lista = (chips ?? []) as Chip[];
@@ -49,6 +54,7 @@ export default async function PaginaPainel({ params }: { params: Promise<{ entra
       municipios={(municipios ?? []) as Municipio[]}
       filaInicial={filaInicial}
       aguardandoInicial={aguardando ?? 0}
+      listasIniciais={(listas ?? []) as ListaDoAtendente[]}
       rotaMeusContatos={rotas(entrada).meusContatos}
     />
   );

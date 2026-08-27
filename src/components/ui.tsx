@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ComponentProps, ReactNode } from 'react';
+import { corDaLista } from '@/lib/cor-lista';
 import type { OrigemContato } from '@/lib/tipos-banco';
 
 export function cx(...c: (string | false | null | undefined)[]) {
@@ -191,6 +192,38 @@ export function EtiquetaOrigem({ origem }: { origem: OrigemContato }) {
     chamou: 'Chamou no WhatsApp',
   };
   return <Pilula cor={origem === 'lista_fria' ? 'frio' : 'quente'}>{texto[origem]}</Pilula>;
+}
+
+/**
+ * O ponto que identifica uma lista.
+ *
+ * Cor por `style`, e não por classe: a cor sai do id em tempo de execução, e
+ * classe do Tailwind montada por interpolação não chega a existir no CSS.
+ */
+export function PontoLista({ id, className }: { id: string; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      style={{ background: corDaLista(id) }}
+      className={cx('inline-block size-2 shrink-0 rounded-full', className)}
+    />
+  );
+}
+
+/**
+ * De que lista veio este contato.
+ *
+ * Pílula NEUTRA com um ponto colorido — de propósito. A cor cheia da pílula já
+ * quer dizer outra coisa na tela do atendente (âmbar é fila quente, azul-gelo é
+ * fila fria), e a etiqueta de lista não pode disputar esse significado.
+ */
+export function EtiquetaLista({ id, nome }: { id: string; nome: string }) {
+  return (
+    <Pilula>
+      <PontoLista id={id} />
+      <span className="max-w-[12rem] truncate">{nome}</span>
+    </Pilula>
+  );
 }
 
 /* ── Métrica ────────────────────────────────────────────────────────────── */

@@ -357,6 +357,44 @@ end; $$ language plpgsql security definer;
 
 **Lease de 20 minutos**, não 24h. Contato preso é fila parada. Um cron devolve à fila os leases vencidos.
 
+### 6.1 A fila não é um bolo só: cada lista tem dono
+
+`atendente_listas (atendente_id, lista_id)` diz quem atende o quê, e o claim só
+entrega um contato de lista a quem tem aquela lista marcada. É o mesmo desenho
+de `atendente_candidatos`.
+
+Quatro regras que caem daí, e nenhuma é acidental:
+
+- **Sem marcação = não recebe.** O contrário seria mais macio no dia do deploy,
+  mas transformaria o esquecimento do gestor em vazamento silencioso: a lista
+  que ele quis dar só ao Gabriel continuaria caindo no Filipe. Aqui o
+  esquecimento PARA a fila da pessoa, com motivo próprio (`sem_lista`) na tela
+  do atendente e contador no menu do gestor (`v_atendentes_sem_lista`).
+- **Contato sem lista continua de todo mundo.** Quem se cadastrou sozinho pela
+  página do candidato (`contatos.lista_id is null`) não pertence a lista nenhuma
+  e é o contato mais valioso que existe — ele pediu para ser chamado.
+- **Lista pausada (`ativa = false`) sai da fila na hora**, mesmo de quem a tem
+  marcada. O que pausar NÃO faz é interromper conversa já aberta: quem está com
+  o contato na mão termina o que começou.
+- **A mesma lista em dois atendentes é dividida** pelo `for update skip locked`
+  de sempre. Não há risco de os dois falarem com a mesma pessoa.
+
+O atendente trabalha de duas formas. No **automático** (padrão) a fila mistura
+todas as listas dele e o contato chega etiquetado com a de origem
+(`contato_json` devolve `lista_id` e `lista`; a cor do ponto sai de
+`src/lib/cor-lista.ts`, e é identificador, não significado). No **manual** ele
+passa `p_lista_id` e recebe só daquela lista — e o servidor confere se ela é
+mesmo dele (`lista_nao_e_sua`), porque escolha de tela se burla com o DevTools
+aberto.
+
+⚠️ O predicado de disponibilidade aparece **três vezes**: em
+`pegar_proximo_contato` (o claim), em `fila_status` (o contador) e em
+`minhas_listas` (o cardápio). Repetido de propósito — `security definer` não é
+inlineável e o claim varre a fila inteira. Os dois primeiros TÊM de andar
+juntos: quando divergiram por causa do candidato, o painel dizia "1 quente na
+fila", o atendente clicava e recebia "não há mais contatos". `supabase/tests/15_listas.sql`
+confere que os três concordam.
+
 ---
 
 ## 7. Travas de volume, horário e intervalo
