@@ -59,6 +59,19 @@ Nas policies, usar `public.is_gestor()` (função `stable security definer`) e
 `(select auth.uid())` — consultar `usuarios` direto dentro da policy causa
 recursão infinita, e `auth.uid()` sem o `select` mata a performance.
 
+### 3.1 Server Component só importa COMPONENTE de arquivo `'use client'`
+
+Tudo que um módulo `'use client'` exporta chega ao servidor como **referência
+para o cliente**, não como valor. Para componente é assim de propósito; para uma
+constante, não — o array vira um objeto que não é array, e `.some` deixa de
+existir. Foi assim que `RECORTES.some is not a function` derrubou a tela de
+Contatos em produção: typecheck aprova, `next build` compila, e o erro só
+aparece quando alguém abre a página.
+
+Constante, função auxiliar e tabela de dados moram em arquivo neutro (ex.:
+`gestor/contatos/recortes.ts`), que os dois lados importam. Tipo pode ficar em
+qualquer lugar — tipo some na compilação. `npm run fronteira` confere.
+
 ### 4. Nunca gravar preferência de voto
 
 Dado sensível, vedado. Não existe campo para isso em nenhuma tabela e não se
@@ -155,6 +168,7 @@ npm run test:tudo    # typecheck + unitários + tipos + banco — antes de commi
 npm test             # só os unitários (rápido)
 npm run test:banco   # travas, automações e concorrência, contra o banco
 npm run tipos        # confere src/lib/tipos-banco.ts contra as colunas reais
+npm run fronteira    # Server Component importando valor de arquivo 'use client'
 npm run build
 ```
 

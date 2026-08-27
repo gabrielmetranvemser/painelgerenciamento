@@ -11,10 +11,11 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "tipos": "node scripts/conferir-tipos.mjs",
+    "fronteira": "node scripts/conferir-fronteira.mjs",
     "semear": "tsx scripts/semear-teste.mts",
     "importar:teste": "tsx scripts/testar-importacao.mts",
     "test:banco": "set -a && . ./.env.local && set +a && ./supabase/tests/rodar.sh",
-    "test:tudo": "npm run typecheck && npm test && npm run tipos && npm run textos && npm run test:banco",
+    "test:tudo": "npm run typecheck && npm run fronteira && npm test && npm run tipos && npm run textos && npm run test:banco",
     "limpar:teste": "tsx scripts/limpar-teste.mts",
     "textos": "tsx scripts/conferir-textos.mts"
   },
