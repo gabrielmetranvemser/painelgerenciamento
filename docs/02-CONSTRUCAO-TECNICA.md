@@ -397,6 +397,38 @@ confere que os três concordam.
 
 ---
 
+## 6.2 ⚠️ O PostgREST corta em 1.000 linhas, e não avisa
+
+`max_rows` deste projeto é **1.000**. Toda resposta maior é truncada em silêncio:
+volta `data` com 1.000 linhas, `count` com o total certo e `error` nulo. Quem
+escreveu `.limit(5000)` acha que recebeu 5.000.
+
+Três lugares tinham sido escritos assim, e os três mentiam:
+
+| Onde | Escrito | Chegava |
+|---|---|---|
+| Tela de Contatos | `.limit(5000)` | 1.000 — **e a busca rodava dentro desses 1.000** |
+| CSV de contatos | `.limit(50000)` | 1.000 |
+| Entregas / CSV do kit | `.limit(2000)` / sem limite | 1.000 |
+
+O pior era a tela: procurar alguém que estava na base e receber "nada com esses
+filtros" faz o gestor concluir que a pessoa não existe.
+
+**As duas saídas, e quando usar cada uma:**
+
+- **Tela** → paginação de verdade. Quem filtra, conta e pagina é o banco
+  (`contatos_do_gestor`), e o navegador recebe 100 linhas. Levantar `max_rows`
+  não serviria: 30 mil linhas no navegador é o travamento que se quer evitar.
+- **Arquivo ou conta** → `buscarTudo()` de `src/lib/supabase/paginar.ts`, que
+  vai em blocos até acabar. ⚠️ Ele avança pelo que **veio**, não pelo que foi
+  pedido — um laço que somasse o tamanho pedido pararia cedo se o teto do
+  projeto mudasse, truncando em silêncio de novo.
+
+Regra prática: **`.limit(n)` com n > 1000 é sempre bug.** Ou é tela, e quer
+paginação, ou é arquivo, e quer `buscarTudo`.
+
+---
+
 ## 7. Travas de volume, horário e intervalo
 
 Validar **no servidor** (função), nunca só no frontend — frontend se burla.
