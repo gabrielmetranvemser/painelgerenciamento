@@ -9,9 +9,10 @@ export {
   horaLocal,
   validarModelo,
   podeSalvar,
+  ehGrave,
   variaveisUsadas,
   proximaVariacao,
   VARIAVEIS_CONHECIDAS,
 } from './mensagem';
-export type { ContextoMensagem, Problema, CodigoProblema } from './mensagem';
+export type { ContextoMensagem, Problema, CodigoProblema, NivelProblema } from './mensagem';
 export type { Etapa as EtapaMensagem } from './mensagem';

@@ -9,12 +9,18 @@ import type { EtapaMsg } from '@/lib/tipos-banco';
 export type ResultadoSalvar = { ok: true } | { ok: false; erro: string };
 
 /**
- * Salva uma variação, revalidando os blocos travados NO SERVIDOR.
+ * Salva uma variação.
  *
- * A tela já valida enquanto o gestor digita, mas a decisão é aqui: Server Action
- * é um endpoint HTTP, e as travas de texto (candidato+cargo na mesma frase, a
- * a variável de origem, a frase de parar/apagar, sem link e sem emoji na
- * Permissão) são o que sustenta a posição jurídica da campanha.
+ * ⚠️ A revalidação continua aqui, no servidor, mas o que ela recusa encolheu:
+ * só o que sairia QUEBRADO na mão da pessoa — texto vazio ou variável que não
+ * existe, que iria crua para o WhatsApp de um eleitor.
+ *
+ * As regras de conteúdo (declarar a chapa, a variável de origem, a frase de
+ * parar e apagar, sem link e sem emoji na Permissão) continuam sendo apontadas
+ * na tela, em vermelho, com o motivo por extenso — e continuam sendo o que
+ * sustenta a posição jurídica da campanha. O que elas não fazem mais é
+ * IMPEDIR: quem decide correr um risco da campanha é quem responde por ela, e
+ * regra que tranca a tela empurra todo mundo para o mesmo texto engessado.
  */
 export async function salvarVariacao(
   variacaoId: string,
@@ -25,7 +31,7 @@ export async function salvarVariacao(
 
   const problemas = validarModelo(etapa, texto);
   if (!podeSalvar(problemas)) {
-    return { ok: false, erro: problemas.find((p) => p.bloqueia)!.mensagem };
+    return { ok: false, erro: problemas.find((p) => p.nivel === 'impede')!.mensagem };
   }
 
   const supabase = criarClienteAdmin();
@@ -41,7 +47,7 @@ export async function adicionarVariacao(modeloId: string, etapa: EtapaMsg, texto
 
   const problemas = validarModelo(etapa, texto);
   if (!podeSalvar(problemas)) {
-    return { ok: false, erro: problemas.find((p) => p.bloqueia)!.mensagem };
+    return { ok: false, erro: problemas.find((p) => p.nivel === 'impede')!.mensagem };
   }
 
   const supabase = criarClienteAdmin();

@@ -267,10 +267,29 @@ export type CodigoProblema =
   | 'linhas_demais'
   | 'vazio';
 
+/**
+ * Quanto pesa um problema apontado no texto.
+ *
+ * ⚠️ Até esta versão havia só um booleano de "impede salvar", e quase tudo o
+ * marcava: o gestor não conseguia gravar um texto que não passasse por todas as
+ * regras. A intenção era boa e o efeito, não — mensagem de campanha precisa
+ * soar de gente, e regra que impede salvar empurra todo mundo para o mesmo
+ * texto engessado.
+ *
+ * Agora o editor APONTA e o gestor DECIDE. Só continua impedindo o que não é
+ * escolha de escrita, e sim texto que sai quebrado na mão da pessoa.
+ *
+ *   `impede` — o texto não funcionaria. Vazio, ou variável que não existe (ela
+ *              sairia crua, "Oi {{primero_nome}}", no WhatsApp de um eleitor).
+ *   `risco`  — sai funcionando, mas custa caro: é a defesa jurídica da campanha
+ *              ou a saúde do número. Aparece em vermelho e não trava.
+ *   `aviso`  — orientação de ofício. Âmbar.
+ */
+export type NivelProblema = 'impede' | 'risco' | 'aviso';
+
 export type Problema = {
   codigo: CodigoProblema;
-  /** `true` impede salvar; `false` é só aviso na tela */
-  bloqueia: boolean;
+  nivel: NivelProblema;
   mensagem: string;
 };
 
@@ -316,20 +335,31 @@ function frases(texto: string): string[] {
  * material de propaganda para efeito de identificação obrigatória é pergunta
  * para o advogado eleitoral — não sei, e não vou travar o trabalho do gestor
  * com base num palpite meu. O aviso existe para a pergunta ser feita.
+ *
+ * ── E por que nada disso IMPEDE mais de salvar ────────────────────────────
+ *
+ * Porque tudo que está escrito acima explica um RISCO, e quem decide correr um
+ * risco da campanha é quem responde por ela. As regras continuam aqui, com o
+ * mesmo texto e a mesma cor de urgência — o que mudou é que elas informam em
+ * vez de trancar. Ver `NivelProblema`.
  */
 export function validarModelo(etapa: Etapa, texto: string): Problema[] {
   const problemas: Problema[] = [];
   const t = (texto ?? '').trim();
 
   if (!t) {
-    return [{ codigo: 'vazio', bloqueia: true, mensagem: 'O texto não pode ficar vazio.' }];
+    return [{ codigo: 'vazio', nivel: 'impede', mensagem: 'O texto não pode ficar vazio.' }];
   }
 
   for (const v of variaveisUsadas(t)) {
     if (!(VARIAVEIS_CONHECIDAS as readonly string[]).includes(v)) {
       problemas.push({
         codigo: 'variavel_desconhecida',
-        bloqueia: true,
+        // Único caso que continua impedindo, junto com o vazio: não é escolha
+        // de escrita. Uma variável que não existe sai CRUA no WhatsApp da
+        // pessoa — "Oi {{primero_nome}}" — e é o tipo de erro que só aparece
+        // depois de a mensagem ter sido enviada.
+        nivel: 'impede',
         mensagem: `A variável {{${v}}} não existe. Disponíveis: ${VARIAVEIS_CONHECIDAS.map((x) => `{{${x}}}`).join(', ')}.`,
       });
     }
@@ -339,7 +369,7 @@ export function validarModelo(etapa: Etapa, texto: string): Problema[] {
   if (exigeSaida && !RE_PARAR.test(t)) {
     problemas.push({
       codigo: 'falta_frase_parar',
-      bloqueia: true,
+      nivel: 'risco',
       mensagem: 'Falta oferecer parar e apagar o contato (ex.: "se não quiser, me fala que apago seu número").',
     });
   }
@@ -348,7 +378,7 @@ export function validarModelo(etapa: Etapa, texto: string): Problema[] {
     if (!t.includes('{{candidatos}}')) {
       problemas.push({
         codigo: 'falta_chapa',
-        bloqueia: true,
+        nivel: 'risco',
         mensagem:
           'A Permissão precisa usar {{candidatos}}, que declara TODOS os candidatos que você atende. ' +
           'A pessoa tem que autorizar sabendo de quem vai receber material — é isso que torna o "pode" dela válido.',
@@ -357,7 +387,7 @@ export function validarModelo(etapa: Etapa, texto: string): Problema[] {
     if (!t.includes('{{origem}}')) {
       problemas.push({
         codigo: 'falta_origem',
-        bloqueia: true,
+        nivel: 'risco',
         mensagem:
           'A Permissão precisa usar {{origem}}, que explica como você chegou no contato. ' +
           'É variável e não frase escrita porque a resposta muda: quem veio da lista foi indicado ' +
@@ -368,14 +398,14 @@ export function validarModelo(etapa: Etapa, texto: string): Problema[] {
     if (t.includes('{{link}}') || t.includes('{{materiais}}') || t.includes('{{link_grupo}}') || RE_URL.test(t)) {
       problemas.push({
         codigo: 'link_na_permissao',
-        bloqueia: true,
+        nivel: 'risco',
         mensagem: 'A primeira mensagem não pode ter link. Link só depois do "pode".',
       });
     }
     if (RE_EMOJI.test(t)) {
       problemas.push({
         codigo: 'emoji_na_permissao',
-        bloqueia: true,
+        nivel: 'risco',
         mensagem: 'Sem emoji na primeira mensagem — é o padrão que mais parece disparo.',
       });
     }
@@ -388,7 +418,7 @@ export function validarModelo(etapa: Etapa, texto: string): Problema[] {
     if (!temCandidato || !temCargo) {
       problemas.push({
         codigo: 'falta_candidato_cargo',
-        bloqueia: true,
+        nivel: 'risco',
         mensagem:
           'O Material precisa dizer de quem ele é: use {{candidato}} e {{cargo}}. ' +
           'Cada peça chega separada e tem que se identificar sozinha.',
@@ -396,7 +426,7 @@ export function validarModelo(etapa: Etapa, texto: string): Problema[] {
     } else if (!frases(t).some((f) => f.includes('{{candidato}}') && f.includes('{{cargo}}'))) {
       problemas.push({
         codigo: 'candidato_cargo_separados',
-        bloqueia: true,
+        nivel: 'risco',
         mensagem: '{{candidato}} e {{cargo}} precisam aparecer na MESMA frase, para não parecer propaganda solta.',
       });
     }
@@ -404,7 +434,7 @@ export function validarModelo(etapa: Etapa, texto: string): Problema[] {
     if (!t.includes('{{numero}}')) {
       problemas.push({
         codigo: 'falta_numero',
-        bloqueia: true,
+        nivel: 'risco',
         mensagem: 'Falta {{numero}} — é o número de urna, e sem ele o material não serve para votar.',
       });
     }
@@ -412,7 +442,7 @@ export function validarModelo(etapa: Etapa, texto: string): Problema[] {
     if (!t.includes('{{link}}') && !t.includes('{{materiais}}')) {
       problemas.push({
         codigo: 'falta_link',
-        bloqueia: true,
+        nivel: 'risco',
         mensagem:
           'O Material precisa de {{materiais}} (todas as peças do candidato) ou {{link}} (só a primeira). ' +
           'É do link rastreado que sai a única métrica confiável do projeto.',
@@ -422,7 +452,7 @@ export function validarModelo(etapa: Etapa, texto: string): Problema[] {
     if (!t.includes('{{cnpj}}')) {
       problemas.push({
         codigo: 'falta_cnpj',
-        bloqueia: false,
+        nivel: 'aviso',
         mensagem:
           'Sem {{cnpj}}. Material de propaganda eleitoral costuma precisar do CNPJ da campanha para ' +
           'ser identificável. Se a mensagem de WhatsApp conta como material para esse efeito é pergunta ' +
@@ -435,7 +465,7 @@ export function validarModelo(etapa: Etapa, texto: string): Problema[] {
   if (linhas > MAX_LINHAS) {
     problemas.push({
       codigo: 'linhas_demais',
-      bloqueia: false,
+      nivel: 'aviso',
       mensagem: `Mensagem com ${linhas} linhas. O combinado é no máximo ${MAX_LINHAS} — texto longo parece panfleto.`,
     });
   }
@@ -443,9 +473,20 @@ export function validarModelo(etapa: Etapa, texto: string): Problema[] {
   return problemas;
 }
 
-/** `true` quando o gestor pode salvar o modelo. */
+/**
+ * `true` quando o gestor pode salvar o modelo.
+ *
+ * Hoje isso é quase sempre. Só texto que sairia quebrado na mão da pessoa
+ * impede — o resto é apontado na tela e decidido por quem responde pela
+ * campanha. Ver `NivelProblema`.
+ */
 export function podeSalvar(problemas: Problema[]): boolean {
-  return !problemas.some((p) => p.bloqueia);
+  return !problemas.some((p) => p.nivel === 'impede');
+}
+
+/** Os que o editor pinta de vermelho: impedimento ou risco assumido. */
+export function ehGrave(p: Problema): boolean {
+  return p.nivel !== 'aviso';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

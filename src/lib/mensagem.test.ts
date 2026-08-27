@@ -4,6 +4,7 @@ import {
   listarChapa,
   montarTexto,
   podeSalvar,
+  ehGrave,
   primeiroNomeDe,
   proximaVariacao,
   saudacao,
@@ -227,7 +228,9 @@ describe('validarModelo — os textos oficiais do documento precisam passar', ()
     'Permissão variação %i é salvável',
     (_i, texto) => {
       const problemas = validarModelo('permissao', texto);
-      expect(problemas.filter((p) => p.bloqueia)).toEqual([]);
+      // Os textos oficiais não podem ter nem marca vermelha: eles são o exemplo
+      // do que a campanha considera seguro.
+      expect(problemas.filter(ehGrave)).toEqual([]);
       expect(podeSalvar(problemas)).toBe(true);
     },
   );
@@ -244,7 +247,7 @@ describe('validarModelo — os textos oficiais do documento precisam passar', ()
     const semCnpj = MATERIAL.replace(' — CNPJ {{cnpj}}', '');
     const p = validarModelo('material', semCnpj);
     expect(p.map((x) => x.codigo)).toContain('falta_cnpj');
-    expect(p.find((x) => x.codigo === 'falta_cnpj')?.bloqueia).toBe(false);
+    expect(p.find((x) => x.codigo === 'falta_cnpj')?.nivel).toBe('aviso');
     expect(podeSalvar(p)).toBe(true);
   });
 
@@ -276,9 +279,9 @@ describe('listarChapa — é o que faz o consentimento ser específico', () => {
   });
 });
 
-describe('validarModelo — travas que impedem salvar', () => {
+describe('validarModelo — as regras que o editor aponta', () => {
   function codigos(etapa: Parameters<typeof validarModelo>[0], texto: string) {
-    return validarModelo(etapa, texto).filter((p) => p.bloqueia).map((p) => p.codigo);
+    return validarModelo(etapa, texto).map((p) => p.codigo);
   }
 
   it('texto vazio', () => {
@@ -346,6 +349,32 @@ describe('validarModelo — travas que impedem salvar', () => {
 
   it('variável inventada', () => {
     expect(codigos('saida', 'Oi {{apelido}}')).toContain('variavel_desconhecida');
+  });
+
+  /**
+   * O ponto desta versão: as regras de conteúdo continuam TODAS aparecendo, e
+   * nenhuma delas tranca a tela. Se alguém voltar a marcar uma como `impede`,
+   * é aqui que quebra — e o teste diz por quê.
+   */
+  it.each([
+    { oQue: 'Permissão sem chapa, sem origem e sem frase de parar',
+      etapa: 'permissao', texto: 'Oi {{primeiro_nome}}, posso te mandar uma coisa?' },
+    { oQue: 'Permissão com emoji e com link',
+      etapa: 'permissao', texto: 'Oi {{primeiro_nome}} 😊, {{candidatos}}, {{origem}}: https://x.br' },
+    { oQue: 'Material sem candidato, cargo, número nem link',
+      etapa: 'material', texto: 'Olha isso aí, {{primeiro_nome}}.' },
+  ] as const)('$oQue: aponta, mas deixa salvar', ({ etapa, texto }) => {
+    const p = validarModelo(etapa, texto);
+    expect(p.length).toBeGreaterThan(0);
+    expect(p.every((x) => x.nivel !== 'impede')).toBe(true);
+    expect(podeSalvar(p)).toBe(true);
+  });
+
+  it('o que sairia QUEBRADO continua impedindo', () => {
+    // Texto vazio não tem o que enviar; variável inventada sai crua no WhatsApp
+    // de um eleitor. Nenhum dos dois é escolha de escrita.
+    expect(podeSalvar(validarModelo('permissao', '   '))).toBe(false);
+    expect(podeSalvar(validarModelo('saida', 'Oi {{apelido}}'))).toBe(false);
   });
 
   it('mensagem longa demais só avisa', () => {

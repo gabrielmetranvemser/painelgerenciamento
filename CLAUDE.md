@@ -39,7 +39,7 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `src/lib/telefone.ts` | dois atendentes falam com a mesma pessoa → denúncia |
 | `src/lib/hmac.ts` | quem pediu saída volta para a fila → multa por mensagem |
 | `src/lib/bots.ts` | o pré-carregamento de link do WhatsApp vira "clique" → métrica inútil |
-| `src/lib/mensagem.ts` | texto sai sem os blocos travados → perde a defesa jurídica |
+| `src/lib/mensagem.ts` | o editor deixa de APONTAR o que falta no texto → o gestor escolhe sem saber o que está abrindo mão (as regras avisam, não travam: só texto quebrado impede salvar) |
 | `src/lib/importacao.ts` | dedup e casamento de município da planilha |
 | `pegar_proximo_contato` | dois atendentes pegam o mesmo contato, ou um contato cai para quem não atende aquela lista
 
