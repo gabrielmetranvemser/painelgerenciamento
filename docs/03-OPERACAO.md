@@ -171,6 +171,32 @@ Os 13 casos, cada um com resposta pronta para copiar e qual botão marcar. Enqua
 - [ ] subir a lista fria (com "entregue por" + data) e as origens quentes
 - [ ] conferir a tela de importação antes de confirmar
 
+### Onde o material aparece para a pessoa
+
+A pergunta chega sempre depois de cadastrar as peças no perfil do candidato:
+*"cadastrei santinho, site e canal — e agora, onde isso aparece?"*.
+
+**Não aparece na página pública do candidato.** Lá é onde a pessoa **pede**. O
+material chega depois, por outro caminho:
+
+1. **A pessoa pede** — se cadastra na página do candidato, ou já estava numa
+   lista importada. Nesse momento ela não recebe nada: a tela só diz que a
+   equipe vai falar com ela.
+2. **Um atendente chama** — o contato entra na fila de quem atende aquele
+   candidato, e a primeira mensagem sai do WhatsApp do atendente, na mão.
+3. **Ela autoriza** — o atendente marca "Autorizou" e o botão *Mandar material*
+   libera.
+4. **Aí sim ela recebe** — um link no WhatsApp, que abre uma página só dela com
+   todas as peças ativas daquele candidato, o CNPJ e o botão de sair.
+
+Entre o cadastro da peça e a entrega há uma pessoa, sempre. É isso que mantém a
+operação como conversa, e não como disparo.
+
+⚠️ **Não abra o link de um contato para conferir.** O sistema só descarta a
+pré-visualização automática do WhatsApp; o gestor abrindo no navegador conta
+como clique de verdade e suja a única métrica confiável do projeto. A mesma
+explicação está dentro do painel, embaixo do formulário de peças.
+
 ### Importação
 Ao subir a planilha, o sistema mostra antes de importar:
 > "10.000 linhas · 8.740 aproveitáveis · 1.190 repetidas · 70 bloqueadas"

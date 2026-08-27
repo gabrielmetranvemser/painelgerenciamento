@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { ExternalLink, FileText, Megaphone, Plus, Radio, Trash2, Video } from 'lucide-react';
 import { Aviso, Botao, Campo, Cartao, Selecao, cx } from '@/components/ui';
+import { ComoOMaterialChega } from '@/components/como-o-material-chega';
 import type { Material, TipoMaterial } from '@/lib/tipos-banco';
 import { adicionarMaterial, alternarMaterial, removerMaterial } from '../acoes';
 
@@ -61,6 +62,11 @@ export function Materiais({
           </Botao>
         </form>
       </Cartao>
+
+      {/* A pergunta que sempre chega depois de cadastrar a primeira peça: "e
+          onde isso aparece?". Fica AQUI, embaixo do formulário, porque é aqui
+          que ela nasce. */}
+      <ComoOMaterialChega />
 
       {!temCanal && (
         <Aviso tom="alerta" icone={<Radio size={16} />}>

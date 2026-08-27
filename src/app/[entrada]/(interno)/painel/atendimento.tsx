@@ -931,6 +931,10 @@ function Entrega({
             ? `Um de cada vez: o próximo material libera em ${espera}s. Emendar vários seguidos é o que derruba número.`
             : 'Mande um de cada vez e espere a resposta. Emendar vários materiais seguidos é o que derruba número.'}
       </p>
+      <p className="mb-4 text-xs leading-relaxed text-suave">
+        Sai um link só. Ele abre uma página da pessoa com todas as peças daquele candidato — não
+        abra para conferir, porque conta como clique dela.
+      </p>
 
       <div className="space-y-2">
         {entregas.map((c) => {

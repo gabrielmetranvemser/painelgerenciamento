@@ -360,6 +360,10 @@ function PorCandidato({
         com todas as peças dele dentro — é a mensagem normal depois do &ldquo;pode&rdquo;.{' '}
         <strong className="text-texto">Convidar pro canal</strong> manda só o link do canal no
         WhatsApp, para quando a pessoa perguntar se tem grupo.
+        <br />
+        Ela recebe <strong className="text-texto">um link</strong>: ele abre uma página só dela,
+        com as peças daquele candidato, o CNPJ da campanha e o botão de sair. Não abra esse link
+        para conferir — conta como clique dela.
       </p>
 
       {entregas.length === 0 ? (
