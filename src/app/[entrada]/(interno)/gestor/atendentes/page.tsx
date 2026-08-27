@@ -5,6 +5,7 @@ import type { Candidato, CargoEleitoral, Usuario } from '@/lib/tipos-banco';
 import type { ItemChapa } from './chapa-do-atendente';
 import type { ItemLista } from './listas-do-atendente';
 import { GerenciarAtendentes } from './lista';
+import { emailsDasContas } from './acoes';
 
 export const metadata: Metadata = { title: 'Atendentes' };
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,10 @@ export default async function PaginaAtendentes({ params }: { params: Promise<{ e
       supabase.from('listas').select('id, rotulo, origem, ativa').order('criado_em', { ascending: false }),
       supabase.from('atendente_listas').select('atendente_id, lista_id'),
     ]);
+
+  // O e-mail vive em `auth.users`, fora do alcance do PostgREST — vem por ação
+  // de servidor, com a chave de serviço.
+  const emails = await emailsDasContas();
 
   type Bruta = {
     atendente_id: string; candidato_id: string; cargo: CargoEleitoral;
@@ -58,6 +63,7 @@ export default async function PaginaAtendentes({ params }: { params: Promise<{ e
         chapas={chapas}
         listas={(listas ?? []) as ItemLista[]}
         listasPorAtendente={listasPorAtendente}
+        emails={emails}
       />
     </>
   );
