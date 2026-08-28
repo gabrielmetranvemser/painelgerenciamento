@@ -35,13 +35,22 @@ export async function atribuirCandidato(atendenteId: string, candidatoId: string
   if (!cand.ativo) return { ok: false, erro: `${cand.nome_urna} está inativo. Reative antes de atribuir.` };
 
   // Já existe alguém neste cargo (e vaga)? Diz quem, para o gestor decidir.
-  const { data: ocupado } = await supabase
+  //
+  // ⚠️ O embed precisa do NOME da chave estrangeira: há duas de
+  // `atendente_candidatos` para `candidatos` (a simples e a composta que
+  // sustenta o `unique (atendente_id, cargo, vaga)`), e sem desambiguar o
+  // PostgREST devolve PGRST201. O erro era descartado, `ocupado` vinha nulo, e
+  // esta checagem nunca disparava: quem tentasse trocar de candidato batia no
+  // `unique` do banco e recebia o texto cru do Postgres.
+  const { data: ocupado, error: erroOcupado } = await supabase
     .from('atendente_candidatos')
-    .select('candidatos(nome_urna)')
+    .select('candidatos!atendente_candidatos_candidato_id_fkey(nome_urna)')
     .eq('atendente_id', atendenteId)
     .eq('cargo', cand.cargo)
     .eq('vaga', cand.vaga)
     .maybeSingle();
+
+  if (erroOcupado) return { ok: false, erro: erroOcupado.message };
 
   if (ocupado) {
     // O PostgREST devolve o relacionamento como lista, mesmo sendo 1:1.
