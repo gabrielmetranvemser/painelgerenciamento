@@ -17,6 +17,7 @@ declare
   v_chip_a  uuid;
   v_chip_b  uuid;
   v_contato uuid;
+  v_cand    uuid;
   v_r       jsonb;
   v_int     public.interacoes%rowtype;
   v_alerta  bigint;
@@ -42,6 +43,18 @@ begin
   values (v_a, 'Chip Alice', 'ativo', 'ativo') returning id into v_chip_a;
   insert into public.chips (atendente_id, rotulo, papel, status)
   values (v_b, 'Chip Bruno', 'ativo', 'ativo') returning id into v_chip_b;
+
+  -- Chapa. Desde `chapa_obrigatoria_na_permissao`, atendente sem candidato
+  -- recebe `sem_candidato` e a fila não entrega nada — sem estas linhas este
+  -- arquivo mediria a configuração do atendente em vez do que existe para
+  -- provar. Mesmo motivo das listas em 01_fixtures.
+  insert into public.candidatos (slug, nome_urna, cargo, vaga, numero, uf, ativo)
+  values ('teste-altos-cand', 'Cand Altos', 'deputado_federal', 1, '9961', 'RO', true)
+  returning id into v_cand;
+
+  insert into public.atendente_candidatos (atendente_id, candidato_id, cargo, vaga, principal)
+  values (v_a, v_cand, 'deputado_federal', 1, true),
+         (v_b, v_cand, 'deputado_federal', 1, true);
 
   -- =========================================================================
   -- A1 · a conversa é de quem ABRE, não de quem preparou

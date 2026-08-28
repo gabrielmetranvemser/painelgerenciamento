@@ -1,5 +1,6 @@
 import 'server-only';
 import { normalizarCep } from './cep';
+import { coordenadaPlausivel } from './distancia';
 
 /**
  * Consulta de endereço por CEP (ViaCEP).
@@ -139,4 +140,58 @@ function converter(bruto: Record<string, unknown> | unknown, cep: string): Ender
 function texto(v: unknown): string | null {
   const s = typeof v === 'string' ? v.trim() : '';
   return s.length > 0 ? s : null;
+}
+
+/* ── Coordenada do CEP ─────────────────────────────────────────────────────
+ *
+ * O ViaCEP não devolve latitude e longitude, e a tela de comitês precisa delas
+ * para dizer "há um comitê a X km de você". A BrasilAPI devolve, é gratuita e
+ * NÃO EXIGE CHAVE — nada para cadastrar, nada para expirar no meio da campanha.
+ *
+ * Mesmo desenho e mesmos motivos do resto deste arquivo: roda no servidor (o
+ * eleitor não fala com terceiro), guarda a resposta por 30 dias, e tem
+ * tempo-limite curto porque serviço externo cai.
+ *
+ * ⚠️ FALHA COM FREQUÊNCIA, e isso é previsto. Em cidade pequena de Rondônia o
+ * CEP é um só para o município inteiro e a BrasilAPI devolve erro. Quem chama
+ * precisa saber viver sem a coordenada: a tela cai para "temos um comitê na sua
+ * cidade", sem número. Distância errada é pior que distância nenhuma.
+ */
+
+const RAIZ_BRASILAPI = 'https://brasilapi.com.br/api/cep/v2';
+
+export type Coordenada = { lat: number; lon: number };
+
+export async function coordenadaDoCep(bruto: string): Promise<Coordenada | null> {
+  const cep = normalizarCep(bruto);
+  if (!cep) return null;
+
+  try {
+    const r = await fetch(`${RAIZ_BRASILAPI}/${cep}`, {
+      signal: AbortSignal.timeout(TEMPO_LIMITE_MS),
+      next: { revalidate: VALIDADE_S },
+      headers: { accept: 'application/json' },
+    });
+    if (!r.ok) return null;
+
+    const d = await r.json() as {
+      location?: { coordinates?: { latitude?: string; longitude?: string } };
+    };
+    const c = d?.location?.coordinates;
+    if (!c) return null;
+
+    // Vêm como TEXTO na resposta ("-8.76194"), não como número.
+    const lat = Number(c.latitude);
+    const lon = Number(c.longitude);
+    const ponto = { lat, lon };
+
+    // A mesma conferência que o cadastro do comitê faz: um par implausível
+    // viraria uma distância de milhares de quilômetros mostrada com toda a
+    // seriedade.
+    return coordenadaPlausivel(ponto) ? ponto : null;
+  } catch {
+    // Tempo esgotado, DNS, TLS, JSON quebrado, CEP de município inteiro — para
+    // quem chama é tudo a mesma coisa: "não sei onde é".
+    return null;
+  }
 }

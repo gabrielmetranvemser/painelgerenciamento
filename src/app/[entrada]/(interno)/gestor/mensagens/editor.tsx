@@ -3,10 +3,12 @@
 import { useMemo, useState, useTransition } from 'react';
 import { Aviso, Botao, Cartao, cx } from '@/components/ui';
 import { ehGrave, montarTexto, validarModelo, VARIAVEIS_CONHECIDAS } from '@/lib/mensagem';
-import type { EtapaMsg, Modelo, Variacao } from '@/lib/tipos-banco';
+import type { EtapaFixa, Modelo, Variacao } from '@/lib/tipos-banco';
 import { adicionarVariacao, alternarVariacao, salvarVariacao } from './acoes';
 
-const TITULO: Record<EtapaMsg, string> = {
+// `EtapaFixa` e não `EtapaMsg`: as mensagens que o gestor cria têm tela
+// própria, e não entram nesta lista de sete. Ver `EtapaFixa`.
+const TITULO: Record<EtapaFixa, string> = {
   permissao: 'Permissão — a primeira mensagem',
   material: 'Material — depois do "pode"',
   saida: 'Saída — quando a pessoa pede para sair',
@@ -24,7 +26,7 @@ const TITULO: Record<EtapaMsg, string> = {
  * escreve tem de saber que pode escrever à sua maneira — e por que a
  * recomendação existe.
  */
-const EXPLICACAO: Partial<Record<EtapaMsg, string>> = {
+const EXPLICACAO: Partial<Record<EtapaFixa, string>> = {
   permissao:
     'O texto recomendado não tem link nem emoji, declara a chapa com {{candidatos}}, usa {{origem}} para dizer como você chegou no contato — a frase muda conforme a pessoa ter vindo da lista ou do site — e oferece parar e apagar. Escreva do seu jeito: o que faltar aparece em vermelho aqui embaixo, com o motivo, e a decisão é sua. Rotaciona entre as variações para o mesmo número não repetir o texto.',
   material:
@@ -65,7 +67,7 @@ export function EditorMensagens({ modelos, exemplo }: Props) {
   );
 }
 
-function useValidacao(etapa: EtapaMsg, texto: string, exemplo: Props['exemplo']) {
+function useValidacao(etapa: EtapaFixa, texto: string, exemplo: Props['exemplo']) {
   return useMemo(() => {
     const problemas = validarModelo(etapa, texto);
     const previa = montarTexto(texto, {
@@ -129,7 +131,7 @@ function Previa({ texto }: { texto: string }) {
 function EditorVariacao({
   variacao, etapa, indice, podeDesativar, exemplo,
 }: {
-  variacao: Variacao; etapa: EtapaMsg; indice: number; podeDesativar: boolean; exemplo: Props['exemplo'];
+  variacao: Variacao; etapa: EtapaFixa; indice: number; podeDesativar: boolean; exemplo: Props['exemplo'];
 }) {
   const [texto, setTexto] = useState(variacao.texto);
   const [erro, setErro] = useState<string | null>(null);
@@ -188,7 +190,7 @@ function EditorVariacao({
   );
 }
 
-function NovaVariacao({ modeloId, etapa, exemplo }: { modeloId: string; etapa: EtapaMsg; exemplo: Props['exemplo'] }) {
+function NovaVariacao({ modeloId, etapa, exemplo }: { modeloId: string; etapa: EtapaFixa; exemplo: Props['exemplo'] }) {
   const [aberto, setAberto] = useState(false);
   const [texto, setTexto] = useState('');
   const [erro, setErro] = useState<string | null>(null);

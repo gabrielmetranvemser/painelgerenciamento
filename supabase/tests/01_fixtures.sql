@@ -2,6 +2,17 @@
 -- 99_limpeza.sql. Não deixar rodar com dados reais na base.
 begin;
 
+-- Um candidato para a chapa dos atendentes de teste.
+--
+-- ⚠️ Pelo MESMO motivo das listas mais abaixo, e é a segunda vez que isto
+-- acontece: uma trava nova de configuração faz os fixtures medirem o vazio.
+-- Desde `chapa_obrigatoria_na_permissao`, atendente sem candidato recebe
+-- `sem_candidato` e a fila não entrega nada — os testes de concorrência
+-- passariam a ver "ninguém pegou o mesmo contato" simplesmente porque ninguém
+-- pegou contato nenhum, que é o falso verde mais caro que este projeto pode ter.
+insert into public.candidatos (slug, nome_urna, cargo, vaga, numero, uf, ativo)
+values ('teste-candidato', 'Candidato Teste', 'deputado_federal', 1, '9911', 'RO', true);
+
 -- 10 atendentes, 1 chip cada
 do $$
 declare
@@ -31,6 +42,13 @@ begin
     insert into public.chips (atendente_id, rotulo, papel, status)
     values (v_uid, 'Chip Teste ' || i, 'ativo', 'ativo')
     returning id into v_chip;
+
+    -- Sem chapa, a fila recusa com `sem_candidato` antes de olhar qualquer
+    -- outra coisa. Ver o comentário do candidato de teste, acima.
+    insert into public.atendente_candidatos
+      (atendente_id, candidato_id, cargo, vaga, principal)
+    select v_uid, c.id, c.cargo, c.vaga, true
+      from public.candidatos c where c.slug = 'teste-candidato';
   end loop;
 end $$;
 

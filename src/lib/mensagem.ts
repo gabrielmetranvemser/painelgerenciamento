@@ -15,7 +15,18 @@ export type Etapa =
   | 'quem_passou'
   | 'quer_ajudar'
   | 'encaminhamento'
-  | 'convite_grupo';
+  | 'convite_grupo'
+  /**
+   * Mensagem que o gestor escreveu, fora das sete etapas.
+   *
+   * Não ganha regra de conteúdo própria: o que vale para ela é só o que vale
+   * para qualquer texto — não pode ser vazio e não pode usar variável que não
+   * existe. As regras das outras etapas são sobre o PAPEL de cada uma na
+   * conversa (a permissão declara a chapa, o material se identifica), e uma
+   * mensagem livre não tem papel fixo. O aviso de linhas demais continua
+   * valendo, porque texto longo parece panfleto em qualquer etapa.
+   */
+  | 'livre';
 
 export const VARIAVEIS_CONHECIDAS = [
   'saudacao',

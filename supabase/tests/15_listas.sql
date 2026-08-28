@@ -19,6 +19,7 @@ declare
   v_c3     uuid;
   v_c4     uuid;
   v_cap    uuid;
+  v_cand   uuid;
   v_linhas int;
   v_r      jsonb;
   v_f      jsonb;
@@ -52,6 +53,18 @@ begin
   values (v_a, 'Chip Lista A', 'ativo', 'ativo') returning id into v_chip_a;
   insert into public.chips (atendente_id, rotulo, papel, status)
   values (v_b, 'Chip Lista B', 'ativo', 'ativo') returning id into v_chip_b;
+
+  -- Chapa dos dois. Desde `chapa_obrigatoria_na_permissao`, atendente sem
+  -- candidato recebe `sem_candidato` e a fila não entrega NADA — este arquivo é
+  -- sobre ROTEAMENTO POR LISTA, e sem estas linhas ele mediria a configuração da
+  -- pessoa em vez do que existe para provar. Mesmo motivo das listas.
+  insert into public.candidatos (slug, nome_urna, cargo, vaga, numero, uf, ativo)
+  values ('teste-listas-cand', 'Cand Listas', 'deputado_federal', 1, '9921', 'RO', true)
+  returning id into v_cand;
+
+  insert into public.atendente_candidatos (atendente_id, candidato_id, cargo, vaga, principal)
+  values (v_a, v_cand, 'deputado_federal', 1, true),
+         (v_b, v_cand, 'deputado_federal', 1, true);
 
   insert into public.listas (origem, rotulo, entregue_por, entregue_em)
   values ('lista_fria', 'Teste L1', 'Fulano', current_date) returning id into v_l1;

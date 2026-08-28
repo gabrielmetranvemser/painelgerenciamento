@@ -11,6 +11,7 @@ update public.config set hora_inicio = 0, hora_fim = 24 where id = 1;
 do $$
 declare
   v_uid     uuid := gen_random_uuid();
+  v_cand  uuid;
   v_chip    uuid;
   v_c       uuid;
   v_perdido uuid;
@@ -33,6 +34,16 @@ begin
   values (v_uid, 'atendente', 'Medina', true, now());
   insert into public.chips (atendente_id, rotulo, papel, status)
   values (v_uid, 'Chip Medio', 'ativo', 'ativo') returning id into v_chip;
+
+  -- Chapa. Desde `chapa_obrigatoria_na_permissao`, `preparar_mensagem` recusa a
+  -- permissão de quem não tem candidato — e M9, que é sobre o texto do log,
+  -- passaria a medir a ausência da interação em vez do que existe para provar.
+  insert into public.candidatos (slug, nome_urna, cargo, vaga, numero, uf, ativo)
+  values ('teste-medio-cand', 'Cand Medio', 'deputado_federal', 1, '9931', 'RO', true)
+  returning id into v_cand;
+
+  insert into public.atendente_candidatos (atendente_id, candidato_id, cargo, vaga, principal)
+  values (v_uid, v_cand, 'deputado_federal', 1, true);
 
   perform set_config('request.jwt.claims',
     json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);

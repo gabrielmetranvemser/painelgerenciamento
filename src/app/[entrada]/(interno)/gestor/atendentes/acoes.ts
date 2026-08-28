@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
+import { criarClienteServidor } from '@/lib/supabase/server';
 import { exigirGestorOuFalhar, gerarSenha } from '@/lib/gestor';
 
 const Novo = z.object({
@@ -82,6 +83,45 @@ export async function redefinirSenha(id: string): Promise<{ ok: boolean; senha?:
 export type ResultadoRenomear = { ok: true } | { ok: false; erro: string };
 
 /**
+ * Troca o e-mail de acesso de uma conta.
+ *
+ * ⚠️ É por onde a pessoa ENTRA. A troca vale na hora: quem já está logado
+ * continua na sessão até ela vencer, mas o e-mail antigo para de funcionar no
+ * login seguinte. A tela avisa antes.
+ *
+ * Mora em `auth.users`, fora do alcance do PostgREST — por isso a chave de
+ * serviço, o mesmo caminho de `emailsDasContas`.
+ *
+ * `email_confirm: true` porque não existe fluxo de e-mail neste projeto: quem
+ * entrega o acesso é o gestor, na mão. Sem isso a conta ficaria esperando uma
+ * confirmação que ninguém vai clicar.
+ */
+export async function trocarEmail(id: string, email: string): Promise<ResultadoRenomear> {
+  await exigirGestorOuFalhar();
+
+  const analise = z.email('E-mail inválido.').safeParse(email.trim().toLowerCase());
+  if (!analise.success) return { ok: false, erro: analise.error.issues[0].message };
+
+  const supabase = criarClienteAdmin();
+  const { error } = await supabase.auth.admin.updateUserById(id, {
+    email: analise.data,
+    email_confirm: true,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      erro: error.message.includes('already') || error.message.includes('been registered')
+        ? 'Já existe uma conta com esse e-mail.'
+        : error.message,
+    };
+  }
+
+  revalidatePath('/gestor/atendentes');
+  return { ok: true };
+}
+
+/**
  * Troca o primeiro nome de quem já está cadastrado.
  *
  * ⚠️ Não é só rótulo de tela: é o nome que a PESSOA DO OUTRO LADO lê. A
@@ -137,4 +177,72 @@ export async function emailsDasContas(): Promise<Record<string, string>> {
   }
 
   return emails;
+}
+
+// ── Consentimento congelado sem chapa ────────────────────────────────────────
+
+export type OrfaoDeChapa = {
+  atendente_id: string;
+  primeiro_nome: string;
+  contatos: number;
+  tem_chapa: boolean;
+};
+
+/**
+ * Quem foi abordado antes de o atendente ter candidato atribuído.
+ *
+ * `registrar_abertura` congela em `contato_candidato` a chapa do atendente no
+ * instante da primeira mensagem, e é essa cópia que autoriza o material depois.
+ * Com a chapa vazia, a cópia nasceu vazia — e nada a preenche mais tarde, de
+ * propósito: senão um candidato atribuído hoje alcançaria quem autorizou ontem
+ * sem nunca ter ouvido o nome dele.
+ *
+ * O resultado prático é que essas pessoas ficam sem material para sempre, e a
+ * tela do atendente diz "não há candidato liberado" mesmo com a chapa montada.
+ * Aconteceu em 27/08/2026 com onze contatos.
+ */
+export async function contatosSemCandidato(): Promise<OrfaoDeChapa[]> {
+  await exigirGestorOuFalhar();
+  const supabase = criarClienteAdmin();
+  const { data, error } = await supabase.rpc('contatos_sem_candidato_declarado');
+  if (error) throw new Error(error.message);
+  return (data ?? []) as OrfaoDeChapa[];
+}
+
+export type ResultadoReparo =
+  | { ok: true; contatos: number }
+  | { ok: false; erro: string };
+
+/**
+ * Declara a chapa atual do atendente para os contatos dele que ficaram órfãos.
+ *
+ * ⚠️ Isto CONTORNA o congelamento do consentimento, que é a trava mais séria do
+ * sistema. Por isso é só do gestor, deixa alerta no banco, e marca cada linha
+ * com `declarado_em_reparo` — que é o que faz a tela do atendente pedir a ele
+ * que se apresente antes de mandar o material.
+ *
+ * A chamada vai com a chave de serviço porque a RPC confere `is_gestor()`
+ * usando `auth.uid()`... e é por isso que ela NÃO pode ir com service_role.
+ * Vai com a sessão, então.
+ */
+export async function repararConsentimento(atendenteId: string): Promise<ResultadoReparo> {
+  await exigirGestorOuFalhar();
+  const supabase = await criarClienteServidor();
+  const { data, error } = await supabase.rpc('declarar_candidatos_pendentes', {
+    p_atendente_id: atendenteId,
+  });
+  if (error) return { ok: false, erro: error.message };
+
+  const r = data as { ok: boolean; motivo?: string; contatos?: number };
+  if (!r.ok) {
+    return {
+      ok: false,
+      erro: r.motivo === 'atendente_sem_chapa'
+        ? 'Monte a chapa deste atendente primeiro — sem candidato não há o que declarar.'
+        : 'Só o gestor pode fazer isso.',
+    };
+  }
+
+  revalidatePath('/gestor/atendentes');
+  return { ok: true, contatos: r.contatos ?? 0 };
 }

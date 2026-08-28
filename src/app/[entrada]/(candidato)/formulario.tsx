@@ -4,15 +4,12 @@ import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Aviso, Botao, Campo, Selecao, cx } from '@/components/ui';
 import { CamposEndereco } from '@/components/campos-endereco';
+import { ComiteMaisPerto } from '@/components/comite-perto';
+import type { Comite } from '@/lib/comites';
 import { ENDERECO_VAZIO, TAMANHOS_CAMISETA, type EnderecoEstruturado } from '@/lib/cep';
+import { pedeTamanho, type ItemKit } from '@/lib/itens-kit';
 import type { Municipio } from '@/lib/tipos-banco';
 import { cadastrar } from './acoes';
-
-const ITENS = [
-  { valor: 'santinho', rotulo: 'Santinho' },
-  { valor: 'adesivo', rotulo: 'Adesivo de carro' },
-  { valor: 'camiseta', rotulo: 'Camiseta' },
-];
 
 function BotaoEnviar() {
   const { pending } = useFormStatus();
@@ -24,12 +21,21 @@ function BotaoEnviar() {
 }
 
 export function FormularioCandidato({
-  slug, aceite, municipios,
+  slug, aceite, municipios, itensKit, comites,
 }: {
   slug: string;
   /** A MESMA frase que o servidor grava como prova. Ver src/lib/consentimento.ts. */
   aceite: string;
   municipios: Municipio[];
+  /**
+   * O que a pessoa pode pedir. Vem do cadastro (`itens_kit`), e não de uma
+   * lista escrita aqui: acrescentar "boné" era um deploy, e esquecer um dos
+   * cinco lugares onde a lista estava copiada era um item que aparece na tela
+   * e o servidor recusa.
+   */
+  itensKit: readonly ItemKit[];
+  /** Onde a pessoa pode buscar material perto de casa. Pode estar vazio. */
+  comites: readonly Comite[];
 }) {
   const [estado, acao] = useActionState(cadastrar, null);
   const [querImpresso, setQuerImpresso] = useState(false);
@@ -108,13 +114,13 @@ export function FormularioCandidato({
 
         <div className={cx('space-y-4 border-t border-borda p-4', querImpresso ? 'block' : 'hidden')}>
           <div className="space-y-3">
-            {ITENS.map((i) => (
-              <label key={i.valor} className="flex cursor-pointer items-center gap-3">
+            {itensKit.map((i) => (
+              <label key={i.chave} className="flex cursor-pointer items-center gap-3">
                 <input
-                  type="checkbox" name="itens" value={i.valor} disabled={!querImpresso}
-                  checked={itens.includes(i.valor)}
+                  type="checkbox" name="itens" value={i.chave} disabled={!querImpresso}
+                  checked={itens.includes(i.chave)}
                   onChange={(e) => setItens((a) =>
-                    e.target.checked ? [...a, i.valor] : a.filter((v) => v !== i.valor))}
+                    e.target.checked ? [...a, i.chave] : a.filter((v) => v !== i.chave))}
                   className="size-5 accent-[var(--acento)]"
                 />
                 <span className="text-sm">{i.rotulo}</span>
@@ -122,7 +128,7 @@ export function FormularioCandidato({
             ))}
           </div>
 
-          {itens.includes('camiseta') && (
+          {pedeTamanho(itens, itensKit) && (
             <Selecao rotulo="Tamanho da camiseta" name="tamanho_camiseta" disabled={!querImpresso}
                      defaultValue="">
               <option value="">Escolha…</option>
@@ -142,6 +148,18 @@ export function FormularioCandidato({
               desabilitado={!querImpresso}
               obrigatorio={querImpresso && itens.length > 0}
             />
+
+            {/* Aparece assim que o CEP fica completo. Para quem mora perto,
+                buscar no comitê chega antes da entrega — e para a campanha é
+                uma peça a menos para rodar. */}
+            {querImpresso && (
+              <ComiteMaisPerto
+                comites={comites}
+                cep={endereco.cep}
+                municipioId={cidadeId === '' ? null : cidadeId}
+                className="mt-3"
+              />
+            )}
           </div>
         </div>
       </div>

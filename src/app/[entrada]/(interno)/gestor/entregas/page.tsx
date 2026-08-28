@@ -5,7 +5,10 @@ import { BotaoLink, Metrica, Titulo, Vazio } from '@/components/ui';
 import { rotas } from '@/lib/links-internos';
 import { Box, PackageCheck } from 'lucide-react';
 import type { Entrega } from '@/lib/tipos-banco';
+import { carregarItensKitTodos } from '@/lib/acoes-itens-kit';
+import { rotuloDoItem } from '@/lib/itens-kit';
 import { ListaEntregas } from './lista';
+import { CadastroDeItens } from './itens';
 
 export const metadata: Metadata = { title: 'Entregas' };
 export const dynamic = 'force-dynamic';
@@ -28,6 +31,10 @@ export default async function PaginaEntregas({
       .order('pedido_em', { ascending: true })
       .range(de, ate),
   );
+  // Todos, inclusive os desativados: quem pediu um item que saiu do cadastro
+  // continua na fila de entrega, e o entregador precisa do rótulo.
+  const itensKit = await carregarItensKitTodos();
+
   const pendentes = entregas.filter((e) => e.estado === 'pendente');
   const entregues = entregas.filter((e) => e.estado === 'entregue');
   const cancelados = entregas.filter((e) => e.estado === 'cancelado');
@@ -38,7 +45,7 @@ export default async function PaginaEntregas({
 
   return (
     <>
-      <Titulo sub="Quem pediu santinho, adesivo ou camiseta — com endereço, data do pedido e o que já saiu.">
+      <Titulo sub="Quem pediu material impresso — com endereço, data do pedido e o que já saiu. Os itens que a pessoa pode pedir são cadastrados abaixo.">
         Entregas
       </Titulo>
 
@@ -50,8 +57,10 @@ export default async function PaginaEntregas({
           rotulo="Peças a separar"
           valor={Object.values(itens).reduce((a, b) => a + b, 0)}
           detalhe={
+            // Rótulo do cadastro, não a chave crua — "3 Santinhos", e não
+            // "3 santinhos" nem "3 bone_grande".
             Object.entries(itens)
-              .map(([nome, n]) => `${n} ${nome}${n > 1 ? 's' : ''}`)
+              .map(([chave, n]) => `${n} ${rotuloDoItem(chave, itensKit)}${n > 1 ? 's' : ''}`)
               .join(' · ') || undefined
           }
         />
@@ -63,8 +72,12 @@ export default async function PaginaEntregas({
           bloco &ldquo;Pedido de kit&rdquo; que o atendente preenche durante a conversa.
         </Vazio>
       ) : (
-        <ListaEntregas entregas={entregas} />
+        <ListaEntregas entregas={entregas} itensKit={itensKit} />
       )}
+
+      <div className="mt-8">
+        <CadastroDeItens itens={itensKit} />
+      </div>
 
       <div className="mt-6">
         <BotaoLink href={rotas(entrada).exportar('kit')} variante="neutro" tamanho="p" prefetch={false}>

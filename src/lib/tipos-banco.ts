@@ -15,11 +15,15 @@ export type OrigemContato = 'site' | 'kit' | 'lista_fria' | 'chamou';
 
 export type StatusContato =
   | 'novo' | 'na_fila' | 'em_atendimento' | 'autorizou' | 'pediu_saida'
-  | 'invalido' | 'quer_ajudar' | 'encaminhado' | 'sem_resposta' | 'perdido';
+  | 'invalido' | 'quer_ajudar' | 'encaminhado' | 'sem_resposta' | 'perdido'
+  // Desfechos que vieram dos testes com os atendentes (28/08/2026).
+  | 'ja_apoia' | 'falar_depois' | 'nao_e_a_pessoa' | 'mudou_de_estado' | 'outro';
 
 export type EtapaMsg =
   | 'permissao' | 'material' | 'saida' | 'quem_passou'
-  | 'quer_ajudar' | 'encaminhamento' | 'convite_grupo';
+  | 'quer_ajudar' | 'encaminhamento' | 'convite_grupo'
+  /** Mensagem que o gestor escreveu. Qual delas vive em `modelos_livres`. */
+  | 'livre';
 
 export type StatusChip = 'aquecendo' | 'ativo' | 'amarelo' | 'pausado' | 'morto';
 export type PapelUsuario = 'gestor' | 'atendente';
@@ -29,11 +33,148 @@ export type PapelChip = 'ativo' | 'reserva';
 export type MotivoFila =
   | 'ok' | 'termo_nao_aceito' | 'usuario_inativo' | 'chip_nao_e_seu'
   | 'chip_indisponivel' | 'dia_bloqueado' | 'fora_de_horario'
-  | 'teto_atingido' | 'intervalo' | 'fila_vazia' | 'sem_lista' | 'lista_nao_e_sua';
+  | 'teto_atingido' | 'intervalo' | 'fila_vazia' | 'sem_lista' | 'lista_nao_e_sua'
+  /** Sem candidato atribuído: a primeira mensagem sairia sem dizer de quem. */
+  | 'sem_candidato';
 
-/** Resultados que o atendente pode marcar. */
-export const RESULTADOS = ['autorizou', 'pediu_saida', 'invalido', 'quer_ajudar', 'encaminhado'] as const;
+/**
+ * Resultados que o atendente pode marcar.
+ *
+ * ⚠️ A ORDEM IMPORTA em dois lugares: os cinco primeiros são os que ganham
+ * atalho de teclado (1 a 5) e ficam visíveis sem expandir. Mexer aqui muda o
+ * que o "2" faz no meio de trinta conversas por dia — ver `RESULTADOS_RAPIDOS`.
+ */
+export const RESULTADOS = [
+  'autorizou', 'pediu_saida', 'invalido', 'quer_ajudar', 'encaminhado',
+  'ja_apoia', 'falar_depois', 'sem_resposta', 'nao_e_a_pessoa',
+  'mudou_de_estado', 'outro',
+] as const;
 export type Resultado = (typeof RESULTADOS)[number];
+
+/**
+ * Os cinco que ficam à mão, com atalho de teclado. O resto abre em "Outros
+ * desfechos".
+ *
+ * Onze botões numa grade é o mesmo que nenhum: o atendente com a conversa
+ * aberta lê os três primeiros e clica. Estes cinco são os que decidem o rumo do
+ * contato — autorizar libera material, sair bloqueia, e os outros três
+ * encerram.
+ */
+export const RESULTADOS_RAPIDOS = RESULTADOS.slice(0, 5) as readonly Resultado[];
+export const RESULTADOS_OUTROS = RESULTADOS.slice(5) as readonly Resultado[];
+
+/** O rótulo do botão. */
+export const ROTULO_RESULTADO: Record<Resultado, string> = {
+  autorizou: 'Autorizou',
+  pediu_saida: 'Pediu saída',
+  invalido: 'Número inválido',
+  quer_ajudar: 'Quer ajudar',
+  encaminhado: 'Encaminhar',
+  ja_apoia: 'Já apoia',
+  falar_depois: 'Falar depois',
+  sem_resposta: 'Não respondeu',
+  nao_e_a_pessoa: 'Não é a pessoa',
+  mudou_de_estado: 'Mudou de estado',
+  outro: 'Outro',
+};
+
+/**
+ * O que cada desfecho quer dizer, na tela de quem marca.
+ *
+ * Existe porque sem isso o atendente com pressa encaixa a conversa no botão de
+ * nome mais parecido — e o relatório passa a medir uma coisa que não aconteceu.
+ * Mesma ideia de `DICA_MOTIVO` no suporte.
+ */
+export const DICA_RESULTADO: Record<Resultado, string> = {
+  autorizou: 'Disse que pode receber o material. Libera o envio.',
+  pediu_saida: 'Pediu para não receber mais. Bloqueia o número para sempre.',
+  invalido: 'Não é WhatsApp, número não existe, ou caixa postal.',
+  quer_ajudar: 'Se ofereceu para ajudar na campanha.',
+  encaminhado: 'Pediu algo que não podemos prometer — emprego, dinheiro, uma vaga.',
+  ja_apoia: 'Já é apoiador e não precisa ser convencido.',
+  falar_depois: 'Pediu para falar em outro momento. Volta para a sua fila em 1 dia.',
+  sem_resposta: 'Você abordou e ela não respondeu. Encerra a conversa.',
+  nao_e_a_pessoa: 'Atendeu outra pessoa: o número trocou de dono.',
+  mudou_de_estado: 'Saiu de Rondônia. Não vota aqui.',
+  outro: 'Nada acima serve. Escreva em uma linha o que aconteceu.',
+};
+
+/** Quais desfechos abrem o campo de texto livre. */
+export const RESULTADOS_COM_TEXTO: readonly Resultado[] = ['encaminhado', 'outro'];
+
+/**
+ * O rótulo de CADA status, inclusive os que o atendente não marca.
+ *
+ * ⚠️ Mora aqui, e não em cada tela, porque estava em quatro cópias — a
+ * exportação de CSV, a tabela do gestor, a lista de "Meus contatos" e o perfil
+ * do contato. Quando os desfechos passaram de cinco para onze, as quatro
+ * precisaram mudar juntas, e uma cópia esquecida mostraria `nao_e_a_pessoa`
+ * cru no meio de rótulos em português.
+ *
+ * Tipado pelo enum de propósito: esquecer um valor novo vira erro de build, e
+ * não texto feio em produção.
+ */
+export const ROTULO_STATUS_CONTATO: Record<StatusContato, string> = {
+  novo: 'Novo',
+  na_fila: 'Na fila',
+  em_atendimento: 'Aguardando resposta',
+  autorizou: 'Autorizou',
+  pediu_saida: 'Pediu saída',
+  invalido: 'Número inválido',
+  quer_ajudar: 'Quer ajudar',
+  encaminhado: 'Encaminhado',
+  sem_resposta: 'Não respondeu',
+  perdido: 'Perdido (o número caiu)',
+  ja_apoia: 'Já apoia',
+  falar_depois: 'Falar depois',
+  nao_e_a_pessoa: 'Não é a pessoa',
+  mudou_de_estado: 'Mudou de estado',
+  outro: 'Outro',
+};
+
+/** A cor da pílula de cada status. Mesma regra de cores do sistema visual. */
+export const COR_STATUS_CONTATO:
+  Record<StatusContato, 'neutro' | 'acento' | 'quente' | 'frio' | 'alerta' | 'perigo'> = {
+  novo: 'neutro',
+  na_fila: 'frio',
+  em_atendimento: 'alerta',
+  autorizou: 'acento',
+  pediu_saida: 'perigo',
+  invalido: 'neutro',
+  quer_ajudar: 'acento',
+  encaminhado: 'quente',
+  sem_resposta: 'neutro',
+  perdido: 'neutro',
+  // Apoiador declarado é resultado positivo — lima, a mesma do "autorizou".
+  ja_apoia: 'acento',
+  // Ainda vai voltar: âmbar, como tudo que está em aberto.
+  falar_depois: 'alerta',
+  nao_e_a_pessoa: 'neutro',
+  mudou_de_estado: 'neutro',
+  outro: 'quente',
+};
+
+/**
+ * As sete etapas fixas — as que têm linha em `modelos` e regras de conteúdo
+ * próprias em `validarModelo`.
+ *
+ * `livre` fica de fora porque não é uma etapa no mesmo sentido: é a etiqueta de
+ * qualquer texto que o gestor escreva em `modelos_livres`. O editor de
+ * Mensagens percorre as sete; os livres têm tela própria.
+ */
+export type EtapaFixa = Exclude<EtapaMsg, 'livre'>;
+
+/** O nome de cada etapa de mensagem, no histórico e no editor do gestor. */
+export const ROTULO_ETAPA: Record<EtapaMsg, string> = {
+  permissao: 'Pedido de permissão',
+  material: 'Material',
+  saida: 'Saída',
+  quem_passou: 'Quem passou meu número',
+  quer_ajudar: 'Quer ajudar',
+  encaminhamento: 'Encaminhamento',
+  convite_grupo: 'Convite ao canal',
+  livre: 'Mensagem do gestor',
+};
 
 export type Config = {
   id: number;
@@ -139,6 +280,8 @@ export type Contato = {
   encaminhamento: string | null;
   /** De qual candidato o lead veio, quando entrou por uma página de candidato. */
   candidato_origem_id: string | null;
+  encaminhamento_tratado_em: string | null;
+  encaminhamento_tratado_por: string | null;
   anonimizado_em: string | null;
   criado_em: string;
 };
@@ -152,6 +295,8 @@ export type Interacao = {
   /** Qual candidato, nas etapas de candidato. Nulo na permissão e na saída. */
   candidato_id: string | null;
   variacao_id: string | null;
+  /** Qual mensagem do gestor foi enviada, quando a etapa é `livre`. */
+  modelo_livre_id: string | null;
   texto_enviado: string | null;
   aberto_wa_em: string | null;
   resultado: StatusContato | null;
@@ -160,7 +305,12 @@ export type Interacao = {
   criado_em: string;
 };
 
-export type Modelo = { id: string; etapa: EtapaMsg; nome: string; ativo: boolean; atualizado_em: string };
+/**
+ * Um dos sete modelos fixos. A tabela `modelos` tem uma linha por etapa e não
+ * recebe linhas novas — o que o gestor escreve vive em `modelos_livres`, e o
+ * banco garante isso com um `check`.
+ */
+export type Modelo = { id: string; etapa: EtapaFixa; nome: string; ativo: boolean; atualizado_em: string };
 export type Variacao = { id: string; modelo_id: string; texto: string; ordem: number; ativa: boolean; criado_em: string };
 /**
  * Link rastreado. Aponta para exatamente UM alvo:
@@ -335,6 +485,8 @@ export type ContatoCandidato = {
   material_enviado_em: string | null;
   atendente_id: string | null;
   chip_id: string | null;
+  /** Declarado pelo gestor depois da conversa, e não na primeira mensagem. */
+  declarado_em_reparo: boolean;
   criado_em: string;
 };
 
@@ -356,6 +508,96 @@ export type EntregaDoContato = {
   materiais: number;
   /** Peças do tipo 'canal'. Zero desabilita o convite. */
   canais: number;
+  /**
+   * A linha veio do REPARO do gestor, não do congelamento da primeira
+   * mensagem: esta pessoa nunca ouviu o nome deste candidato. A tela avisa,
+   * porque muda o que o atendente precisa escrever antes do material.
+   */
+  declarado_em_reparo: boolean;
+};
+
+// ── Cadastros do gestor ──────────────────────────────────────────────────────
+
+/**
+ * O que a pessoa pode pedir de material impresso.
+ *
+ * ⚠️ `chave` é para SEMPRE: ela fica gravada em `captacoes.itens` (um `text[]`)
+ * de quem já pediu. Trocá-la criaria linha de relatório que ninguém consegue
+ * ler — por isso item sai de circulação sendo desativado, nunca apagado.
+ */
+export type ItemDeKit = {
+  chave: string;
+  rotulo: string;
+  /** Pedir este item deve perguntar o tamanho da camiseta. */
+  pede_tamanho: boolean;
+  ordem: number;
+  ativo: boolean;
+  criado_em: string;
+};
+
+/**
+ * Um ponto físico de uma candidatura.
+ *
+ * `latitude`/`longitude` nulas é estado previsto: em cidade pequena de Rondônia
+ * o CEP vale para o município inteiro e o serviço não devolve o ponto. Sem elas
+ * a tela não mostra distância — mostra "temos um comitê na sua cidade".
+ */
+export type ComiteDoCandidato = {
+  id: string;
+  candidato_id: string;
+  nome: string;
+  municipio_id: number | null;
+  cep: string | null;
+  rua: string | null;
+  numero: string | null;
+  bairro: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  horario: string | null;
+  telefone: string | null;
+  /** Só o gestor vê. Não vai para a página pública nem para o eleitor. */
+  observacao: string | null;
+  ativo: boolean;
+  criado_em: string;
+};
+
+/**
+ * O rastro de quem corrigiu o nome ou o telefone de um contato.
+ *
+ * ⚠️ Telefone é a IDENTIDADE da pessoa no sistema — `chave_dedup` é única e o
+ * HMAC é o que liga a lista de bloqueio. Trocar o número de uma ficha é dizer
+ * "esta conversa agora é de outra pessoa"; sem rastro, ninguém consegue olhar
+ * para trás e entender o que aconteceu.
+ */
+export type CorrecaoDeContato = {
+  id: number;
+  contato_id: string;
+  autor_id: string | null;
+  campo: 'nome' | 'telefone';
+  de: string | null;
+  para: string | null;
+  criado_em: string;
+};
+
+/**
+ * Uma mensagem que o GESTOR escreveu, fora das sete etapas fixas.
+ *
+ * ⚠️ `e_abordagem` decide se ela respeita o intervalo entre mensagens, e o
+ * padrão é `true`. Uma mensagem livre marcada como "resposta" não espera o
+ * intervalo; se todas nascessem assim, elas seriam a porta de fuga da trava que
+ * existe para o número do atendente não cair.
+ */
+export type ModeloLivre = {
+  id: string;
+  nome: string;
+  /** A linha embaixo do botão, na tela do atendente. */
+  dica: string | null;
+  texto: string;
+  e_abordagem: boolean;
+  ordem: number;
+  ativo: boolean;
+  criado_em: string;
+  atualizado_em: string;
 };
 
 // ── Suporte ──────────────────────────────────────────────────────────────────
@@ -524,6 +766,8 @@ export type ContatoDoGestor = {
   resultado_em: string | null;
   criado_em: string;
   encaminhamento: string | null;
+  /** Quando o gestor deu o encaminhamento por resolvido. Nulo = na fila dele. */
+  encaminhamento_tratado_em: string | null;
   anonimizado_em: string | null;
   claim_expira_em: string | null;
   adiado_ate: string | null;
@@ -652,4 +896,6 @@ export const TEXTO_MOTIVO: Record<MotivoFila, string> = {
   // o detalhe vem no parágrafo de baixo.
   sem_lista: 'Você ainda não está em nenhuma lista.',
   lista_nao_e_sua: 'Essa lista não é sua. Volte para “Todas as listas”.',
+  // Curto pelo mesmo motivo de `sem_lista`: é o TÍTULO do cartão de espera.
+  sem_candidato: 'Você ainda não tem candidato atribuído.',
 };

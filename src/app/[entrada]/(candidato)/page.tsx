@@ -7,6 +7,8 @@ import { ETIQUETA_CANDIDATOS } from '@/lib/cache';
 import { Cartao, cx } from '@/components/ui';
 import { textoDoAceite } from '@/lib/consentimento';
 import { ROTULO_CARGO, type CargoEleitoral, type Municipio } from '@/lib/tipos-banco';
+import { carregarItensKit } from '@/lib/acoes-itens-kit';
+import { comitesDoCandidato } from '@/lib/acoes-comites';
 import { FormularioCandidato } from './formulario';
 
 export const dynamic = 'force-dynamic';
@@ -101,7 +103,15 @@ export default async function PaginaDoCandidato({
   // para separar as três.
   if (!candidato?.ativo) notFound();
 
-  const municipios = await municipiosDeRondonia();
+  const [municipios, itensKit, comites] = await Promise.all([
+    municipiosDeRondonia(),
+    // Sem cache: o gestor acabou de acrescentar "boné" e precisa ver na página
+    // agora, não daqui a uma hora. É uma consulta a uma tabela de três linhas.
+    carregarItensKit(),
+    // Onde buscar material perto de casa. Só deste candidato: a página de um
+    // não anuncia o comitê de outro.
+    comitesDoCandidato(candidato.id),
+  ]);
   const aceite = textoDoAceite(candidato);
 
   return (
@@ -143,6 +153,8 @@ export default async function PaginaDoCandidato({
           slug={candidato.slug}
           aceite={aceite}
           municipios={municipios}
+          itensKit={itensKit}
+          comites={comites}
         />
       </Cartao>
 

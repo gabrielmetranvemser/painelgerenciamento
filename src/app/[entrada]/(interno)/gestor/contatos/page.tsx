@@ -96,6 +96,7 @@ export default async function PaginaContatos({
         contatos={resposta.linhas ?? []}
         contagens={resposta.contagens ?? {
           todos: 0, pendentes: 0, na_fila: 0, autorizou: 0, pediu_saida: 0, kit: 0,
+          encaminhados: 0,
         }}
         total={resposta.total ?? 0}
         pagina={pagina}

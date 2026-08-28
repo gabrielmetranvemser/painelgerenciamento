@@ -5,14 +5,9 @@ import { useMemo, useState, useTransition } from 'react';
 import { Check, Loader2, MapPin, Phone, Undo2, X } from 'lucide-react';
 import { Aviso, Botao, Cartao, Pilula, Selecao, cx } from '@/components/ui';
 import { formatarExibicao } from '@/lib/telefone';
+import { rotuloDoItem, type ItemKit } from '@/lib/itens-kit';
 import type { Entrega } from '@/lib/tipos-banco';
 import { marcarEntrega, type EstadoEntrega } from './acoes';
-
-const ROTULO_ITEM: Record<string, string> = {
-  santinho: 'Santinho',
-  adesivo: 'Adesivo de carro',
-  camiseta: 'Camiseta',
-};
 
 const ABAS: { chave: EstadoEntrega; rotulo: string }[] = [
   { chave: 'pendente', rotulo: 'A entregar' },
@@ -25,7 +20,19 @@ function saiuDaLista(e: Entrega) {
   return e.status_contato === 'pediu_saida' || e.nome === null;
 }
 
-export function ListaEntregas({ entregas }: { entregas: Entrega[] }) {
+export function ListaEntregas({
+  entregas, itensKit,
+}: {
+  entregas: Entrega[];
+  /**
+   * O cadastro de itens, só para traduzir a chave em rótulo.
+   *
+   * ⚠️ Inclui os DESATIVADOS de propósito: quem pediu um item que saiu do
+   * cadastro continua na fila de entrega, e a chave crua no meio de rótulos em
+   * português seria a linha que o entregador não entende.
+   */
+  itensKit: readonly ItemKit[];
+}) {
   const [aba, setAba] = useState<EstadoEntrega>('pendente');
   const [cidade, setCidade] = useState('');
   const [busca, setBusca] = useState('');
@@ -131,7 +138,7 @@ export function ListaEntregas({ entregas }: { entregas: Entrega[] }) {
 
                   <p className="mt-2 flex flex-wrap gap-1.5">
                     {(e.itens ?? []).map((i) => (
-                      <Pilula key={i} cor="acento">{ROTULO_ITEM[i] ?? i}</Pilula>
+                      <Pilula key={i} cor="acento">{rotuloDoItem(i, itensKit)}</Pilula>
                     ))}
                     {e.tamanho_camiseta && <Pilula>tamanho {e.tamanho_camiseta}</Pilula>}
                   </p>

@@ -2,14 +2,17 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, Loader2, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, Loader2, UserPlus, X } from 'lucide-react';
 import { Aviso, Botao, Campo, Selecao, cx } from '@/components/ui';
 import { useChipSalvo } from '@/components/chip-salvo';
 import { CamposEndereco } from '@/components/campos-endereco';
 import { ENDERECO_VAZIO, TAMANHOS_CAMISETA, enderecoUtilizavel, type EnderecoEstruturado } from '@/lib/cep';
+import { carregarItensKit } from '@/lib/acoes-itens-kit';
+import { pedeTamanho, type ItemKit } from '@/lib/itens-kit';
 import type { Chip, MotivoAdicionar, Municipio } from '@/lib/tipos-banco';
 import {
-  adicionarContato, carregarChapa, type CandidatoDaChapa,
+  adicionarContato, carregarChapa, consultarTelefone,
+  type CandidatoDaChapa, type ConsultaTelefone,
 } from '@/app/[entrada]/(interno)/painel/acoes';
 import { registrarPedidoKit } from '@/app/[entrada]/(interno)/painel/contatos/[id]/acoes';
 
@@ -25,12 +28,6 @@ import { registrarPedidoKit } from '@/app/[entrada]/(interno)/painel/contatos/[i
  * quem está com a conversa aberta do lado não vai preencher oito campos — e
  * cidade, kit e endereço podem ser completados depois, no perfil do contato.
  */
-
-const ITENS = [
-  { valor: 'santinho', rotulo: 'Santinho' },
-  { valor: 'adesivo', rotulo: 'Adesivo de carro' },
-  { valor: 'camiseta', rotulo: 'Camiseta' },
-];
 
 const RECUSA: Record<MotivoAdicionar, string> = {
   usuario_inativo: 'Sua conta está inativa. Fale com o gestor.',
@@ -106,8 +103,20 @@ function Formulario({
   const [tamanho, setTamanho] = useState('');
   const [endereco, setEndereco] = useState<EnderecoEstruturado>(ENDERECO_VAZIO);
   const [chapa, setChapa] = useState<CandidatoDaChapa[]>([]);
+  const [itensKit, setItensKit] = useState<ItemKit[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [avisoKit, setAvisoKit] = useState<string | null>(null);
+  /**
+   * O que o servidor sabe sobre este número — consultado enquanto a pessoa
+   * digita, e não no clique.
+   *
+   * ⚠️ `adicionar_contato` já recusava número que é de outro atendente, mas SÓ
+   * DEPOIS de o formulário inteiro ser preenchido e enviado. E dois atendentes
+   * falando com o mesmo eleitor é o que vira denúncia: o aviso tem de chegar
+   * antes de a conversa começar, não depois.
+   */
+  const [consulta, setConsulta] = useState<{ chave: string; r: ConsultaTelefone } | null>(null);
+  const [consultando, setConsultando] = useState(false);
   const [ocupado, iniciar] = useTransition();
   const primeiroCampo = useRef<HTMLInputElement>(null);
 
@@ -126,8 +135,14 @@ function Formulario({
     return () => window.removeEventListener('keydown', aoTeclar);
   }, [aoFechar]);
 
-  // A chapa só é buscada quando alguém abre "Mais opções": na maioria dos
-  // cadastros ninguém abre, e seria uma consulta por clique no botão flutuante.
+  // A chapa e os itens só são buscados quando alguém abre "Mais opções": na
+  // maioria dos cadastros ninguém abre, e seriam duas consultas por clique no
+  // botão flutuante.
+  useEffect(() => {
+    if (!expandido || itensKit.length > 0) return;
+    void carregarItensKit().then(setItensKit);
+  }, [expandido, itensKit.length]);
+
   useEffect(() => {
     if (!expandido || chapa.length > 0) return;
     void carregarChapa().then((c) => {
@@ -136,6 +151,38 @@ function Formulario({
       else setCandidatoId(c.find((x) => x.principal)?.id ?? '');
     });
   }, [expandido, chapa.length]);
+
+  // Consulta com folga depois da última tecla: sem isso é uma ida ao servidor
+  // por dígito digitado.
+  const digitos = telefone.replace(/\D/g, '');
+  /** Só consulta com número plausível. Abaixo disso não há o que perguntar. */
+  const telefonePronto = digitos.length >= 10 ? digitos : null;
+
+  /**
+   * A resposta vale só para o número que está no campo AGORA.
+   *
+   * Casar o resultado com a pergunta é o que substitui um `setConsulta(null)`
+   * dentro do efeito — que o React trata como renderização em cascata.
+   */
+  const consultaAtual =
+    consulta && telefonePronto && consulta.chave === telefonePronto ? consulta.r : null;
+
+  useEffect(() => {
+    if (!telefonePronto) return;
+
+    let cancelado = false;
+    const t = setTimeout(async () => {
+      setConsultando(true);
+      const r = await consultarTelefone(telefonePronto);
+      // A resposta de um número que a pessoa já apagou não pode sobrescrever a
+      // do número que ela está digitando agora — daí a `chave` junto.
+      if (cancelado) return;
+      setConsulta({ chave: telefonePronto, r });
+      setConsultando(false);
+    }, 500);
+
+    return () => { cancelado = true; clearTimeout(t); };
+  }, [telefonePronto]);
 
   const cidade = municipios.find((m) => m.id === cidadeId) ?? null;
   const podeEnviar = nome.trim().length >= 2 && telefone.replace(/\D/g, '').length >= 10;
@@ -236,6 +283,9 @@ function Formulario({
             dica="Pode colar do WhatsApp, com ou sem +55."
           />
 
+          <AvisoDeDuplicado consulta={consultaAtual}
+                            consultando={consultando && consultaAtual === null} />
+
           {chips.length > 1 && (
             <Selecao rotulo="Seu número que ela chamou" value={chipId}
                      onChange={(e) => setChipEscolhido(e.target.value)}>
@@ -275,15 +325,15 @@ function Formulario({
             <div>
               <p className="mb-2 text-[13px] font-semibold">Pediu material impresso?</p>
               <div className="space-y-2">
-                {ITENS.map((i) => (
-                  <label key={i.valor} className={cx(
+                {itensKit.map((i) => (
+                  <label key={i.chave} className={cx(
                     'flex cursor-pointer items-center gap-3 rounded-2xl border p-3 transition-colors',
-                    itens.includes(i.valor) ? 'border-acento/45 bg-acento/10' : 'border-borda',
+                    itens.includes(i.chave) ? 'border-acento/45 bg-acento/10' : 'border-borda',
                   )}>
                     <input
-                      type="checkbox" checked={itens.includes(i.valor)}
+                      type="checkbox" checked={itens.includes(i.chave)}
                       onChange={() => setItens((a) =>
-                        a.includes(i.valor) ? a.filter((v) => v !== i.valor) : [...a, i.valor])}
+                        a.includes(i.chave) ? a.filter((v) => v !== i.chave) : [...a, i.chave])}
                       className="size-5 accent-[var(--acento)]"
                     />
                     <span className="text-sm font-medium">{i.rotulo}</span>
@@ -292,7 +342,7 @@ function Formulario({
               </div>
             </div>
 
-            {itens.includes('camiseta') && (
+            {pedeTamanho(itens, itensKit) && (
               <Selecao rotulo="Tamanho da camiseta" value={tamanho}
                        onChange={(e) => setTamanho(e.target.value)}>
                 <option value="">Não informou</option>
@@ -329,5 +379,105 @@ function Formulario({
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── Esse número já é de alguém? ─────────────────────────────────────────── */
+
+/**
+ * O aviso que aparece enquanto o atendente digita o telefone.
+ *
+ * ⚠️ Cada caso manda a pessoa para um lugar DIFERENTE, e é por isso que não é
+ * um aviso só:
+ *
+ *   bloqueado          não cadastre, e não responda. Quem pediu saída não pode
+ *                      voltar por uma porta lateral — é multa por mensagem.
+ *   é de outro colega  fale com o colega ANTES de responder. Dois atendentes
+ *                      no mesmo eleitor é o que vira denúncia.
+ *   é seu, já falado   não é cadastro novo: é a conversa que já existe.
+ *   é seu, não falado  já está na sua fila; cadastrar de novo não faz nada.
+ *   existe, sem dono   está na fila geral — vai cair para alguém.
+ *
+ * O verde do "número novo" existe de propósito: sem ele, a ausência de aviso
+ * seria indistinguível de "a consulta não rodou".
+ */
+function AvisoDeDuplicado({
+  consulta, consultando,
+}: {
+  consulta: ConsultaTelefone | null;
+  consultando: boolean;
+}) {
+  if (consultando) {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-suave">
+        <Loader2 size={12} className="animate-spin" /> conferindo se esse número já está na base…
+      </p>
+    );
+  }
+
+  if (!consulta) return null;
+
+  if (!consulta.ok) {
+    // Telefone que nem chega a ser telefone: o campo já explica, e repetir aqui
+    // seria dois vermelhos dizendo a mesma coisa.
+    return null;
+  }
+
+  if (consulta.bloqueado) {
+    return (
+      <Aviso tom="erro" icone={<AlertTriangle size={14} />}>
+        <strong>Esse número pediu para sair da lista.</strong> Não cadastre e não responda —
+        mandar mensagem para quem pediu saída é multa por mensagem. Se a pessoa procurou você
+        de novo por conta própria, avise o gestor: só ele pode liberar.
+      </Aviso>
+    );
+  }
+
+  if (!consulta.existe) {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-ok">
+        <Check size={12} /> número novo — ninguém falou com essa pessoa ainda.
+      </p>
+    );
+  }
+
+  if (consulta.meu) {
+    return (
+      <Aviso tom="info">
+        {consulta.ja_falado
+          ? <>
+              <strong>Essa pessoa já é sua e você já falou com ela</strong>
+              {consulta.primeiro_contato_em &&
+                ` em ${new Date(consulta.primeiro_contato_em).toLocaleDateString('pt-BR')}`}.
+              {' '}Procure em <strong>Meus contatos</strong> em vez de cadastrar de novo — lá
+              você continua a conversa e corrige o resultado.
+            </>
+          : <>
+              <strong>Essa pessoa já está na sua fila</strong>, ainda sem conversa.
+              Cadastrar de novo não muda nada: ela vai chegar em &ldquo;Buscar próximo
+              contato&rdquo;.
+            </>}
+      </Aviso>
+    );
+  }
+
+  if (consulta.atendente) {
+    return (
+      <Aviso tom="alerta" icone={<AlertTriangle size={14} />}>
+        <strong>Esse número já está com {consulta.atendente}.</strong>{' '}
+        {consulta.ja_falado
+          ? `${consulta.atendente} já conversou com essa pessoa.`
+          : `${consulta.atendente} ainda não falou com ela.`}
+        {' '}Fale com {consulta.atendente} antes de responder — duas pessoas da campanha
+        escrevendo para o mesmo eleitor é o que gera denúncia.
+      </Aviso>
+    );
+  }
+
+  return (
+    <Aviso tom="info">
+      Esse número já está na base, na fila geral, ainda sem atendente. Cadastrar por aqui traz
+      ele para você.
+    </Aviso>
   );
 }
