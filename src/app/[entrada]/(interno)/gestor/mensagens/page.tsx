@@ -5,6 +5,8 @@ import { criarClienteServidor } from '@/lib/supabase/server';
 import { Aviso, Titulo } from '@/components/ui';
 import { ROTULO_CARGO, type Candidato, type EtapaMsg, type Modelo, type Variacao } from '@/lib/tipos-banco';
 import { EditorMensagens } from './editor';
+import { MensagensDoGestor } from './mensagens-do-gestor';
+import { carregarModelosLivres } from './livres';
 
 export const metadata: Metadata = { title: 'Mensagens' };
 export const dynamic = 'force-dynamic';
@@ -40,6 +42,9 @@ export default async function PaginaMensagens({
     }))
     .sort((a, b) => ORDEM.indexOf(a.etapa) - ORDEM.indexOf(b.etapa));
 
+  // As mensagens que o gestor escreveu, fora das sete etapas fixas.
+  const livres = await carregarModelosLivres();
+
   const lista = (candidatos ?? []) as Candidato[];
   const primeiro = lista[0] ?? null;
 
@@ -74,6 +79,10 @@ export default async function PaginaMensagens({
           timezone: cfg?.timezone ?? 'America/Porto_Velho',
         }}
       />
+
+      <div className="mt-6">
+        <MensagensDoGestor modelos={livres} />
+      </div>
     </>
   );
 }
