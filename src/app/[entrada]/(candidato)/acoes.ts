@@ -6,10 +6,10 @@ import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { ipDosCabecalhos, registrarCaptacao } from '@/lib/captacao';
 import { ENDERECO_VAZIO, TAMANHOS_CAMISETA, normalizarCep, type EnderecoEstruturado } from '@/lib/cep';
 import { textoDoAceite } from '@/lib/consentimento';
+import { carregarItensKit } from '@/lib/acoes-itens-kit';
+import { pedeTamanho } from '@/lib/itens-kit';
 import { primeiroNomeDe } from '@/lib/mensagem';
 import type { CargoEleitoral } from '@/lib/tipos-banco';
-
-const ITENS_VALIDOS = ['santinho', 'adesivo', 'camiseta'] as const;
 
 /** Campo de endereço que veio em branco chega como '' e deve virar null. */
 const Texto = (max: number) =>
@@ -25,7 +25,13 @@ const Entrada = z.object({
   numero: Texto(20),
   bairro: Texto(80),
   tamanhoCamiseta: z.enum(TAMANHOS_CAMISETA).optional().nullable().catch(null),
-  itens: z.array(z.enum(ITENS_VALIDOS)),
+  /**
+   * A lista de itens é CADASTRO, não código — por isso `z.string()` com um
+   * formato, e a conferência de quais existem fica logo abaixo, contra o banco.
+   * Antes era um `z.enum` com os três escritos à mão aqui, e acrescentar um
+   * item no cadastro fazia o formulário público recusá-lo em silêncio.
+   */
+  itens: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,29}$/)),
   aceite: z.literal('on', { message: 'É preciso autorizar o contato pelo WhatsApp.' }),
   /**
    * Armadilha. O campo existe no HTML, fica escondido do olho e do leitor de
@@ -90,7 +96,15 @@ export async function cadastrar(
     return { ok: false, erro: 'Esta página não está mais recebendo cadastros.' };
   }
 
-  const querKit = d.itens.length > 0;
+  // ⚠️ Os itens são conferidos contra o CADASTRO, e não contra uma lista
+  // escrita neste arquivo. O `regex` do schema garante só o formato da chave;
+  // quem decide o que existe é a tabela `itens_kit`. Sem esta conferência,
+  // qualquer chave bem-formada entraria em `captacoes.itens` pelo DevTools e
+  // viraria uma linha de entrega que ninguém sabe o que é.
+  const validos = await carregarItensKit();
+  const itens = d.itens.filter((c) => validos.some((i) => i.chave === c));
+
+  const querKit = itens.length > 0;
   const cabecalhos = await headers();
 
   // Sem item pedido não há entrega, e endereço guardado sem entrega para fazer
@@ -105,8 +119,10 @@ export async function cadastrar(
     telefone: d.telefone,
     municipioId: d.municipioId,
     endereco,
-    tamanhoCamiseta: querKit && d.itens.includes('camiseta') ? d.tamanhoCamiseta ?? null : null,
-    itens: querKit ? d.itens : null,
+    // Qual item pede tamanho também sai do cadastro: era `includes('camiseta')`
+    // escrito à mão, e amanhã pode ser a camiseta e o boné.
+    tamanhoCamiseta: pedeTamanho(itens, validos) ? d.tamanhoCamiseta ?? null : null,
+    itens: querKit ? itens : null,
     candidatoId: candidato.id,
     textoAceite: textoDoAceite({
       nome_urna: candidato.nome_urna,
