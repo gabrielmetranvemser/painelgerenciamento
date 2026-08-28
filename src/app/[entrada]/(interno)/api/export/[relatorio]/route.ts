@@ -3,7 +3,7 @@ import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { buscarTudo } from '@/lib/supabase/paginar';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { ehChaveDoPainel } from '@/lib/rotas';
-import type { OrigemContato, StatusContato } from '@/lib/tipos-banco';
+import { ROTULO_STATUS_CONTATO, type OrigemContato, type StatusContato } from '@/lib/tipos-banco';
 import { dataHoraLocal, gerarCsv, type Coluna } from '@/lib/csv';
 import { formatarCep } from '@/lib/cep';
 import { formatarExibicao } from '@/lib/telefone';
@@ -28,13 +28,6 @@ export const maxDuration = 60;
  * gestor mostrava `chamou` cru, no meio de rótulos em português, e nada quebrou
  * para avisar. Tipado pelo enum, esquecer um valor novo vira erro de build.
  */
-const ROTULO_STATUS: Record<StatusContato, string> = {
-  novo: 'Novo', na_fila: 'Na fila', em_atendimento: 'Em atendimento',
-  autorizou: 'Autorizou', pediu_saida: 'Pediu saída', invalido: 'Número inválido',
-  quer_ajudar: 'Quer ajudar', encaminhado: 'Encaminhado',
-  sem_resposta: 'Sem resposta', perdido: 'Perdido',
-};
-
 const ROTULO_ORIGEM: Record<OrigemContato, string> = {
   site: 'Cadastro no site', kit: 'Pedido de kit', lista_fria: 'Lista fria',
   chamou: 'Chamou no WhatsApp',
@@ -109,7 +102,7 @@ export async function GET(
         { cabecalho: 'Telefone', valor: (c) => (c.telefone_e164 ? formatarExibicao(c.telefone_e164) : '') },
         { cabecalho: 'Município', valor: (c) => c.municipios?.nome },
         { cabecalho: 'Origem', valor: (c) => ROTULO_ORIGEM[c.origem as OrigemContato] ?? c.origem },
-        { cabecalho: 'Situação', valor: (c) => ROTULO_STATUS[c.status as StatusContato] ?? c.status },
+        { cabecalho: 'Situação', valor: (c) => ROTULO_STATUS_CONTATO[c.status as StatusContato] ?? c.status },
         { cabecalho: 'Atendente', valor: (c) => c.usuarios?.primeiro_nome },
         { cabecalho: 'Lista', valor: (c) => c.listas?.rotulo },
         { cabecalho: 'Primeiro contato', valor: (c) => q(c.primeiro_contato_em) },

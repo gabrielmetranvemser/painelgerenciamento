@@ -8,13 +8,17 @@ import { montarTexto, primeiroNomeDe } from '@/lib/mensagem-etapas';
 import { normalizarTelefone, urlWhatsApp, type MotivoInvalido } from '@/lib/telefone';
 import type {
   CargoEleitoral, EntregaDoContato, EtapaMsg, FilaStatus, ListaDoAtendente, OrigemContato,
-  RespostaAbertura, RespostaAdicionarContato, RespostaFila, RespostaResultado, Resultado,
+  MotivoFila, RespostaAbertura, RespostaAdicionarContato, RespostaFila, RespostaResultado,
+  Resultado, StatusContato,
 } from '@/lib/tipos-banco';
 
 export type MensagemPronta = {
   ok: true;
   etapa: EtapaMsg;
-  variacaoId: string;
+  /** Nulo nas mensagens do gestor: elas não têm variação nem rotação por chip. */
+  variacaoId: string | null;
+  /** Qual texto do gestor, quando a etapa é `livre`. */
+  modeloLivreId: string | null;
   texto: string;
   urlWhatsApp: string;
   /** O candidato desta mensagem, quando ela é de um só. */
@@ -77,7 +81,7 @@ type RespostaPreparar = {
   ok: boolean;
   motivo?: string;
   modelo: string;
-  variacao_id: string;
+  variacao_id: string | null;
   contato: {
     primeiro_nome: string | null; nome: string | null; telefone_e164: string;
     origem: OrigemContato;
@@ -112,6 +116,8 @@ export async function prepararMensagem(
   chipId: string,
   etapa: EtapaMsg,
   candidatoId?: string | null,
+  /** Obrigatório quando a etapa é `livre`: qual texto do gestor. */
+  modeloLivreId?: string | null,
 ): Promise<MensagemPronta | MensagemErro> {
   const supabase = await criarClienteServidor();
   const { data, error } = await supabase.rpc('preparar_mensagem', {
@@ -119,6 +125,7 @@ export async function prepararMensagem(
     p_chip_id: chipId,
     p_etapa: etapa,
     p_candidato_id: candidatoId ?? null,
+    p_modelo_livre_id: modeloLivreId ?? null,
   });
   if (error) throw new Error(error.message);
 
@@ -165,12 +172,16 @@ export async function prepararMensagem(
     p_etapa: etapa,
     p_candidato_id: candidatoId ?? null,
     p_texto: texto,
+    // Sem isto, o texto da segunda mensagem livre sobrescreveria o rascunho da
+    // primeira: as duas têm a mesma etapa e o mesmo candidato nulo.
+    p_modelo_livre_id: modeloLivreId ?? null,
   });
 
   return {
     ok: true,
     etapa,
     variacaoId: r.variacao_id,
+    modeloLivreId: modeloLivreId ?? null,
     texto,
     urlWhatsApp: urlWhatsApp(r.contato.telefone_e164, texto),
     candidato: r.candidato
@@ -225,8 +236,9 @@ export async function registrarAbertura(
   contatoId: string,
   chipId: string,
   etapa: EtapaMsg,
-  variacaoId: string,
+  variacaoId: string | null,
   candidatoId?: string | null,
+  modeloLivreId?: string | null,
 ): Promise<RespostaAbertura> {
   const supabase = await criarClienteServidor();
   const { data, error } = await supabase.rpc('registrar_abertura', {
@@ -236,6 +248,7 @@ export async function registrarAbertura(
     p_texto: null,
     p_variacao_id: variacaoId,
     p_candidato_id: candidatoId ?? null,
+    p_modelo_livre_id: modeloLivreId ?? null,
   });
   if (error) throw new Error(error.message);
   return data as RespostaAbertura;
@@ -375,4 +388,189 @@ export async function definirMunicipio(contatoId: string, municipioId: number) {
   });
   if (error) throw new Error(error.message);
   return data as { ok: boolean; motivo?: string };
+}
+
+/**
+ * Esse número já existe na base? De quem é?
+ *
+ * Serve ao aviso que aparece ANTES de o atendente terminar de cadastrar alguém
+ * — `adicionar_contato` já recusava número de colega, mas só depois do
+ * trabalho feito. Duas pessoas falando com o mesmo eleitor é o que vira
+ * denúncia, então o aviso precisa vir cedo.
+ *
+ * O HMAC é calculado AQUI, no servidor: a chave secreta não está no Postgres
+ * nem pode chegar ao navegador. É o mesmo caminho de `adicionarContato`.
+ */
+export async function consultarTelefone(telefone: string): Promise<ConsultaTelefone> {
+  const normalizado = normalizarTelefone(telefone);
+  if (!normalizado.valido) {
+    return { ok: false, motivo: 'telefone_invalido', detalhe: EXPLICACAO_TELEFONE[normalizado.motivo] };
+  }
+
+  const supabase = await criarClienteServidor();
+  const { hash } = hashTelefone(normalizado.chaveDedup);
+
+  const { data, error } = await supabase.rpc('consultar_telefone', { p_telefone_hmac: hash });
+  if (error) throw new Error(error.message);
+  return data as ConsultaTelefone;
+}
+
+export type ConsultaTelefone =
+  | {
+      ok: true;
+      existe: boolean;
+      bloqueado: boolean;
+      status?: StatusContato;
+      /** O contato já é deste atendente. */
+      meu?: boolean;
+      /** Primeiro nome de QUEM ATENDE. Nunca o nome do contato. */
+      atendente?: string | null;
+      ja_falado?: boolean;
+      primeiro_contato_em?: string | null;
+    }
+  | { ok: false; motivo: string; detalhe?: string };
+
+/**
+ * Corrige o nome e/ou o telefone de um contato, deixando rastro.
+ *
+ * ⚠️ Trocar o telefone é trocar a IDENTIDADE da pessoa no sistema:
+ * `chave_dedup` é única e o HMAC é o que liga a lista de bloqueio. Por isso os
+ * três identificadores são calculados aqui, no servidor, e a chamada vai com a
+ * chave de serviço — um HMAC que o navegador pudesse inventar reabriria o
+ * caminho que a migration 330200 fechou.
+ *
+ * `p_autor_id` é explícito porque, sob service_role, `auth.uid()` é nulo dentro
+ * da função. Quem resolve quem é o autor é esta função, pela sessão.
+ */
+export async function corrigirContato(dados: {
+  contatoId: string;
+  nome?: string | null;
+  telefone?: string | null;
+}): Promise<RespostaCorrigir> {
+  const sessao = await criarClienteServidor();
+  const { data: { user } } = await sessao.auth.getUser();
+  if (!user) return { ok: false, motivo: 'usuario_inativo' };
+
+  let e164: string | null = null;
+  let chave: string | null = null;
+  let hash: string | null = null;
+  let versao: number | null = null;
+
+  if (dados.telefone != null && dados.telefone.trim() !== '') {
+    const t = normalizarTelefone(dados.telefone);
+    if (!t.valido) {
+      return { ok: false, motivo: 'telefone_invalido', detalhe: EXPLICACAO_TELEFONE[t.motivo] };
+    }
+    e164 = t.e164;
+    chave = t.chaveDedup;
+    const h = hashTelefone(t.chaveDedup);
+    hash = h.hash;
+    versao = h.versao;
+  }
+
+  const nome = dados.nome?.trim() || null;
+
+  const supabase = criarClienteAdmin();
+  const { data, error } = await supabase.rpc('corrigir_contato', {
+    p_autor_id: user.id,
+    p_contato_id: dados.contatoId,
+    p_nome: nome,
+    // A mesma função que monta o primeiro nome de todo mundo que veio de
+    // planilha — senão a saudação viraria "Bom dia, MARIA DAS D SILVA!".
+    p_primeiro_nome: primeiroNomeDe(nome),
+    p_telefone_e164: e164,
+    p_chave_dedup: chave,
+    p_telefone_hmac: hash,
+    p_hmac_versao: versao,
+  });
+  if (error) throw new Error(error.message);
+  return data as RespostaCorrigir;
+}
+
+export type RespostaCorrigir =
+  | { ok: true; mudou: boolean }
+  | { ok: false; motivo: string; atendente?: string | null; detalhe?: string };
+
+/** O que já foi corrigido neste contato, para o histórico. */
+export async function carregarCorrecoes(contatoId: string) {
+  const supabase = await criarClienteServidor();
+  const { data, error } = await supabase.rpc('correcoes_do_contato', { p_contato_id: contatoId });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as {
+    campo: 'nome' | 'telefone';
+    de: string | null;
+    para: string | null;
+    autor: string | null;
+    criado_em: string;
+  }[];
+}
+
+/** Uma linha da tela de escolher contato. NÃO traz telefone — ver a RPC. */
+export type ContatoNaFila = {
+  id: string;
+  nome: string | null;
+  origem: OrigemContato;
+  municipio: string | null;
+  lista_id: string | null;
+  lista: string | null;
+  criado_em: string;
+  /** Marcado como "Falar depois" por este atendente, e a hora já chegou. */
+  reagendado: boolean;
+};
+
+/**
+ * A fila deste atendente, para ele escolher de quem falar.
+ *
+ * Mesmo critério de `pegarProximo` — a lista não pode oferecer alguém que a
+ * fila depois recusa a entregar.
+ */
+export async function carregarFilaDoAtendente(
+  listaId?: string | null,
+  busca?: string | null,
+): Promise<ContatoNaFila[]> {
+  const supabase = await criarClienteServidor();
+  const { data, error } = await supabase.rpc('fila_do_atendente', {
+    p_lista_id: listaId ?? null,
+    p_busca: busca?.trim() || null,
+    p_limite: 40,
+  });
+  if (error) throw new Error(error.message);
+
+  const r = data as { ok?: boolean; erro?: string; linhas?: ContatoNaFila[] };
+  return r.linhas ?? [];
+}
+
+/**
+ * Pega um contato ESCOLHIDO, em vez do próximo da fila.
+ *
+ * As travas são as mesmas do "próximo": quem confere é o banco, e passar um id
+ * daqui não autoriza nada.
+ */
+export type RespostaEscolhido =
+  | Extract<RespostaFila, { ok: true }>
+  | {
+      ok: false;
+      /**
+       * Os motivos da fila, mais um só desta função.
+       *
+       * `contato_indisponivel` cobre de propósito quatro casos diferentes —
+       * o contato não existe, não é da sua lista, já foi pego por outro, ou
+       * está bloqueado. Separar os quatro transformaria esta chamada num
+       * oráculo sobre o que existe na base fora do alcance de quem pergunta.
+       */
+      motivo: MotivoFila | 'contato_indisponivel';
+      fila: FilaStatus;
+    };
+
+export async function pegarEscolhido(
+  contatoId: string,
+  chipId: string,
+): Promise<RespostaEscolhido> {
+  const supabase = await criarClienteServidor();
+  const { data, error } = await supabase.rpc('pegar_contato_especifico', {
+    p_contato_id: contatoId,
+    p_chip_id: chipId,
+  });
+  if (error) throw new Error(error.message);
+  return data as RespostaEscolhido;
 }

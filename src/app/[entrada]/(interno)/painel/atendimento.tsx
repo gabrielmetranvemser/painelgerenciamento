@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
-  AlertTriangle, Check, CircleSlash, Clock, Flame, Layers, Loader2, MessageSquare, PackageOpen,
-  Send, Siren, Snowflake, SkipForward, Star,
+  AlertTriangle, Check, ChevronDown, CircleSlash, Clock, Copy, Flame, Layers, List, Loader2,
+  MessageSquare, PackageOpen, Search, Send, Siren, Snowflake, SkipForward, Star, X,
 } from 'lucide-react';
 import {
   Aviso, Avatar, Botao, Cartao, EtiquetaLista, EtiquetaOrigem, Pilula, PontoLista, Selecao,
@@ -16,14 +16,16 @@ import { guardarLista, useListaSalva } from '@/components/lista-salva';
 import { ComoAgir } from '@/components/como-agir';
 import { formatarExibicao } from '@/lib/telefone';
 import {
-  RESULTADOS, ROTULO_CARGO, TEXTO_MOTIVO,
+  DICA_RESULTADO, RESULTADOS_COM_TEXTO, RESULTADOS_OUTROS, RESULTADOS_RAPIDOS,
+  ROTULO_CARGO, ROTULO_RESULTADO, TEXTO_MOTIVO,
   type Chip, type ContatoDaFila, type EntregaDoContato, type EtapaMsg, type FilaStatus,
   type ListaDoAtendente, type Municipio, type Resultado,
 } from '@/lib/tipos-banco';
 import {
-  carregarEntregas, carregarMinhasListas, consultarFila, definirMunicipio, pegarProximo,
-  prepararMensagem, pularContato, registrarAbertura, registrarResultado, sinalizarChip,
-  type MensagemPronta,
+  carregarEntregas, carregarFilaDoAtendente, carregarMinhasListas, consultarFila,
+  definirMunicipio, pegarEscolhido, pegarProximo, prepararMensagem, pularContato,
+  registrarAbertura, registrarResultado, sinalizarChip,
+  type ContatoNaFila, type MensagemPronta,
 } from './acoes';
 
 type Fase = 'ocioso' | 'permissao' | 'aberta' | 'entrega' | 'seguimento';
@@ -45,14 +47,6 @@ const TITULO_ETAPA: Partial<Record<EtapaMsg, string>> = {
   saida: 'Confirme que o contato saiu da lista',
   quer_ajudar: 'Resposta para quem quer ajudar',
   encaminhamento: 'Resposta para quem pediu algo que não podemos prometer',
-};
-
-const ROTULO_RESULTADO: Record<Resultado, string> = {
-  autorizou: 'Autorizou',
-  pediu_saida: 'Pediu saída',
-  invalido: 'Número inválido',
-  quer_ajudar: 'Quer ajudar',
-  encaminhado: 'Encaminhar',
 };
 
 /** Nome da janela do WhatsApp: reaproveita a mesma aba em vez de abrir 30. */
@@ -95,6 +89,8 @@ export function Atendimento({
   const [municipioId, setMunicipioId] = useState<number | ''>('');
   const [encaminhamento, setEncaminhamento] = useState('');
   const [confirmandoSaida, setConfirmandoSaida] = useState(false);
+  /** A folha de escolher contato está aberta. */
+  const [escolhendo, setEscolhendo] = useState(false);
   const [aguardando, setAguardando] = useState(aguardandoInicial);
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -230,7 +226,7 @@ export function Atendimento({
     iniciar(async () => {
       const r = await registrarAbertura(
         contato.id, chipId, enviada.etapa, enviada.variacaoId,
-        enviada.candidato?.id ?? null,
+        enviada.candidato?.id ?? null, enviada.modeloLivreId,
       );
       if (!r.ok) {
         // Não navega: o texto não chega ao WhatsApp.
@@ -244,23 +240,82 @@ export function Atendimento({
       }
       if (janela && !janela.closed) janela.location.href = enviada.urlWhatsApp;
       else window.open(enviada.urlWhatsApp, JANELA_WA);
-      setFila(r.fila);
-      setEspera(r.fila.segundos_espera);
-
-      if (enviada.etapa === 'permissao') { setFase('aberta'); return; }
-
-      // Material de um candidato: risca aquele da lista e volta para ela, para
-      // o atendente ver o que ainda falta sem perder o contexto.
-      if (enviada.candidato) {
-        const id = enviada.candidato.id;
-        setEntregas((atual) => atual.map((c) =>
-          c.candidato_id === id
-            ? { ...c, material_enviado_em: c.material_enviado_em ?? new Date().toISOString() }
-            : c,
-        ));
-        setMensagem(null);
-      }
+      seguirDepoisDoEnvio(enviada, r.fila);
     });
+  }
+
+  /**
+   * Copia o texto em vez de abrir o WhatsApp.
+   *
+   * ⚠️ PASSA PELO MESMO `registrarAbertura`, e isso não é economia de código:
+   * copiar é o passo anterior a enviar. Se copiar não registrasse, o teto do
+   * dia, o intervalo entre abordagens e a trilha de auditoria deixariam de
+   * enxergar a mensagem — e o atendente teria, sem querer, um caminho para
+   * furar as três coisas. Mesma razão de `src/lib/bots.ts` existir.
+   *
+   * Serve para quem já está com a conversa aberta no WhatsApp Web: abrir de
+   * novo recarrega a aba, e no meio de trinta conversas isso custa caro.
+   *
+   * A cópia acontece DEPOIS do `await`, e não junto do clique. No Chrome — que
+   * é o navegador da operação, o mesmo da extensão — isso funciona; se o
+   * navegador recusar, o `catch` avisa em vez de fingir que copiou, porque o
+   * envio a essa altura JÁ está registrado.
+   */
+  function copiarConversa() {
+    if (!contato || !mensagem) return;
+    setErro(null); setAviso(null);
+    const enviada = mensagem;
+    iniciar(async () => {
+      const r = await registrarAbertura(
+        contato.id, chipId, enviada.etapa, enviada.variacaoId,
+        enviada.candidato?.id ?? null, enviada.modeloLivreId,
+      );
+      if (!r.ok) {
+        setErro(
+          MOTIVO_ENVIO[r.motivo] ??
+          `O sistema não registrou o envio: ${r.motivo}. Não envie nada — fale com o gestor.`,
+        );
+        await atualizarFila();
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(enviada.texto);
+        setAviso('Texto copiado. Cole na conversa que já está aberta no WhatsApp.');
+      } catch {
+        setAviso(
+          'O envio foi registrado, mas não consegui copiar sozinho. ' +
+          'Selecione o texto acima e copie na mão.',
+        );
+      }
+      seguirDepoisDoEnvio(enviada, r.fila);
+    });
+  }
+
+  /**
+   * O que acontece depois de o envio ser registrado — igual para quem abre o
+   * WhatsApp e para quem copia o texto.
+   *
+   * Estava escrito dentro de `abrirConversa`; virou função quando o botão de
+   * copiar entrou, porque duas cópias disto sairiam de sincronia no primeiro
+   * ajuste de fase.
+   */
+  function seguirDepoisDoEnvio(enviada: MensagemPronta, filaNova: FilaStatus) {
+    setFila(filaNova);
+    setEspera(filaNova.segundos_espera);
+
+    if (enviada.etapa === 'permissao') { setFase('aberta'); return; }
+
+    // Material de um candidato: risca aquele da lista e volta para ela, para
+    // o atendente ver o que ainda falta sem perder o contexto.
+    if (enviada.candidato) {
+      const id = enviada.candidato.id;
+      setEntregas((atual) => atual.map((c) =>
+        c.candidato_id === id
+          ? { ...c, material_enviado_em: c.material_enviado_em ?? new Date().toISOString() }
+          : c,
+      ));
+      setMensagem(null);
+    }
   }
 
   /**
@@ -274,8 +329,10 @@ export function Atendimento({
    */
   function marcar(resultado: Resultado) {
     if (!contato || fase !== 'aberta') return;
-    if (resultado === 'encaminhado' && !encaminhamento.trim()) {
-      setErro('Escreva em uma linha o que a pessoa pediu, para a equipe saber o que encaminhar.');
+    if (RESULTADOS_COM_TEXTO.includes(resultado) && !encaminhamento.trim()) {
+      setErro(resultado === 'encaminhado'
+        ? 'Escreva em uma linha o que a pessoa pediu, para a equipe saber o que encaminhar.'
+        : 'Escreva em uma linha o que aconteceu — senão "Outro" não diz nada a ninguém.');
       return;
     }
     if (resultado === 'pediu_saida' && !confirmandoSaida) {
@@ -286,14 +343,14 @@ export function Atendimento({
     setConfirmandoSaida(false);
     setErro(null);
     iniciar(async () => {
-      // O campo livre só acompanha "Encaminhar". Antes ia em todo resultado:
-      // quem digitasse uma anotação e depois clicasse em "Pediu saída" gravava
-      // texto livre na ficha de alguém que acabou de pedir para sair — e o campo
-      // livre é o único lugar do sistema onde caberia, por engano, uma anotação
-      // que não pode existir.
+      // O campo livre só acompanha "Encaminhar" e "Outro". Antes ia em todo
+      // resultado: quem digitasse uma anotação e depois clicasse em "Pediu
+      // saída" gravava texto livre na ficha de alguém que acabou de pedir para
+      // sair — e o campo livre é o único lugar do sistema onde caberia, por
+      // engano, uma anotação que não pode existir.
       const r = await registrarResultado(
         contato.id, resultado, municipioId || null,
-        resultado === 'encaminhado' ? encaminhamento : null,
+        RESULTADOS_COM_TEXTO.includes(resultado) ? encaminhamento : null,
       );
       if (!r.ok) { setErro(`Não consegui gravar o resultado: ${r.motivo}`); return; }
 
@@ -326,6 +383,41 @@ export function Atendimento({
       const m = await prepararMensagem(contato.id, chipId, 'material', candidatoId);
       if (!m.ok) { setErro(MOTIVO_ENVIO[m.motivo] ?? `Não consegui montar a mensagem (${m.motivo}).`); return; }
       setMensagem(m);
+      setTimeout(() => botaoAbrir.current?.focus(), 60);
+    });
+  }
+
+  /**
+   * Abre um contato escolhido a dedo, em vez do próximo da fila.
+   *
+   * O corpo é o mesmo de `buscarProximo` depois da chamada — só muda quem
+   * decide QUAL contato. As travas continuam todas no servidor.
+   */
+  function buscarEscolhido(contatoId: string) {
+    setEscolhendo(false);
+    iniciar(async () => {
+      setErro(null);
+      const r = await pegarEscolhido(contatoId, chipId);
+      setFila(r.fila);
+      setEspera(r.fila.segundos_espera);
+      if (!r.ok) {
+        setErro(r.motivo === 'contato_indisponivel'
+          ? 'Esse contato não está mais disponível — outra pessoa pegou, ou ele saiu da sua fila.'
+          : (TEXTO_MOTIVO[r.motivo] ?? `Não consegui abrir esse contato (${r.motivo}).`));
+        return;
+      }
+      setContato(r.contato);
+      setMunicipioId(r.contato.municipio_id ?? '');
+      setEncaminhamento('');
+      setEntregas([]);
+
+      const m = await prepararMensagem(r.contato.id, chipId, 'permissao');
+      if (!m.ok) {
+        setErro(MOTIVO_ENVIO[m.motivo] ?? `Não consegui montar a mensagem (${m.motivo}). Fale com o gestor.`);
+        return;
+      }
+      setMensagem(m);
+      setFase('permissao');
       setTimeout(() => botaoAbrir.current?.focus(), 60);
     });
   }
@@ -391,8 +483,14 @@ export function Atendimento({
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(alvo.tagName)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (fase === 'aberta') {
+        // Só os cinco de sempre. Os desfechos que entraram depois ficam atrás
+        // de "Outros desfechos" e sem atalho: número que já estava na memória
+        // dos dedos não pode passar a fazer outra coisa.
         const i = Number(e.key) - 1;
-        if (i >= 0 && i < RESULTADOS.length) { e.preventDefault(); marcar(RESULTADOS[i]); }
+        if (i >= 0 && i < RESULTADOS_RAPIDOS.length) {
+          e.preventDefault();
+          marcar(RESULTADOS_RAPIDOS[i]);
+        }
       }
     }
     window.addEventListener('keydown', aoTeclar);
@@ -461,12 +559,31 @@ export function Atendimento({
                 ? `Comece pelos ${fila.quentes_na_fila} cadastros novos — são pessoas que pediram contato.`
                 : `${fila?.frios_na_fila ?? 0} contatos na fila.`}
             </p>
-            <Botao tamanho="g" className="mt-7" onClick={buscarProximo} disabled={ocupado}>
-              {ocupado
-                ? <><Loader2 size={17} className="animate-spin" /> Buscando…</>
-                : 'Buscar próximo contato'}
-            </Botao>
+            <div className="mt-7 flex flex-wrap justify-center gap-2.5">
+              <Botao tamanho="g" onClick={buscarProximo} disabled={ocupado}>
+                {ocupado
+                  ? <><Loader2 size={17} className="animate-spin" /> Buscando…</>
+                  : 'Buscar próximo contato'}
+              </Botao>
+              {/* ⚠️ "Próximo" continua sendo o caminho principal, e o botão
+                  grande é ele: é a ordem da fila que mantém quente antes de
+                  frio e mais antigo primeiro. Escolher existe para o caso
+                  combinado ("falei que ligava hoje"), não para todo mundo
+                  garimpar os fáceis. */}
+              <Botao tamanho="g" variante="neutro" onClick={() => setEscolhendo(true)}
+                     disabled={ocupado}>
+                <List size={16} /> Escolher da fila
+              </Botao>
+            </div>
           </Cartao>
+        )}
+
+        {escolhendo && (
+          <EscolherContato
+            listaId={listaId}
+            aoEscolher={buscarEscolhido}
+            aoFechar={() => setEscolhendo(false)}
+          />
         )}
 
         {contato && fase !== 'ocioso' && (
@@ -481,7 +598,8 @@ export function Atendimento({
               if (id) iniciar(async () => { await definirMunicipio(contato.id, id); });
             }}
             aoMudarEncaminhamento={setEncaminhamento}
-            aoAbrir={abrirConversa} aoMarcar={marcar} aoProximo={limparEBuscar}
+            aoAbrir={abrirConversa} aoCopiar={copiarConversa}
+            aoMarcar={marcar} aoProximo={limparEBuscar}
             aoPular={pularEBuscar} aoPrepararMaterial={prepararMaterial}
           />
         )}
@@ -503,6 +621,11 @@ export function Atendimento({
  * dicionários faria uma delas cair no texto cru mais cedo ou mais tarde.
  */
 const MOTIVO_ENVIO: Record<string, string> = {
+  modelo_obrigatorio: 'Escolha qual mensagem mandar.',
+  sem_chapa:
+    'Você ainda não tem candidato atribuído, então a primeira mensagem sairia sem dizer de quem ' +
+    'é o material — e a pessoa autorizaria sem saber o que está autorizando. Fale com o gestor ' +
+    'antes de abrir qualquer conversa.',
   candidato_nao_declarado:
     'Esta pessoa não foi avisada deste candidato na primeira mensagem, então não dá para mandar o material dele. ' +
     'Ela só autorizou o que estava escrito lá.',
@@ -671,6 +794,17 @@ function Travado({
               escolhe é o gestor: peça a ele para marcar suas listas.
             </p>
           )}
+          {/* Não é fila vazia nem falta de trabalho: é configuração faltando.
+              Sem candidato, a primeira mensagem sairia dizendo "tô ajudando
+              nessa eleição" e mais nada — foi o que aconteceu em 27/08 com
+              onze pessoas, e o material delas ficou travado depois. */}
+          {fila.motivo === 'sem_candidato' && (
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-suave">
+              Sua primeira mensagem precisa dizer de quem é o material. Sem candidato atribuído
+              ela sairia sem nome nenhum, e quem respondesse estaria autorizando no escuro.
+              Peça ao gestor para montar sua chapa — leva um minuto.
+            </p>
+          )}
           {/* Fila vazia trabalhando UMA lista quase nunca quer dizer "acabou o
               dia": quer dizer que aquela lista acabou. O caminho de volta tem
               de estar aqui, e não escondido lá em cima. */}
@@ -696,7 +830,7 @@ function Travado({
 
 function CartaoAtendimento({
   contato, mensagem, fase, ocupado, entregas, refBotao, municipios, municipioId, encaminhamento,
-  espera, confirmandoSaida, aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoMarcar,
+  espera, confirmandoSaida, aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoCopiar, aoMarcar,
   aoProximo, aoPular, aoPrepararMaterial,
 }: {
   contato: ContatoDaFila; mensagem: MensagemPronta | null; fase: Fase; ocupado: boolean;
@@ -709,7 +843,8 @@ function CartaoAtendimento({
   municipios: Municipio[]; municipioId: number | ''; encaminhamento: string;
   aoMudarMunicipio: (id: number | '') => void;
   aoMudarEncaminhamento: (v: string) => void;
-  aoAbrir: () => void; aoMarcar: (r: Resultado) => void; aoProximo: () => void;
+  aoAbrir: () => void; aoCopiar: () => void;
+  aoMarcar: (r: Resultado) => void; aoProximo: () => void;
   aoPular: () => void; aoPrepararMaterial: (candidatoId: string) => void;
 }) {
   const nome = contato.primeiro_nome ?? contato.nome ?? 'Sem nome';
@@ -768,14 +903,28 @@ function CartaoAtendimento({
           </div>
 
           <div className="border-t border-borda px-6 py-5">
-            <Botao ref={refBotao} tamanho="g" className="w-full" onClick={aoAbrir}
-                   disabled={ocupado || travadoPorIntervalo}>
-              {ocupado
-                ? <><Loader2 size={17} className="animate-spin" /> Registrando…</>
-                : travadoPorIntervalo
-                  ? <><Clock size={17} /> Aguarde {espera}s para abrir</>
-                  : <><Send size={17} /> Abrir conversa no WhatsApp</>}
-            </Botao>
+            <div className="flex flex-wrap gap-2.5">
+              <Botao ref={refBotao} tamanho="g" className="min-w-[13rem] flex-1" onClick={aoAbrir}
+                     disabled={ocupado || travadoPorIntervalo}>
+                {ocupado
+                  ? <><Loader2 size={17} className="animate-spin" /> Registrando…</>
+                  : travadoPorIntervalo
+                    ? <><Clock size={17} /> Aguarde {espera}s para abrir</>
+                    : <><Send size={17} /> Abrir conversa no WhatsApp</>}
+              </Botao>
+              {/* Copiar registra o envio igual a abrir — não é atalho que pula
+                  a auditoria. Existe para quem já está com a conversa aberta e
+                  não quer que a aba do WhatsApp recarregue. */}
+              <Botao tamanho="g" variante="neutro" onClick={aoCopiar}
+                     disabled={ocupado || travadoPorIntervalo}
+                     title="Copia o texto e registra o envio, sem recarregar o WhatsApp Web">
+                <Copy size={16} /> Copiar texto
+              </Botao>
+            </div>
+            <p className="mt-2 text-center text-xs leading-relaxed text-suave">
+              Os dois registram o envio. Use <strong className="text-texto">Copiar</strong> quando a
+              conversa já estiver aberta do lado.
+            </p>
             {travadoPorIntervalo && (
               <p className="mt-2 text-center text-xs leading-relaxed text-suave">
                 O intervalo entre uma abordagem e outra vale também para o material. Emendar
@@ -798,43 +947,11 @@ function CartaoAtendimento({
             {municipios.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
           </Selecao>
 
-          <div>
-            <p className="mb-3.5 text-sm font-semibold">Depois de conversar, marque o resultado:</p>
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-              {RESULTADOS.map((r, i) => {
-                const armado = r === 'pediu_saida' && confirmandoSaida;
-                return (
-                  <Botao key={r} variante={r === 'pediu_saida' ? 'perigo' : 'neutro'}
-                         onClick={() => aoMarcar(r)} disabled={ocupado}
-                         className="justify-between !rounded-2xl py-3">
-                    <span>{armado ? 'Confirmar saída' : ROTULO_RESULTADO[r]}</span>
-                    <kbd className="rounded-md border border-borda bg-fundo px-1.5 py-0.5 font-sans text-[10px] text-suave">
-                      {i + 1}
-                    </kbd>
-                  </Botao>
-                );
-              })}
-            </div>
-
-            {confirmandoSaida && (
-              <p className="mt-2.5 text-xs leading-relaxed text-perigo">
-                Clique de novo para confirmar. &ldquo;Pediu saída&rdquo; bloqueia o número para
-                sempre e apaga os dados em 48h — e desfazer depois depende do gestor.
-              </p>
-            )}
-          </div>
-
-          <label className="block">
-            <span className="text-xs leading-relaxed text-suave">
-              Se for encaminhar, escreva em uma linha o que a pessoa pediu.
-              Não escreva em quem ela vota — isso não pode ser registrado.
-            </span>
-            <input
-              value={encaminhamento} onChange={(e) => aoMudarEncaminhamento(e.target.value)}
-              maxLength={280} placeholder="ex.: perguntou sobre vaga de emprego"
-              className="mt-2 w-full rounded-2xl border border-borda bg-superficie-alta px-4 py-2.5 text-sm placeholder:text-tenue"
-            />
-          </label>
+          <Desfechos
+            ocupado={ocupado} confirmandoSaida={confirmandoSaida}
+            texto={encaminhamento}
+            aoMarcar={aoMarcar} aoMudarTexto={aoMudarEncaminhamento}
+          />
 
           {/* ⚠️ O desfecho mais COMUM de uma abordagem não é nenhum dos cinco
               botões acima: é a pessoa não responder na hora. Esse caminho existia
@@ -889,6 +1006,285 @@ function CartaoAtendimento({
         </div>
       )}
     </Cartao>
+  );
+}
+
+/* ── Escolher de quem falar ──────────────────────────────────────────────── */
+
+/**
+ * A folha que lista a fila para o atendente escolher a dedo.
+ *
+ * ⚠️ NÃO MOSTRA TELEFONE, e isso é de propósito: é uma lista de gente que
+ * ninguém abordou ainda, e mandar o número de cada um para o navegador seria
+ * exportar pedaço da base a cada abertura de tela. O número chega quando o
+ * contato é pego — que é o momento em que ele passa a ser daquela pessoa.
+ *
+ * A busca é por NOME, e só. Procurar por telefone aqui transformaria a tela num
+ * consultador de números; isso existe em outro lugar, com trava própria e
+ * devolvendo o mínimo (ver `consultarTelefone`).
+ */
+function EscolherContato({
+  listaId, aoEscolher, aoFechar,
+}: {
+  listaId: string | null;
+  aoEscolher: (contatoId: string) => void;
+  aoFechar: () => void;
+}) {
+  const [linhas, setLinhas] = useState<ContatoNaFila[] | null>(null);
+  const [busca, setBusca] = useState('');
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    const aoTeclar = (e: KeyboardEvent) => { if (e.key === 'Escape') aoFechar(); };
+    window.addEventListener('keydown', aoTeclar);
+    return () => window.removeEventListener('keydown', aoTeclar);
+  }, [aoFechar]);
+
+  // Espera a digitação parar: sem isso é uma ida ao servidor por tecla.
+  useEffect(() => {
+    let cancelado = false;
+    const t = setTimeout(async () => {
+      // `setCarregando` fica DENTRO do tempo, e não no corpo do efeito: chamar
+      // setState de forma síncrona na abertura do efeito dispara renderização
+      // em cascata.
+      setCarregando(true);
+      const r = await carregarFilaDoAtendente(listaId, busca);
+      if (cancelado) return;
+      setLinhas(r);
+      setCarregando(false);
+    }, busca ? 350 : 0);
+    return () => { cancelado = true; clearTimeout(t); };
+  }, [listaId, busca]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+      <button type="button" aria-label="Fechar" onClick={aoFechar}
+              className="absolute inset-0 bg-fundo/70 backdrop-blur-sm" />
+
+      <div role="dialog" aria-modal="true" aria-label="Escolher contato"
+           className={cx(
+             'relative flex max-h-[92vh] w-full flex-col border border-borda bg-superficie',
+             'rounded-t-3xl shadow-[var(--sombra-alta)] sm:max-w-lg sm:rounded-3xl',
+           )}>
+        <div className="flex items-start gap-3 p-5 pb-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="font-display text-lg font-semibold tracking-tight">Escolher contato</h2>
+            <p className="mt-0.5 text-xs leading-relaxed text-suave">
+              Quem está esperando na sua fila. O de sempre é o botão &ldquo;Buscar próximo&rdquo;
+              — esta lista serve para quando você combinou de falar com alguém.
+            </p>
+          </div>
+          <button type="button" onClick={aoFechar} aria-label="Fechar"
+                  className="grid size-8 shrink-0 place-items-center rounded-full text-suave hover:bg-superficie-alta hover:text-texto">
+            <X size={16} />
+          </button>
+        </div>
+
+        <label className="relative block px-5 pb-3">
+          <Search size={15} className="pointer-events-none absolute left-9 top-1/2 -translate-y-1/2 text-tenue" />
+          <input
+            autoFocus value={busca} onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar pelo nome" aria-label="Buscar pelo nome"
+            className="w-full rounded-2xl border border-borda bg-superficie-alta py-2.5 pl-11 pr-4 text-sm placeholder:text-tenue"
+          />
+        </label>
+
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-borda">
+          {carregando && linhas === null ? (
+            <p className="flex items-center justify-center gap-2 p-8 text-sm text-suave">
+              <Loader2 size={15} className="animate-spin" /> carregando…
+            </p>
+          ) : (linhas ?? []).length === 0 ? (
+            <p className="p-8 text-center text-sm leading-relaxed text-suave">
+              {busca
+                ? 'Ninguém com esse nome na sua fila.'
+                : 'Sua fila está vazia agora.'}
+            </p>
+          ) : (
+            <ul className="divide-y divide-borda">
+              {(linhas ?? []).map((c) => (
+                <li key={c.id}>
+                  <button type="button" onClick={() => aoEscolher(c.id)}
+                          className="flex w-full flex-wrap items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-superficie-alta">
+                    <Avatar nome={c.nome} tamanho="m" />
+                    <div className="mr-auto min-w-0">
+                      <p className="truncate text-sm font-semibold">{c.nome ?? 'Sem nome'}</p>
+                      <p className="truncate text-xs text-suave">
+                        {c.municipio ?? 'cidade não informada'}
+                        {c.lista && ` · ${c.lista}`}
+                      </p>
+                    </div>
+                    {/* Reagendado por ele mesmo: é a agenda dele, e é o motivo
+                        mais comum de abrir esta tela. Vem em primeiro na
+                        ordenação e marcado aqui. */}
+                    {c.reagendado && <Pilula cor="alerta"><Clock size={11} /> falar hoje</Pilula>}
+                    <EtiquetaOrigem origem={c.origem} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <p className="border-t border-borda px-5 py-3 text-xs leading-relaxed text-suave">
+          O telefone não aparece aqui — ele chega quando você abre o contato.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ── Os desfechos de uma conversa ────────────────────────────────────────── */
+
+/**
+ * Onze desfechos, cinco à mostra.
+ *
+ * ⚠️ ERAM CINCO, e vieram a onze pelos testes com os atendentes: o que
+ * acontecia na conversa não cabia nos cinco, e quem não achava onde encaixar
+ * marcava qualquer coisa para poder seguir. Um relatório que mede "número
+ * inválido" onde houve "não é a pessoa" é pior que um relatório com uma coluna
+ * a menos, porque parece certo.
+ *
+ * Mas onze botões numa grade é o mesmo que nenhum: o atendente com a conversa
+ * aberta lê os três primeiros e clica. Então os cinco que decidem o rumo do
+ * contato ficam à mão, com o atalho de teclado que já estava na memória dos
+ * dedos, e o resto abre num clique.
+ *
+ * A microdescrição embaixo de cada um é o que impede o encaixe errado. É a
+ * mesma ideia de `DICA_MOTIVO` na tela de suporte.
+ */
+function Desfechos({
+  ocupado, confirmandoSaida, texto, aoMarcar, aoMudarTexto,
+}: {
+  ocupado: boolean;
+  confirmandoSaida: boolean;
+  texto: string;
+  aoMarcar: (r: Resultado) => void;
+  aoMudarTexto: (v: string) => void;
+}) {
+  const [abertos, setAbertos] = useState(false);
+  const campo = useRef<HTMLInputElement>(null);
+  const [faltaTexto, setFaltaTexto] = useState<Resultado | null>(null);
+
+  /**
+   * Os dois desfechos que exigem uma linha escrita não podem ser um clique que
+   * devolve erro: quem clicou já decidiu, e a mensagem vermelha aparece longe
+   * do campo. Aqui o clique leva o cursor para o campo e explica o que falta.
+   */
+  function clicar(r: Resultado) {
+    if (RESULTADOS_COM_TEXTO.includes(r) && !texto.trim()) {
+      setFaltaTexto(r);
+      campo.current?.focus();
+      return;
+    }
+    setFaltaTexto(null);
+    aoMarcar(r);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="mb-3.5 text-sm font-semibold">Depois de conversar, marque o resultado:</p>
+
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          {RESULTADOS_RAPIDOS.map((r, i) => (
+            <BotaoDesfecho
+              key={r} resultado={r} atalho={i + 1} ocupado={ocupado}
+              rotulo={r === 'pediu_saida' && confirmandoSaida ? 'Confirmar saída' : ROTULO_RESULTADO[r]}
+              aoClicar={() => clicar(r)}
+            />
+          ))}
+        </div>
+
+        {confirmandoSaida && (
+          <p className="mt-2.5 text-xs leading-relaxed text-perigo">
+            Clique de novo para confirmar. &ldquo;Pediu saída&rdquo; bloqueia o número para
+            sempre e apaga os dados em 48h — e desfazer depois depende do gestor.
+          </p>
+        )}
+
+        <button
+          type="button" onClick={() => setAbertos((v) => !v)}
+          aria-expanded={abertos}
+          className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-acento"
+        >
+          <ChevronDown size={14} className={cx('transition-transform', abertos && 'rotate-180')} />
+          {abertos ? 'Menos desfechos' : 'Outros desfechos'}
+        </button>
+
+        {abertos && (
+          <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+            {RESULTADOS_OUTROS.map((r) => (
+              <BotaoDesfecho
+                key={r} resultado={r} ocupado={ocupado}
+                rotulo={ROTULO_RESULTADO[r]}
+                aoClicar={() => clicar(r)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <label className="block">
+        <span className="text-xs leading-relaxed text-suave">
+          Para <strong className="text-texto">Encaminhar</strong> ou{' '}
+          <strong className="text-texto">Outro</strong>, escreva em uma linha o que aconteceu.
+          {' '}Não escreva em quem a pessoa vota — isso não pode ser registrado.
+        </span>
+        <input
+          ref={campo}
+          value={texto}
+          onChange={(e) => { aoMudarTexto(e.target.value); if (e.target.value.trim()) setFaltaTexto(null); }}
+          maxLength={280} placeholder="ex.: perguntou sobre vaga de emprego"
+          className={cx(
+            'mt-2 w-full rounded-2xl border bg-superficie-alta px-4 py-2.5 text-sm placeholder:text-tenue',
+            faltaTexto ? 'border-perigo' : 'border-borda',
+          )}
+        />
+        {faltaTexto && (
+          <span className="mt-1.5 block text-xs text-perigo">
+            {faltaTexto === 'encaminhado'
+              ? 'Escreva o que a pessoa pediu, para a equipe saber o que encaminhar.'
+              : 'Escreva o que aconteceu — senão “Outro” não diz nada a ninguém.'}
+          </span>
+        )}
+      </label>
+    </div>
+  );
+}
+
+function BotaoDesfecho({
+  resultado, rotulo, atalho, ocupado, aoClicar,
+}: {
+  resultado: Resultado;
+  rotulo: string;
+  atalho?: number;
+  ocupado: boolean;
+  aoClicar: () => void;
+}) {
+  const perigoso = resultado === 'pediu_saida';
+  return (
+    <button
+      type="button" onClick={aoClicar} disabled={ocupado}
+      className={cx(
+        'rounded-2xl border p-3.5 text-left transition-colors disabled:opacity-45',
+        perigoso
+          ? 'border-perigo/40 hover:border-perigo hover:bg-perigo/10'
+          : 'border-borda hover:border-borda-forte hover:bg-superficie-alta',
+      )}
+    >
+      <span className="flex items-center gap-2">
+        <span className={cx('mr-auto text-sm font-semibold', perigoso && 'text-perigo')}>{rotulo}</span>
+        {atalho !== undefined && (
+          <kbd className="shrink-0 rounded-md border border-borda bg-fundo px-1.5 py-0.5 font-sans text-[10px] text-suave">
+            {atalho}
+          </kbd>
+        )}
+      </span>
+      <span className="mt-1 block text-xs leading-relaxed text-suave">
+        {DICA_RESULTADO[resultado]}
+      </span>
+    </button>
   );
 }
 

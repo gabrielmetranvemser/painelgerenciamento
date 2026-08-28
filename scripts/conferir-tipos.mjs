@@ -22,6 +22,8 @@ const TABELAS = {
   candidatos: 'Candidato', materiais: 'Material',
   atendente_candidatos: 'AtendenteCandidato', contato_candidato: 'ContatoCandidato',
   atendente_listas: 'AtendenteLista',
+  itens_kit: 'ItemDeKit', comites: 'ComiteDoCandidato',
+  contato_correcoes: 'CorrecaoDeContato', modelos_livres: 'ModeloLivre',
   chamados: 'Chamado', chamado_mensagens: 'ChamadoMensagem', chamado_anexos: 'ChamadoAnexo',
 };
 

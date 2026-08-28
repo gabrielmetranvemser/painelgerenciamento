@@ -1,41 +1,35 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useState, useTransition } from 'react';
 import {
-  ArrowLeft, Check, Gift, History, Loader2, MessageSquarePlus, MousePointerClick, PackageOpen,
-  Radio, Send, Star,
+  AlertTriangle, ArrowLeft, Check, ChevronDown, Copy, Gift, History, Loader2, MessageSquarePlus,
+  MousePointerClick, PackageOpen, Pencil, Radio, Send, Star, X,
 } from 'lucide-react';
 import { Avatar, Aviso, Botao, Cartao, EtiquetaOrigem, Pilula, Selecao, cx } from '@/components/ui';
 import { CamposEndereco } from '@/components/campos-endereco';
+import { ComiteMaisPerto } from '@/components/comite-perto';
+import { comitesDoContato } from '@/lib/acoes-comites';
+import type { Comite } from '@/lib/comites';
+import { carregarModelosLivres } from '@/app/[entrada]/(interno)/gestor/mensagens/livres';
+import type { ModeloLivre } from '@/lib/tipos-banco';
 import { TAMANHOS_CAMISETA, type EnderecoEstruturado } from '@/lib/cep';
+import { carregarItensKit } from '@/lib/acoes-itens-kit';
+import { pedeTamanho, type ItemKit } from '@/lib/itens-kit';
 import { formatarExibicao } from '@/lib/telefone';
 import {
-  RESULTADOS, ROTULO_CARGO,
+  DICA_RESULTADO, RESULTADOS_COM_TEXTO, RESULTADOS_OUTROS, RESULTADOS_RAPIDOS,
+  COR_STATUS_CONTATO, ROTULO_CARGO, ROTULO_ETAPA, ROTULO_RESULTADO, ROTULO_STATUS_CONTATO,
   type Chip, type Contato, type EntregaDoContato, type EtapaMsg, type Municipio, type Resultado,
 } from '@/lib/tipos-banco';
 import {
-  carregarEntregas, definirMunicipio, prepararMensagem, registrarAbertura, registrarResultado,
+  carregarCorrecoes, carregarEntregas, corrigirContato, definirMunicipio, prepararMensagem,
+  registrarAbertura, registrarResultado,
   type MensagemPronta,
 } from '@/app/[entrada]/(interno)/painel/acoes';
 import { carregarHistorico, registrarPedidoKit, type Historico, type PedidoKit as DadosPedidoKit } from './acoes';
 
 const JANELA_WA = 'whatsapp-atendimento';
-
-const ROTULO_RESULTADO: Record<Resultado, string> = {
-  autorizou: 'Autorizou',
-  pediu_saida: 'Pediu saída',
-  invalido: 'Número inválido',
-  quer_ajudar: 'Quer ajudar',
-  encaminhado: 'Encaminhar',
-};
-
-const ROTULO_STATUS: Record<string, string> = {
-  na_fila: 'Na fila', em_atendimento: 'Aguardando resposta',
-  autorizou: 'Autorizou', pediu_saida: 'Pediu saída', invalido: 'Número inválido',
-  quer_ajudar: 'Quer ajudar', encaminhado: 'Encaminhado',
-  sem_resposta: 'Não respondeu', perdido: 'Perdido (o número caiu)',
-};
 
 /**
  * Mensagens que valem para a conversa toda, sem dono.
@@ -50,24 +44,11 @@ const MENSAGENS: { etapa: EtapaMsg; rotulo: string; dica: string }[] = [
   { etapa: 'saida', rotulo: 'Saída', dica: 'confirma que o contato saiu da lista' },
 ];
 
-/** Rótulo de cada etapa no histórico, incluindo as que são por candidato. */
-const ROTULO_ETAPA: Record<EtapaMsg, string> = {
-  permissao: 'Pedido de permissão',
-  material: 'Material',
-  convite_grupo: 'Convite ao canal',
-  quem_passou: 'Quem passou meu número',
-  quer_ajudar: 'Quer ajudar',
-  encaminhamento: 'Encaminhamento',
-  saida: 'Saída',
-};
-
-const ITENS_KIT = [
-  { valor: 'santinho', rotulo: 'Santinho' },
-  { valor: 'adesivo', rotulo: 'Adesivo de carro' },
-  { valor: 'camiseta', rotulo: 'Camiseta' },
-];
-
 const MOTIVO: Record<string, string> = {
+  modelo_obrigatorio: 'Escolha qual mensagem mandar.',
+  sem_chapa:
+    'Você ainda não tem candidato atribuído. Fale com o gestor antes de abrir a conversa — ' +
+    'a primeira mensagem sairia sem dizer de quem é o material.',
   saida_pedida_pela_pessoa:
     'Não dá. Quem pediu para sair foi a própria pessoa, pelo link. Isso só ela pode desfazer.',
   saida_so_o_gestor_desfaz:
@@ -106,29 +87,47 @@ export function Perfil({
 }) {
   const [historico, setHistorico] = useState<Historico | null>(null);
   const [entregas, setEntregas] = useState<EntregaDoContato[]>([]);
+  const [correcoes, setCorrecoes] = useState<Awaited<ReturnType<typeof carregarCorrecoes>>>([]);
+  /** As mensagens que o gestor escreveu, fora das sete etapas fixas. */
+  const [livres, setLivres] = useState<ModeloLivre[]>([]);
+  useEffect(() => { void carregarModelosLivres(true).then(setLivres); }, []);
   const [status, setStatus] = useState(contato.status);
   const [mensagem, setMensagem] = useState<MensagemPronta | null>(null);
+  /** O texto livre de "Encaminhar" e "Outro". Ver `RESULTADOS_COM_TEXTO`. */
+  const [observacao, setObservacao] = useState(contato.encaminhamento ?? '');
   const [erro, setErro] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
 
+  // Nome e telefone vivem em estado porque podem ser corrigidos aqui mesmo: o
+  // nome vem torto da planilha, e a pessoa às vezes diz "esse número é do meu
+  // filho, o meu é outro".
+  const [nome, setNome] = useState(contato.nome ?? contato.primeiro_nome ?? '');
+  const [telefone, setTelefone] = useState(contato.telefone_e164 ?? '');
+
   const chipId = contato.chip_id ?? chips[0]?.id ?? '';
   const apagado = contato.anonimizado_em !== null;
 
-  useEffect(() => {
+  /**
+   * Recarrega tudo que a tela mostra sobre este contato.
+   *
+   * `useCallback` porque ela é dependência do efeito abaixo — sem isso, uma
+   * função nova a cada renderização faria o efeito rodar em laço.
+   */
+  const recarregar = useCallback(() => {
     void carregarHistorico(contato.id).then(setHistorico);
     void carregarEntregas(contato.id).then(setEntregas);
+    void carregarCorrecoes(contato.id).then(setCorrecoes);
   }, [contato.id]);
 
-  function recarregar() {
-    void carregarHistorico(contato.id).then(setHistorico);
-    void carregarEntregas(contato.id).then(setEntregas);
-  }
+  useEffect(() => { recarregar(); }, [recarregar]);
 
-  function preparar(etapa: EtapaMsg, candidatoId?: string) {
+  function preparar(etapa: EtapaMsg, candidatoId?: string, modeloLivreId?: string) {
     setErro(null); setOk(null); setMensagem(null);
     iniciar(async () => {
-      const m = await prepararMensagem(contato.id, chipId, etapa, candidatoId ?? null);
+      const m = await prepararMensagem(
+        contato.id, chipId, etapa, candidatoId ?? null, modeloLivreId ?? null,
+      );
       if (!m.ok) { setErro(MOTIVO[m.motivo] ?? `Não consegui montar a mensagem (${m.motivo}).`); return; }
       setMensagem(m);
     });
@@ -149,7 +148,7 @@ export function Perfil({
     iniciar(async () => {
       const r = await registrarAbertura(
         contato.id, chipId, enviada.etapa, enviada.variacaoId,
-        enviada.candidato?.id ?? null,
+        enviada.candidato?.id ?? null, enviada.modeloLivreId,
       );
       if (!r.ok) {
         // Não navega: nada chega ao WhatsApp.
@@ -163,10 +162,58 @@ export function Perfil({
     });
   }
 
+  /**
+   * Copia o texto em vez de abrir o WhatsApp.
+   *
+   * ⚠️ PASSA PELO MESMO `registrarAbertura` que o botão de abrir, e isso não é
+   * detalhe: copiar é o passo anterior a enviar. Se copiar não registrasse, o
+   * teto do dia, o intervalo entre abordagens e a trilha de auditoria
+   * deixariam de enxergar a mensagem — e o atendente teria, sem querer, um
+   * caminho para furar as três coisas. A mesma razão pela qual `src/lib/bots.ts`
+   * existe: métrica que não vê o que aconteceu é pior que métrica nenhuma.
+   *
+   * Serve para quem já está com a conversa aberta no WhatsApp Web e não quer
+   * que a aba recarregue.
+   */
+  function copiar() {
+    if (!mensagem) return;
+    setErro(null); setOk(null);
+    const enviada = mensagem;
+    iniciar(async () => {
+      const r = await registrarAbertura(
+        contato.id, chipId, enviada.etapa, enviada.variacaoId,
+        enviada.candidato?.id ?? null, enviada.modeloLivreId,
+      );
+      if (!r.ok) {
+        setErro(MOTIVO[r.motivo] ?? `O sistema não registrou o envio: ${r.motivo}`);
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(enviada.texto);
+        setOk('Texto copiado, e o envio ficou registrado. Cole na conversa que já está aberta.');
+      } catch {
+        // Área de transferência negada (permissão, aba sem foco, navegador
+        // antigo). O envio JÁ está registrado, então não dá para fingir que
+        // nada aconteceu: o atendente precisa saber que pode copiar à mão.
+        setOk('O envio foi registrado, mas não consegui copiar sozinho. Selecione o texto acima e copie na mão.');
+      }
+      recarregar();
+    });
+  }
+
   function marcar(resultado: Resultado) {
     setErro(null); setOk(null);
+    if (RESULTADOS_COM_TEXTO.includes(resultado) && !observacao.trim()) {
+      setErro(resultado === 'encaminhado'
+        ? 'Escreva em uma linha o que a pessoa pediu, para a equipe saber o que encaminhar.'
+        : 'Escreva em uma linha o que aconteceu — senão "Outro" não diz nada a ninguém.');
+      return;
+    }
     iniciar(async () => {
-      const r = await registrarResultado(contato.id, resultado);
+      const r = await registrarResultado(
+        contato.id, resultado, null,
+        RESULTADOS_COM_TEXTO.includes(resultado) ? observacao : null,
+      );
       if (!r.ok) { setErro(MOTIVO[r.motivo] ?? `Não consegui gravar: ${r.motivo}`); return; }
       setStatus(resultado);
       setOk(`Marcado como "${ROTULO_RESULTADO[resultado]}".`);
@@ -185,19 +232,20 @@ export function Perfil({
 
       <Cartao className="p-6" elevado>
         <div className="flex flex-wrap items-center gap-4">
-          <Avatar nome={contato.nome ?? contato.primeiro_nome} tamanho="g" />
+          <Avatar nome={nome || contato.primeiro_nome} tamanho="g" />
           <div className="mr-auto min-w-0">
-            <h1 className="font-display text-2xl font-semibold tracking-tight">
-              {contato.nome ?? contato.primeiro_nome ?? <span className="text-tenue">(dados apagados)</span>}
-            </h1>
-            <p className="mt-0.5 truncate text-sm text-suave">
-              {contato.telefone_e164 ? formatarExibicao(contato.telefone_e164) : '—'}
-              {contato.municipio_id &&
-                ` · ${municipios.find((m) => m.id === contato.municipio_id)?.nome ?? ''}`}
-            </p>
+            <Identidade
+              contatoId={contato.id}
+              nome={nome} telefone={telefone}
+              apagado={apagado}
+              municipio={contato.municipio_id
+                ? municipios.find((m) => m.id === contato.municipio_id)?.nome ?? null
+                : null}
+              aoCorrigir={(n, t) => { setNome(n); setTelefone(t); recarregar(); }}
+            />
           </div>
           <EtiquetaOrigem origem={contato.origem} />
-          <Pilula>{ROTULO_STATUS[status] ?? status}</Pilula>
+          <Pilula cor={COR_STATUS_CONTATO[status]}>{ROTULO_STATUS_CONTATO[status] ?? status}</Pilula>
         </div>
 
         {clicou && (
@@ -223,21 +271,15 @@ export function Perfil({
             <p className="mb-3 text-xs text-suave">
               Serve para quando a pessoa responde dias depois, ou quando você clicou no botão errado.
             </p>
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-              {RESULTADOS.map((r) => (
-                <Botao key={r} variante={r === status ? 'principal' : r === 'pediu_saida' ? 'perigo' : 'neutro'}
-                       disabled={ocupado} onClick={() => marcar(r)} className="!rounded-2xl py-3">
-                  {ROTULO_RESULTADO[r]}
-                </Botao>
-              ))}
-            </div>
+            <MudarResultado
+              atual={status} ocupado={ocupado} texto={observacao}
+              aoMarcar={marcar} aoMudarTexto={setObservacao}
+            />
           </Cartao>
 
           <PorCandidato
-            entregas={entregas} ocupado={ocupado}
-            escolhido={mensagem?.candidato?.id ?? null}
-            etapaEscolhida={mensagem?.candidato ? mensagem.etapa : null}
-            aoPreparar={preparar}
+            entregas={entregas} ocupado={ocupado} mensagem={mensagem}
+            aoPreparar={preparar} aoAbrir={abrir} aoCopiar={copiar}
           />
 
           <Cartao className="p-6">
@@ -251,7 +293,7 @@ export function Perfil({
                         onClick={() => preparar(m.etapa)}
                         className={cx(
                           'rounded-2xl border p-3.5 text-left transition-colors disabled:opacity-50',
-                          mensagem?.etapa === m.etapa
+                          mensagem?.etapa === m.etapa && !mensagem.candidato
                             ? 'border-acento/50 bg-acento/10'
                             : 'border-borda hover:border-borda-forte hover:bg-superficie-alta',
                         )}>
@@ -261,16 +303,39 @@ export function Perfil({
               ))}
             </div>
 
-            {mensagem && (
-              <div className="mt-4 border-t border-borda pt-4">
-                <div className="whitespace-pre-wrap rounded-2xl rounded-tl-md border border-borda bg-superficie-alta p-5 text-[15px] leading-[1.7]">
-                  {mensagem.texto}
+            {livres.length > 0 && (
+              <>
+                <p className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-[0.08em] text-suave">
+                  Do gestor
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {livres.map((m) => (
+                    <button key={m.id} type="button" disabled={ocupado}
+                            onClick={() => preparar('livre', undefined, m.id)}
+                            className={cx(
+                              'rounded-2xl border p-3.5 text-left transition-colors disabled:opacity-50',
+                              mensagem?.modeloLivreId === m.id
+                                ? 'border-acento/50 bg-acento/10'
+                                : 'border-borda hover:border-borda-forte hover:bg-superficie-alta',
+                            )}>
+                      <span className="block text-sm font-medium">{m.nome}</span>
+                      {m.dica && <span className="block text-xs text-suave">{m.dica}</span>}
+                    </button>
+                  ))}
                 </div>
-                <Botao tamanho="g" className="mt-4 w-full" onClick={abrir} disabled={ocupado}>
-                  {ocupado
-                    ? <><Loader2 size={17} className="animate-spin" /> Registrando…</>
-                    : <><Send size={17} /> Abrir conversa no WhatsApp</>}
-                </Botao>
+              </>
+            )}
+
+            {/* ⚠️ `!mensagem.candidato` é a correção de um defeito de tela real:
+                `mensagem` é um estado só, e esta prévia estava DENTRO deste
+                cartão. Clicar em "Mandar material" no cartão de cima fazia o
+                texto aparecer aqui embaixo, fora da vista — e o botão parecia
+                não ter feito nada. Agora cada cartão mostra a própria prévia. */}
+            {mensagem && !mensagem.candidato && (
+              <div className="mt-4 border-t border-borda pt-4">
+                <PreviaDaMensagem
+                  mensagem={mensagem} ocupado={ocupado} aoAbrir={abrir} aoCopiar={copiar}
+                />
               </div>
             )}
           </Cartao>
@@ -294,7 +359,8 @@ export function Perfil({
           <p className="text-sm text-suave">carregando…</p>
         ) : !historico.ok ? (
           <p className="text-sm text-suave">{MOTIVO[historico.motivo] ?? historico.motivo}</p>
-        ) : historico.interacoes.length === 0 && historico.cliques.length === 0 ? (
+        ) : historico.interacoes.length === 0 && historico.cliques.length === 0
+             && correcoes.length === 0 ? (
           <p className="text-sm text-suave">Nada registrado ainda.</p>
         ) : (
           <ol className="space-y-3">
@@ -321,6 +387,25 @@ export function Perfil({
                 <p className="text-xs text-suave">{new Date(c.quando).toLocaleString('pt-BR')}</p>
               </li>
             ))}
+            {/* Trocar o telefone de uma ficha é dizer "esta conversa agora é de
+                outra pessoa". Sem aparecer aqui, o rastro no banco não serviria
+                para nada: ninguém abre uma tabela para entender uma tela. */}
+            {correcoes.map((c, k) => (
+              <li key={`x${k}`} className="border-l-2 border-borda-forte pl-4">
+                <p className="text-sm">
+                  {c.autor ?? 'Alguém'} corrigiu o {c.campo === 'nome' ? 'nome' : 'número'}
+                </p>
+                <p className="text-xs text-suave">
+                  de <span className="line-through">{
+                    c.campo === 'telefone' && c.de ? formatarExibicao(c.de) : c.de ?? '(vazio)'
+                  }</span>
+                  {' '}para <strong className="text-texto">{
+                    c.campo === 'telefone' && c.para ? formatarExibicao(c.para) : c.para ?? '(vazio)'
+                  }</strong>
+                </p>
+                <p className="text-xs text-suave">{new Date(c.criado_em).toLocaleString('pt-BR')}</p>
+              </li>
+            ))}
           </ol>
         )}
       </Cartao>
@@ -332,6 +417,251 @@ export function Perfil({
   );
 }
 
+/* ── Nome e telefone, corrigíveis ────────────────────────────────────────── */
+
+const MOTIVO_CORRECAO: Record<string, string> = {
+  numero_bloqueado:
+    'Esse número pediu para sair da lista. Não dá para apontar um contato para ele — ' +
+    'só o gestor pode liberar.',
+  numero_ja_existe: 'Esse número já é de outro contato na base.',
+  contato_nao_e_seu: 'Este contato não está com você.',
+  dados_ja_apagados: 'Os dados desta pessoa já foram apagados.',
+  usuario_inativo: 'Sua conta está inativa. Fale com o gestor.',
+  telefone_invalido: 'Confira o número.',
+};
+
+/**
+ * O nome e o telefone da pessoa, com o lápis que corrige.
+ *
+ * ⚠️ NÃO É EDIÇÃO DE RÓTULO. O nome é o que sai na saudação da próxima
+ * mensagem ("Bom dia, MARIA DAS D SILVA!" era o que a planilha produzia), e o
+ * telefone é a IDENTIDADE da pessoa no sistema: `chave_dedup` tem índice único
+ * e o HMAC é o que liga a lista de bloqueio.
+ *
+ * Por isso as duas correções ficam gravadas em `contato_correcoes`, com autor e
+ * data, e aparecem no Histórico. Trocar o número de uma ficha é dizer "esta
+ * conversa agora é de outra pessoa" — sem rastro, ninguém consegue olhar para
+ * trás e entender o que aconteceu.
+ */
+function Identidade({
+  contatoId, nome, telefone, municipio, apagado, aoCorrigir,
+}: {
+  contatoId: string;
+  nome: string;
+  telefone: string;
+  municipio: string | null;
+  apagado: boolean;
+  aoCorrigir: (nome: string, telefone: string) => void;
+}) {
+  const [editando, setEditando] = useState(false);
+  const [rascunhoNome, setRascunhoNome] = useState(nome);
+  const [rascunhoTel, setRascunhoTel] = useState(telefone);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, iniciar] = useTransition();
+
+  if (!editando) {
+    return (
+      <>
+        <h1 className="flex items-center gap-2 font-display text-2xl font-semibold tracking-tight">
+          <span className="truncate">
+            {nome || <span className="text-tenue">(dados apagados)</span>}
+          </span>
+          {!apagado && (
+            <button type="button" title="Corrigir nome ou número"
+                    onClick={() => {
+                      setRascunhoNome(nome); setRascunhoTel(telefone);
+                      setErro(null); setEditando(true);
+                    }}
+                    className="shrink-0 text-suave transition-colors hover:text-texto">
+              <Pencil size={14} />
+            </button>
+          )}
+        </h1>
+        <p className="mt-0.5 truncate text-sm text-suave">
+          {telefone ? formatarExibicao(telefone) : '—'}
+          {municipio && ` · ${municipio}`}
+        </p>
+      </>
+    );
+  }
+
+  return (
+    <form
+      className="space-y-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        iniciar(async () => {
+          const r = await corrigirContato({
+            contatoId,
+            nome: rascunhoNome,
+            // Só manda o telefone se mudou: o servidor recalcula o HMAC e o
+            // dedup, e mandar o mesmo número gera trabalho para nada.
+            telefone: rascunhoTel.replace(/\D/g, '') === telefone ? null : rascunhoTel,
+          });
+          if (!r.ok) {
+            setErro(
+              r.motivo === 'numero_ja_existe' && r.atendente
+                ? `Esse número já é de outro contato, com ${r.atendente}.`
+                : r.detalhe ?? MOTIVO_CORRECAO[r.motivo] ?? `Não consegui salvar (${r.motivo}).`,
+            );
+            return;
+          }
+          setErro(null);
+          setEditando(false);
+          aoCorrigir(rascunhoNome.trim(), rascunhoTel.replace(/\D/g, '') || telefone);
+        });
+      }}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          autoFocus value={rascunhoNome} maxLength={120}
+          onChange={(e) => setRascunhoNome(e.target.value)}
+          aria-label="Nome do contato"
+          className="min-w-0 flex-1 rounded-xl border border-borda-forte bg-superficie-alta px-3 py-2 text-lg font-semibold text-texto"
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={rascunhoTel} type="tel" inputMode="tel" maxLength={24}
+          onChange={(e) => setRascunhoTel(e.target.value)}
+          aria-label="WhatsApp do contato"
+          className="w-48 rounded-xl border border-borda-forte bg-superficie-alta px-3 py-2 text-sm text-texto"
+        />
+        <Botao type="submit" tamanho="p" disabled={ocupado}>
+          {ocupado ? <><Loader2 size={13} className="animate-spin" /> Salvando…</> : <><Check size={13} /> Salvar</>}
+        </Botao>
+        <Botao type="button" tamanho="p" variante="neutro" disabled={ocupado}
+               onClick={() => { setErro(null); setEditando(false); }}>
+          <X size={13} /> Cancelar
+        </Botao>
+      </div>
+      {erro
+        ? <p className="text-xs text-perigo">{erro}</p>
+        : <p className="text-xs leading-relaxed text-suave">
+            O nome é o que sai na saudação da próxima mensagem. Trocar o número muda a identidade
+            desta ficha — as duas correções ficam registradas no histórico, com seu nome.
+          </p>}
+    </form>
+  );
+}
+
+/* ── A prévia do texto, com os dois caminhos de envio ────────────────────── */
+
+/**
+ * O texto pronto e o que fazer com ele.
+ *
+ * Existe como componente porque é renderizado em DOIS lugares — dentro da linha
+ * do candidato e dentro de "Mandar outra mensagem" —, e ter duas cópias do
+ * bloco garantiria que uma delas ficasse para trás.
+ *
+ * ⚠️ Os dois botões registram o envio no servidor. "Copiar" não é um atalho
+ * que pula a auditoria: é o mesmo caminho, para quem já está com a conversa
+ * aberta no WhatsApp Web e não quer que a aba recarregue.
+ */
+function PreviaDaMensagem({
+  mensagem, ocupado, aoAbrir, aoCopiar,
+}: {
+  mensagem: MensagemPronta;
+  ocupado: boolean;
+  aoAbrir: () => void;
+  aoCopiar: () => void;
+}) {
+  return (
+    <>
+      <div className="whitespace-pre-wrap rounded-2xl rounded-tl-md border border-borda bg-superficie-alta p-5 text-[15px] leading-[1.7]">
+        {mensagem.texto}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2.5">
+        <Botao tamanho="g" className="min-w-[12rem] flex-1" onClick={aoAbrir} disabled={ocupado}>
+          {ocupado
+            ? <><Loader2 size={17} className="animate-spin" /> Registrando…</>
+            : <><Send size={17} /> Abrir conversa no WhatsApp</>}
+        </Botao>
+        <Botao tamanho="g" variante="neutro" onClick={aoCopiar} disabled={ocupado}
+               title="Copia o texto e registra o envio, sem recarregar o WhatsApp Web">
+          <Copy size={16} /> Copiar texto
+        </Botao>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-suave">
+        Os dois registram o envio. Use <strong className="text-texto">Copiar</strong> quando a
+        conversa já estiver aberta do lado — assim a aba do WhatsApp não recarrega.
+      </p>
+    </>
+  );
+}
+
+/* ── Corrigir o desfecho ─────────────────────────────────────────────────── */
+
+/**
+ * Onze desfechos numa tela de correção.
+ *
+ * Aqui, ao contrário da tela de atendimento, não há atalho de teclado nem
+ * pressa: quem abre este cartão veio corrigir uma coisa específica. Então os
+ * onze cabem, com o atual em destaque — mas os seis que entraram depois
+ * continuam atrás de um clique, para a lista não virar um paredão.
+ */
+function MudarResultado({
+  atual, ocupado, texto, aoMarcar, aoMudarTexto,
+}: {
+  atual: string;
+  ocupado: boolean;
+  texto: string;
+  aoMarcar: (r: Resultado) => void;
+  aoMudarTexto: (v: string) => void;
+}) {
+  const [abertos, setAbertos] = useState(RESULTADOS_OUTROS.includes(atual as Resultado));
+
+  const botao = (r: Resultado) => (
+    <button key={r} type="button" disabled={ocupado} onClick={() => aoMarcar(r)}
+            className={cx(
+              'rounded-2xl border p-3.5 text-left transition-colors disabled:opacity-45',
+              r === atual
+                ? 'border-acento/50 bg-acento/10'
+                : r === 'pediu_saida'
+                  ? 'border-perigo/40 hover:border-perigo hover:bg-perigo/10'
+                  : 'border-borda hover:border-borda-forte hover:bg-superficie-alta',
+            )}>
+      <span className={cx('block text-sm font-semibold', r === 'pediu_saida' && r !== atual && 'text-perigo')}>
+        {ROTULO_RESULTADO[r]}
+      </span>
+      <span className="mt-1 block text-xs leading-relaxed text-suave">{DICA_RESULTADO[r]}</span>
+    </button>
+  );
+
+  return (
+    <>
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        {RESULTADOS_RAPIDOS.map(botao)}
+      </div>
+
+      <button type="button" onClick={() => setAbertos((v) => !v)} aria-expanded={abertos}
+              className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-acento">
+        <ChevronDown size={14} className={cx('transition-transform', abertos && 'rotate-180')} />
+        {abertos ? 'Menos desfechos' : 'Outros desfechos'}
+      </button>
+
+      {abertos && (
+        <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+          {RESULTADOS_OUTROS.map(botao)}
+        </div>
+      )}
+
+      <label className="mt-4 block">
+        <span className="text-xs leading-relaxed text-suave">
+          Para <strong className="text-texto">Encaminhar</strong> ou{' '}
+          <strong className="text-texto">Outro</strong>, escreva em uma linha o que aconteceu.
+          {' '}Não escreva em quem a pessoa vota — isso não pode ser registrado.
+        </span>
+        <input
+          value={texto} onChange={(e) => aoMudarTexto(e.target.value)}
+          maxLength={280} placeholder="ex.: perguntou sobre vaga de emprego"
+          className="mt-2 w-full rounded-2xl border border-borda bg-superficie-alta px-4 py-2.5 text-sm placeholder:text-tenue"
+        />
+      </label>
+    </>
+  );
+}
+
 /* ── Mensagens que pertencem a um candidato ─────────────────────────────── */
 
 /**
@@ -340,14 +670,18 @@ export function Perfil({
  * quem autorizou sem saber dele.
  */
 function PorCandidato({
-  entregas, ocupado, escolhido, etapaEscolhida, aoPreparar,
+  entregas, ocupado, mensagem, aoPreparar, aoAbrir, aoCopiar,
 }: {
   entregas: EntregaDoContato[];
   ocupado: boolean;
-  escolhido: string | null;
-  etapaEscolhida: EtapaMsg | null;
+  /** A mensagem montada agora. A prévia dela aparece AQUI quando é daqui. */
+  mensagem: MensagemPronta | null;
   aoPreparar: (etapa: EtapaMsg, candidatoId: string) => void;
+  aoAbrir: () => void;
+  aoCopiar: () => void;
 }) {
+  const escolhido = mensagem?.candidato?.id ?? null;
+  const etapaEscolhida = mensagem?.candidato ? mensagem.etapa : null;
   return (
     <Cartao className="p-6">
       <h2 className="mb-1 flex items-center gap-2 font-semibold">
@@ -375,9 +709,12 @@ function PorCandidato({
         <div className="space-y-2">
           {entregas.map((c) => {
             const marcado = (etapa: EtapaMsg) => escolhido === c.candidato_id && etapaEscolhida === etapa;
+            const aqui = escolhido === c.candidato_id;
             return (
               <div key={c.candidato_id}
-                   className="flex flex-wrap items-center gap-3 rounded-2xl border border-borda p-3.5">
+                   className={cx('rounded-2xl border p-3.5 transition-colors',
+                     aqui ? 'border-acento/50 bg-acento/[0.07]' : 'border-borda')}>
+              <div className="flex flex-wrap items-center gap-3">
                 <div className="mr-auto min-w-0">
                   <p className="flex items-center gap-2 text-sm font-semibold">
                     {c.nome_urna}
@@ -411,6 +748,34 @@ function PorCandidato({
                        onClick={() => aoPreparar('convite_grupo', c.candidato_id)}>
                   <Radio size={13} /> Convidar pro canal
                 </Botao>
+              </div>
+
+              {/* ⚠️ A pessoa NÃO ouviu o nome deste candidato: a declaração
+                  veio do reparo do gestor, não da primeira mensagem. Mandar o
+                  material direto seria entregar propaganda de alguém que ela
+                  nunca soube que existia. */}
+              {c.declarado_em_reparo && (
+                <p className="mt-3 flex gap-2 rounded-xl border border-alerta/30 bg-alerta/10 px-3.5 py-2.5 text-xs leading-relaxed text-alerta">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                  <span>
+                    Esta pessoa <strong>não ouviu o nome de {c.nome_urna}</strong> na primeira
+                    mensagem — o gestor liberou depois. Antes de mandar o material, escreva uma
+                    linha se apresentando: diga que você ajuda {c.nome_urna} e pergunte se ela
+                    quer receber. Se ela disser que não, marque &ldquo;Pediu saída&rdquo;.
+                  </span>
+                </p>
+              )}
+
+              {/* A prévia mora dentro da linha do candidato que a gerou. Antes
+                  ela ficava no cartão "Mandar outra mensagem", lá embaixo:
+                  clicar aqui parecia não fazer nada. */}
+              {aqui && mensagem && (
+                <div className="mt-3.5 border-t border-borda pt-3.5">
+                  <PreviaDaMensagem
+                    mensagem={mensagem} ocupado={ocupado} aoAbrir={aoAbrir} aoCopiar={aoCopiar}
+                  />
+                </div>
+              )}
               </div>
             );
           })}
@@ -446,6 +811,16 @@ function PedidoKit({
   const [salvo, setSalvo] = useState(false);
   const [ocupado, iniciar] = useTransition();
 
+  // O que a pessoa pode pedir vem do cadastro, não de uma lista escrita aqui.
+  const [itensKit, setItensKit] = useState<ItemKit[]>([]);
+  useEffect(() => { void carregarItensKit().then(setItensKit); }, []);
+
+  // Só os comitês dos candidatos DECLARADOS a esta pessoa — a mesma lista
+  // congelada do consentimento. Comitê de candidato que ela nunca ouviu falar
+  // não é informação útil: é propaganda que ela não autorizou.
+  const [comites, setComites] = useState<Comite[]>([]);
+  useEffect(() => { void comitesDoContato(contatoId).then(setComites); }, [contatoId]);
+
   const municipio = municipios.find((m) => m.id === cidade) ?? null;
 
   function alternar(valor: string) {
@@ -462,20 +837,21 @@ function PedidoKit({
       </p>
 
       <div className="space-y-2">
-        {ITENS_KIT.map((i) => (
-          <label key={i.valor}
+        {itensKit.map((i) => (
+          <label key={i.chave}
                  className={cx('flex cursor-pointer items-center gap-3 rounded-2xl border p-3.5 transition-colors',
-                   itens.includes(i.valor) ? 'border-acento/45 bg-acento/10' : 'border-borda hover:border-borda-forte')}>
-            <input type="checkbox" checked={itens.includes(i.valor)} onChange={() => alternar(i.valor)}
+                   itens.includes(i.chave) ? 'border-acento/45 bg-acento/10' : 'border-borda hover:border-borda-forte')}>
+            <input type="checkbox" checked={itens.includes(i.chave)} onChange={() => alternar(i.chave)}
                    className="size-5 accent-[var(--acento)]" />
             <span className="text-sm font-medium">{i.rotulo}</span>
           </label>
         ))}
       </div>
 
-      {/* Só aparece com camiseta no pedido: perguntar o tamanho de quem pediu
-          adesivo é campo que a pessoa lê, pensa e deixa em branco. */}
-      {itens.includes('camiseta') && (
+      {/* Só aparece com um item que pede tamanho: perguntar o tamanho de quem
+          pediu adesivo é campo que a pessoa lê, pensa e deixa em branco. Quais
+          itens pedem tamanho é cadastro, não `includes('camiseta')`. */}
+      {pedeTamanho(itens, itensKit) && (
         <div className="mt-3">
           <Selecao rotulo="Tamanho da camiseta" value={tamanho}
                    onChange={(e) => { setTamanho(e.target.value); setSalvo(false); }}>
@@ -499,6 +875,16 @@ function PedidoKit({
           valor={endereco}
           aoMudar={(e) => { setEndereco(e); setSalvo(false); }}
           cidade={municipio ? { nome: municipio.nome, uf: municipio.uf } : null}
+        />
+
+        {/* Para quem mora perto, buscar no comitê chega antes da entrega — e é
+            uma peça a menos para a campanha rodar. O atendente lê isto na tela
+            e passa na conversa. */}
+        <ComiteMaisPerto
+          comites={comites}
+          cep={endereco.cep}
+          municipioId={cidade === '' ? null : cidade}
+          className="mt-3"
         />
       </div>
 
