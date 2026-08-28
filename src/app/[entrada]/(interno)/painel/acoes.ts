@@ -509,6 +509,16 @@ export async function carregarCorrecoes(contatoId: string) {
 export type ContatoNaFila = {
   id: string;
   nome: string | null;
+  /**
+   * ⚠️ Aparece na tela de escolha a pedido de quem opera.
+   *
+   * Tinha sido deixado de fora de propósito — a lista mostra gente que ainda não
+   * foi abordada, e mandar o número de cada um para o navegador é exportar
+   * pedaço da base a cada abertura. O que segura isso hoje é o teto de 40 linhas
+   * e a busca só por nome; buscar por telefone aqui transformaria a tela num
+   * consultador de números.
+   */
+  telefone_e164: string | null;
   origem: OrigemContato;
   municipio: string | null;
   lista_id: string | null;
@@ -524,20 +534,36 @@ export type ContatoNaFila = {
  * Mesmo critério de `pegarProximo` — a lista não pode oferecer alguém que a
  * fila depois recusa a entregar.
  */
+export type RespostaFilaDoAtendente =
+  | { ok: true; linhas: ContatoNaFila[] }
+  | { ok: false; erro: string };
+
+/**
+ * ⚠️ DEVOLVE O ERRO, não o lança.
+ *
+ * A primeira versão fazia `throw`, e a tela chamava isto dentro de um efeito
+ * sem `catch`. Quando a função do banco quebrou, a promessa foi rejeitada em
+ * silêncio: `setCarregando(false)` nunca rodou e a folha ficou em
+ * "carregando…" para sempre — o que fez parecer lentidão com a base grande,
+ * quando era um erro que aconteceria com três contatos.
+ *
+ * Erro que a tela não consegue mostrar é erro que vira suporte.
+ */
 export async function carregarFilaDoAtendente(
   listaId?: string | null,
   busca?: string | null,
-): Promise<ContatoNaFila[]> {
+): Promise<RespostaFilaDoAtendente> {
   const supabase = await criarClienteServidor();
   const { data, error } = await supabase.rpc('fila_do_atendente', {
     p_lista_id: listaId ?? null,
     p_busca: busca?.trim() || null,
     p_limite: 40,
   });
-  if (error) throw new Error(error.message);
+  if (error) return { ok: false, erro: error.message };
 
   const r = data as { ok?: boolean; erro?: string; linhas?: ContatoNaFila[] };
-  return r.linhas ?? [];
+  if (r.erro) return { ok: false, erro: r.erro };
+  return { ok: true, linhas: r.linhas ?? [] };
 }
 
 /**

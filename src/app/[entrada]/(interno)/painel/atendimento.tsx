@@ -1033,6 +1033,7 @@ function EscolherContato({
   const [linhas, setLinhas] = useState<ContatoNaFila[] | null>(null);
   const [busca, setBusca] = useState('');
   const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     const aoTeclar = (e: KeyboardEvent) => { if (e.key === 'Escape') aoFechar(); };
@@ -1050,7 +1051,11 @@ function EscolherContato({
       setCarregando(true);
       const r = await carregarFilaDoAtendente(listaId, busca);
       if (cancelado) return;
-      setLinhas(r);
+      // ⚠️ O erro precisa APARECER. Antes esta chamada podia rejeitar, e a
+      // folha ficava em "carregando…" para sempre — o defeito parecia lentidão
+      // da base, e não um erro.
+      if (r.ok) { setLinhas(r.linhas); setErro(null); }
+      else { setErro(r.erro); setLinhas([]); }
       setCarregando(false);
     }, busca ? 350 : 0);
     return () => { cancelado = true; clearTimeout(t); };
@@ -1090,7 +1095,15 @@ function EscolherContato({
         </label>
 
         <div className="min-h-0 flex-1 overflow-y-auto border-t border-borda">
-          {carregando && linhas === null ? (
+          {erro ? (
+            <div className="p-5">
+              <Aviso tom="erro" icone={<AlertTriangle size={16} />}>
+                <strong>Não consegui carregar sua fila.</strong> Feche e use o botão
+                &ldquo;Buscar próximo contato&rdquo;, que segue funcionando — e avise o gestor.
+                <span className="mt-1.5 block text-xs opacity-80">{erro}</span>
+              </Aviso>
+            </div>
+          ) : carregando && linhas === null ? (
             <p className="flex items-center justify-center gap-2 p-8 text-sm text-suave">
               <Loader2 size={15} className="animate-spin" /> carregando…
             </p>
@@ -1110,7 +1123,8 @@ function EscolherContato({
                     <div className="mr-auto min-w-0">
                       <p className="truncate text-sm font-semibold">{c.nome ?? 'Sem nome'}</p>
                       <p className="truncate text-xs text-suave">
-                        {c.municipio ?? 'cidade não informada'}
+                        {c.telefone_e164 ? formatarExibicao(c.telefone_e164) : '—'}
+                        {c.municipio && ` · ${c.municipio}`}
                         {c.lista && ` · ${c.lista}`}
                       </p>
                     </div>
@@ -1127,7 +1141,7 @@ function EscolherContato({
         </div>
 
         <p className="border-t border-borda px-5 py-3 text-xs leading-relaxed text-suave">
-          O telefone não aparece aqui — ele chega quando você abre o contato.
+          Mostra os 40 primeiros da sua fila. Se não achar quem procura, use a busca pelo nome.
         </p>
       </div>
     </div>

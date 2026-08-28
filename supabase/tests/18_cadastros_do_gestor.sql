@@ -64,23 +64,33 @@ begin
   -- =========================================================================
   -- 1 · Itens de kit
   -- =========================================================================
-  select count(*)::int into v_n from public.itens_kit_ativos();
-  if v_n >= 3 then
-    raise notice '  ✅ 1. os três itens de sempre continuam ativos';
-  else raise warning '  ❌ 1. itens ativos: %', v_n; v_falhas := v_falhas + 1;
+  -- ⚠️ O item é CRIADO AQUI, e o teste não conta quantos existem na base.
+  --
+  -- A primeira versão afirmava "os três de sempre continuam ativos" — e quebrou
+  -- no dia em que o gestor desativou a camiseta pela tela nova, que é
+  -- exatamente o que a tela existe para fazer. Teste que depende do que o
+  -- gestor faz em produção acusa falha onde houve uso normal.
+  insert into public.itens_kit (chave, rotulo, pede_tamanho, ordem, ativo)
+  values ('teste_bone', 'Boné de teste', true, 900, true);
+
+  select count(*)::int into v_n
+    from public.itens_kit_ativos() where chave = 'teste_bone';
+  if v_n = 1 then
+    raise notice '  ✅ 1. item novo aparece nas telas';
+  else raise warning '  ❌ 1. item novo não apareceu'; v_falhas := v_falhas + 1;
   end if;
 
   -- ⚠️ A chave é para SEMPRE: fica gravada em `captacoes.itens` de quem pediu.
   -- Item sai de circulação sendo DESATIVADO, e o histórico continua legível.
-  update public.itens_kit set ativo = false where chave = 'adesivo';
+  update public.itens_kit set ativo = false where chave = 'teste_bone';
   select count(*)::int into v_n
-    from public.itens_kit_ativos() where chave = 'adesivo';
+    from public.itens_kit_ativos() where chave = 'teste_bone';
   if v_n = 0 then
     raise notice '  ✅ 2. item desativado some das telas novas';
   else raise warning '  ❌ 2. item desativado continuou aparecendo'; v_falhas := v_falhas + 1;
   end if;
 
-  select count(*)::int into v_n from public.itens_kit where chave = 'adesivo';
+  select count(*)::int into v_n from public.itens_kit where chave = 'teste_bone';
   if v_n = 1 then
     raise notice '  ✅ 3. mas a linha continua lá, para o relatório antigo';
   else raise warning '  ❌ 3. a linha sumiu'; v_falhas := v_falhas + 1;
