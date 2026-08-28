@@ -3,42 +3,68 @@
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState, useTransition } from 'react';
-import { ChevronLeft, ChevronRight, Loader2, MousePointerClick, PackageOpen, Search } from 'lucide-react';
+import {
+  Check, ChevronLeft, ChevronRight, Loader2, MessageCircleQuestion, MousePointerClick,
+  PackageOpen, RotateCcw, Search,
+} from 'lucide-react';
 import { Cartao, EtiquetaOrigem, Pilula, PontoLista, Selecao, cx } from '@/components/ui';
 import { formatarExibicao } from '@/lib/telefone';
-import type {
-  Candidato, ContatoDoGestor, Lista, Municipio, StatusContato, Usuario,
+import {
+  COR_STATUS_CONTATO, ROTULO_STATUS_CONTATO,
+  type Candidato, type ContatoDoGestor, type Lista, type Municipio, type Usuario,
 } from '@/lib/tipos-banco';
 // Num arquivo à parte porque a página, que roda no SERVIDOR, também precisa
 // deles — e o que sai de um módulo 'use client' chega lá como referência, não
 // como valor. Ver o cabeçalho de `recortes.ts`.
 import { RECORTES, type Contagens, type Filtros } from './recortes';
+import { marcarEncaminhamentoTratado } from './acoes';
 
-const ROTULO_STATUS: Record<StatusContato, string> = {
-  novo: 'Novo',
-  na_fila: 'Na fila',
-  em_atendimento: 'Aguardando resposta',
-  autorizou: 'Autorizou',
-  pediu_saida: 'Pediu saída',
-  invalido: 'Número inválido',
-  quer_ajudar: 'Quer ajudar',
-  encaminhado: 'Encaminhado',
-  sem_resposta: 'Não respondeu',
-  perdido: 'Perdido',
-};
+/**
+ * O pedido que a pessoa fez, e o botão de dar por resolvido.
+ *
+ * O estado é otimista de propósito: o gestor percorre a aba "Encaminhados"
+ * marcando um atrás do outro, e esperar a ida ao servidor a cada clique
+ * transformaria a varredura numa fila de espera. Se o servidor recusar, o
+ * estado volta e o erro aparece.
+ */
+function Encaminhamento({
+  contatoId, texto, tratadoEm,
+}: {
+  contatoId: string;
+  texto: string;
+  tratadoEm: string | null;
+}) {
+  const [tratado, setTratado] = useState(tratadoEm !== null);
+  const [erro, setErro] = useState(false);
+  const [ocupado, iniciar] = useTransition();
 
-const COR_STATUS: Record<StatusContato, 'neutro' | 'acento' | 'quente' | 'frio' | 'alerta' | 'perigo'> = {
-  novo: 'neutro',
-  na_fila: 'frio',
-  em_atendimento: 'alerta',
-  autorizou: 'acento',
-  pediu_saida: 'perigo',
-  invalido: 'neutro',
-  quer_ajudar: 'acento',
-  encaminhado: 'quente',
-  sem_resposta: 'neutro',
-  perdido: 'neutro',
-};
+  function alternar() {
+    const alvo = !tratado;
+    setTratado(alvo);
+    setErro(false);
+    iniciar(async () => {
+      const r = await marcarEncaminhamentoTratado(contatoId, alvo);
+      if (!r.ok) { setTratado(!alvo); setErro(true); }
+    });
+  }
+
+  return (
+    <div className="mt-1.5 max-w-[18rem]">
+      <p className={cx('flex gap-1.5 text-xs leading-relaxed',
+        tratado ? 'text-tenue line-through' : 'text-quente')}>
+        <MessageCircleQuestion size={12} className="mt-0.5 shrink-0" />
+        <span>{texto}</span>
+      </p>
+      <button type="button" onClick={alternar} disabled={ocupado}
+              className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-suave transition-colors hover:text-texto disabled:opacity-45">
+        {tratado
+          ? <><RotateCcw size={10} /> reabrir</>
+          : <><Check size={10} /> marcar como tratado</>}
+      </button>
+      {erro && <p className="text-[11px] text-perigo">não consegui salvar</p>}
+    </div>
+  );
+}
 
 const dataHora = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
@@ -199,11 +225,23 @@ export function TabelaContatos({
                     )}
                   </td>
                   <td className="px-4 py-2.5">
-                    <Pilula cor={COR_STATUS[c.status]}>{ROTULO_STATUS[c.status]}</Pilula>
+                    <Pilula cor={COR_STATUS_CONTATO[c.status]}>{ROTULO_STATUS_CONTATO[c.status]}</Pilula>
                     {c.kit_pendente && (
                       <p className="mt-1 inline-flex items-center gap-1 text-xs text-alerta">
                         <PackageOpen size={11} /> kit a entregar
                       </p>
+                    )}
+                    {/* ⚠️ O texto do encaminhamento aparece AQUI, e antes não
+                        aparecia em lugar nenhum da tela — só no CSV. Era a
+                        promessa que o sistema mais quebrava: o atendente diz à
+                        pessoa "vou levar sua pergunta pra equipe", e a pergunta
+                        morria no banco. */}
+                    {c.encaminhamento && (
+                      <Encaminhamento
+                        contatoId={c.id}
+                        texto={c.encaminhamento}
+                        tratadoEm={c.encaminhamento_tratado_em}
+                      />
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-suave">

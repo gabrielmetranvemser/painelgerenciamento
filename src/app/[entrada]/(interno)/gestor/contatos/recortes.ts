@@ -37,6 +37,11 @@ export const RECORTES = [
   { chave: 'autorizou', rotulo: 'Autorizaram' },
   { chave: 'pediu_saida', rotulo: 'Pediram saída' },
   { chave: 'kit', rotulo: 'Kit a entregar' },
+  // ⚠️ Só os NÃO tratados. "Encaminhar" grava o pedido da pessoa em
+  // `contatos.encaminhamento` e o atendente responde "vou levar sua pergunta
+  // pra equipe" — mas o texto só chegava ao gestor pelo CSV, e na prática
+  // morria no banco. Esta aba é o outro lado da promessa.
+  { chave: 'encaminhados', rotulo: 'Encaminhados' },
 ] as const;
 
 export type Recorte = (typeof RECORTES)[number]['chave'];

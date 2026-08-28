@@ -1,45 +1,58 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { ChevronRight, Inbox } from 'lucide-react';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { exigirAtendente } from '@/lib/sessao';
-import { rotas } from '@/lib/links-internos';
-import { Avatar, Cartao, EtiquetaOrigem, Pilula, Titulo, Vazio } from '@/components/ui';
-import { formatarExibicao } from '@/lib/telefone';
-import type { Contato, StatusContato } from '@/lib/tipos-banco';
+import { Titulo } from '@/components/ui';
+import type { StatusContato } from '@/lib/tipos-banco';
+// ⚠️ Do arquivo de cliente vem SÓ o componente. Constante importada de um
+// módulo 'use client' chega aqui como referência para o navegador, não como
+// valor. Ver o cabeçalho de `recortes.ts`.
+import { ListaMeusContatos } from './lista';
+import { ehStatus, type RespostaMeusContatos } from './recortes';
 
 export const metadata: Metadata = { title: 'Meus contatos' };
 export const dynamic = 'force-dynamic';
 
-const ROTULO: Partial<Record<StatusContato, { texto: string; cor: 'neutro' | 'acento' | 'alerta' | 'perigo' }>> = {
-  em_atendimento: { texto: 'Aguardando resposta', cor: 'neutro' },
-  autorizou: { texto: 'Autorizou', cor: 'acento' },
-  pediu_saida: { texto: 'Pediu saída', cor: 'perigo' },
-  invalido: { texto: 'Número inválido', cor: 'neutro' },
-  quer_ajudar: { texto: 'Quer ajudar', cor: 'acento' },
-  encaminhado: { texto: 'Encaminhado', cor: 'alerta' },
-  sem_resposta: { texto: 'Não respondeu', cor: 'neutro' },
-  perdido: { texto: 'Perdido (o número caiu)', cor: 'perigo' },
-};
+/**
+ * Cinquenta por página.
+ *
+ * ⚠️ A versão anterior pedia 300 linhas e não filtrava nada. Com o teto de 30
+ * conversas por dia, um atendente passa de 300 em duas semanas — e a partir daí
+ * os mais antigos sumiam da tela em silêncio, que é exatamente o defeito que a
+ * tela de contatos do gestor já teve. Agora quem filtra, conta e pagina é o
+ * banco.
+ */
+const POR_PAGINA = 50;
+
+type Busca = { status?: string; busca?: string; pagina?: string };
 
 /**
  * Caso 12 de docs/03-OPERACAO.md §6: a pessoa responde dias depois. O atendente
- * precisa achar quem já abordou sem mexer na fila.
+ * precisa achar quem já abordou sem mexer na fila — e, desde que os desfechos
+ * passaram de cinco para onze, precisa achar POR DESFECHO.
  */
-export default async function MeusContatos({ params }: { params: Promise<{ entrada: string }> }) {
+export default async function MeusContatos({
+  params, searchParams,
+}: {
+  params: Promise<{ entrada: string }>;
+  searchParams: Promise<Busca>;
+}) {
   const { entrada } = await params;
-  const usuario = await exigirAtendente(entrada);
+  const q = await searchParams;
+  await exigirAtendente(entrada);
   const supabase = await criarClienteServidor();
 
-  const { data } = await supabase
-    .from('contatos')
-    .select('*')
-    .eq('atendente_id', usuario.id)
-    .not('primeiro_contato_em', 'is', null)
-    .order('primeiro_contato_em', { ascending: false })
-    .limit(300);
+  const status: StatusContato | 'todos' = ehStatus(q.status) ? q.status : 'todos';
+  const busca = q.busca ?? '';
+  const pagina = Math.max(0, Number(q.pagina ?? 0) || 0);
 
-  const contatos = (data ?? []) as Contato[];
+  const { data } = await supabase.rpc('meus_contatos', {
+    p_status: status,
+    p_busca: busca || null,
+    p_pagina: pagina,
+    p_por_pagina: POR_PAGINA,
+  });
+
+  const dados = (data ?? {}) as Partial<RespostaMeusContatos>;
 
   return (
     <>
@@ -47,39 +60,19 @@ export default async function MeusContatos({ params }: { params: Promise<{ entra
         Meus contatos
       </Titulo>
 
-      {contatos.length === 0 ? (
-        <Vazio icone={<Inbox size={26} />}>
-          Você ainda não abordou ninguém. Quem você atender aparece aqui.
-        </Vazio>
-      ) : (
-        <Cartao className="divide-y divide-borda overflow-hidden">
-          {contatos.map((c) => {
-            const estado = ROTULO[c.status];
-            return (
-              <Link
-                key={c.id}
-                href={rotas(entrada).contato(c.id)}
-                className="flex flex-wrap items-center gap-4 px-5 py-4 transition-colors hover:bg-superficie-alta"
-              >
-                <Avatar nome={c.nome ?? c.primeiro_nome} tamanho="m" />
-                <div className="mr-auto min-w-0">
-                  <p className="truncate font-semibold">
-                    {c.primeiro_nome ?? c.nome ?? <span className="text-tenue">(dados apagados)</span>}
-                  </p>
-                  <p className="truncate text-xs text-suave">
-                    {c.telefone_e164 ? formatarExibicao(c.telefone_e164) : '—'}
-                    {c.primeiro_contato_em &&
-                      ` · ${new Date(c.primeiro_contato_em).toLocaleDateString('pt-BR')}`}
-                  </p>
-                </div>
-                <EtiquetaOrigem origem={c.origem} />
-                {estado && <Pilula cor={estado.cor}>{estado.texto}</Pilula>}
-                <ChevronRight size={16} className="text-tenue" />
-              </Link>
-            );
-          })}
-        </Cartao>
-      )}
+      <ListaMeusContatos
+        dados={{
+          contagens: dados.contagens ?? {},
+          todos: dados.todos ?? 0,
+          total: dados.total ?? 0,
+          linhas: dados.linhas ?? [],
+        }}
+        status={status}
+        busca={busca}
+        pagina={pagina}
+        porPagina={POR_PAGINA}
+        entrada={entrada}
+      />
     </>
   );
 }

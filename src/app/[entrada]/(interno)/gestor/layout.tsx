@@ -28,7 +28,8 @@ export default async function LayoutGestor({
   // O contador do menu: o que está esperando alguém olhar. Sem ele, o gestor
   // só descobre um risco jurídico se lembrar de abrir a tela.
   const supabase = await criarClienteServidor();
-  const [{ data: resumo }, { count: semLista }] = await Promise.all([
+  const [{ data: resumo }, { count: semLista }, { count: semChapa }, { count: encaminhados }] =
+    await Promise.all([
     supabase
       .from('v_resumo')
       .select('chamados_abertos, juridicos_abertos, alertas_abertos')
@@ -37,6 +38,18 @@ export default async function LayoutGestor({
     // ele fica sentado o turno inteiro achando que a base acabou. O número no
     // menu é o que faz o gestor descobrir isso antes do atendente.
     supabase.from('v_atendentes_sem_lista').select('id', { count: 'exact', head: true }),
+    // ⚠️ Atendente sem CHAPA é pior que sem lista: a fila recusa com
+    // `sem_candidato`, e antes desta trava ele conseguia abordar pessoas com
+    // uma primeira mensagem que não dizia de quem era o material. Onze contatos
+    // ficaram assim em 27/08.
+    supabase.from('v_atendentes_sem_chapa').select('id', { count: 'exact', head: true }),
+    // Pedidos que a pessoa fez e o atendente prometeu levar à equipe. Sem este
+    // número, o gestor só descobre que existem se lembrar de abrir a aba.
+    supabase
+      .from('v_contatos_gestor')
+      .select('id', { count: 'exact', head: true })
+      .not('encaminhamento', 'is', null)
+      .is('encaminhamento_tratado_em', null),
   ]);
 
   const chamados = resumo?.chamados_abertos ?? 0;
@@ -48,7 +61,12 @@ export default async function LayoutGestor({
       titulo: 'Acompanhar',
       itens: [
         { href: r.gestor, rotulo: 'Visão geral', icone: <Gauge size={15} /> },
-        { href: r.gestorContatos, rotulo: 'Contatos', icone: <Contact size={15} /> },
+        {
+          href: r.gestorContatos,
+          rotulo: 'Contatos',
+          icone: <Contact size={15} />,
+          aviso: encaminhados ?? 0,
+        },
         {
           href: r.gestorSuporte,
           rotulo: 'Suporte',
@@ -75,7 +93,13 @@ export default async function LayoutGestor({
           href: r.gestorAtendentes,
           rotulo: 'Atendentes',
           icone: <Users size={15} />,
-          aviso: semLista ?? 0,
+          // Os dois somam: as duas coisas mandam o gestor para a mesma tela e
+          // têm a mesma cara para o atendente — ele fica sentado achando que a
+          // base acabou.
+          aviso: (semLista ?? 0) + (semChapa ?? 0),
+          // Sem chapa o atendente não trabalha de jeito nenhum. Sem lista, ele
+          // ainda recebe quem se cadastrou sozinho.
+          urgente: (semChapa ?? 0) > 0,
         },
         { href: r.gestorChips, rotulo: 'Números', icone: <Smartphone size={15} /> },
       ],
