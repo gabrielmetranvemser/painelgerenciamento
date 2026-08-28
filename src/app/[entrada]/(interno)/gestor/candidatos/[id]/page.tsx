@@ -6,10 +6,15 @@ import { ArrowLeft } from 'lucide-react';
 import { rotas } from '@/lib/links-internos';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { Avatar, Pilula } from '@/components/ui';
-import { ROTULO_CARGO, type Candidato, type Material, type PapelUsuario } from '@/lib/tipos-banco';
+import {
+  ROTULO_CARGO,
+  type Candidato, type Material, type Municipio, type PapelUsuario,
+} from '@/lib/tipos-banco';
 import { FormularioCandidato } from '../formulario';
 import { Materiais } from './materiais';
 import { AtendentesDoCandidato, type AtendenteDoCandidato } from './atendentes';
+import { ComitesDoCandidato } from './comites';
+import { carregarComites } from '@/lib/acoes-comites';
 
 export const metadata: Metadata = { title: 'Candidato' };
 export const dynamic = 'force-dynamic';
@@ -39,6 +44,13 @@ export default async function PaginaCandidato({
 
   if (!candidato) notFound();
   const c = candidato as Candidato;
+
+  // Onde a pessoa pode buscar material. Depende do candidato existir, então vem
+  // depois do `notFound`.
+  const [comites, { data: municipios }] = await Promise.all([
+    carregarComites(id),
+    supabase.from('municipios').select('*').order('nome'),
+  ]);
 
   const porAtendente = new Map(
     ((vinculos ?? []) as { atendente_id: string; principal: boolean }[])
@@ -89,6 +101,10 @@ export default async function PaginaCandidato({
           />
           <Materiais candidatoId={c.id} materiais={(materiais ?? []) as Material[]}
                      previaHref={rotas(entrada).gestorCandidatoPrevia(c.id)} />
+          <ComitesDoCandidato
+            candidatoId={c.id} comites={comites}
+            municipios={(municipios ?? []) as Municipio[]}
+          />
         </div>
       </div>
     </>
