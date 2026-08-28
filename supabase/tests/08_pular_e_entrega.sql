@@ -19,6 +19,7 @@ declare
   v_a      uuid;
   v_b      uuid;
   v_cap    uuid;
+  v_cand   uuid;
   v_r      jsonb;
   v_com_adiado int;
   v_sem_adiado int;
@@ -42,6 +43,17 @@ begin
 
   insert into public.chips (atendente_id, rotulo, papel, status)
   values (v_uid, 'Chip Pular', 'ativo', 'ativo') returning id into v_chip;
+
+  -- Chapa. Desde `chapa_obrigatoria_na_permissao`, atendente sem candidato
+  -- recebe `sem_candidato` e a fila não entrega nada — sem estas linhas este
+  -- arquivo mediria a configuração do atendente em vez do que existe para
+  -- provar. Mesmo motivo das listas em 01_fixtures.
+  insert into public.candidatos (slug, nome_urna, cargo, vaga, numero, uf, ativo)
+  values ('teste-pular-cand', 'Cand Pular', 'deputado_federal', 1, '9951', 'RO', true)
+  returning id into v_cand;
+
+  insert into public.atendente_candidatos (atendente_id, candidato_id, cargo, vaga, principal)
+  values (v_uid, v_cand, 'deputado_federal', 1, true);
 
   -- Dois contatos na fila, o A mais antigo.
   insert into public.contatos (origem, nome, telefone_e164, chave_dedup, telefone_hmac, status, criado_em)

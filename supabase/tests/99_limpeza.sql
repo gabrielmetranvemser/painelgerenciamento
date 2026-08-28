@@ -15,4 +15,7 @@ delete from public.listas   where rotulo = 'teste-lista-fria';
 delete from public.chips    where rotulo like 'Chip Teste %';
 delete from public.usuarios where id in (select id from auth.users where email like 'teste-atendente-%@painel.local');
 delete from auth.users      where email like 'teste-atendente-%@painel.local';
+-- Depois dos usuários: `atendente_candidatos` cai por cascata quando o
+-- atendente sai, e só então o candidato fica sem referência.
+delete from public.candidatos where slug = 'teste-candidato';
 commit;

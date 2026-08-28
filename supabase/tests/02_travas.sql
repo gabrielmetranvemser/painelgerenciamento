@@ -13,8 +13,17 @@ begin;
 
 -- ── Fixtures (revertidos pelo rollback) ─────────────────────────────────────
 do $$
-declare i int; v_uid uuid;
+declare i int; v_uid uuid; v_cand uuid;
 begin
+
+  -- Chapa. Desde `chapa_obrigatoria_na_permissao`, atendente sem candidato
+  -- recebe `sem_candidato` e a fila não entrega nada — sem estas linhas este
+  -- arquivo mediria a configuração do atendente em vez do que existe para
+  -- provar. Mesmo motivo das listas em 01_fixtures.
+  insert into public.candidatos (slug, nome_urna, cargo, vaga, numero, uf, ativo)
+  values ('teste-travas-cand', 'Cand Travas', 'deputado_federal', 1, '9941', 'RO', true)
+  returning id into v_cand;
+
   for i in 1..2 loop
     v_uid := gen_random_uuid();
     insert into auth.users (
@@ -32,6 +41,9 @@ begin
     values (v_uid, 'atendente', 'Trava' || i, true, now(), 1);
     insert into public.chips (atendente_id, rotulo, papel, status)
     values (v_uid, 'Chip Trava ' || i, 'ativo', 'ativo');
+
+    insert into public.atendente_candidatos (atendente_id, candidato_id, cargo, vaga, principal)
+    values (v_uid, v_cand, 'deputado_federal', 1, true);
   end loop;
 end $$;
 
