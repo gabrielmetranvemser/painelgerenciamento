@@ -1,4 +1,4 @@
-# Painel de Adminsitração de Contatos
+# Painel de Gerenciamento de Contatos
 
 Painel que organiza atendimento **manual** por WhatsApp: entrega o contato certo
 ao atendente certo com o texto pronto, registra o resultado e faz cumprir as
