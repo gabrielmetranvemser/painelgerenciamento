@@ -145,6 +145,10 @@ Ao clicar: o chip vai para status `amarelo`, o gestor é avisado, e o atendente 
 
 Os 13 casos, cada um com resposta pronta para copiar e qual botão marcar. Enquanto a versão em software não fica pronta, imprimir e deixar do lado do computador.
 
+**Acima dele fica o "Roteiro da conversa"** (`/{chave}/painel/script`), que abre em aba própria — do "oi" até depois da eleição, em 15 blocos, com o texto pronto de cada passo e os nomes da chapa do atendente já preenchidos. Vive em aba separada, e não numa sanfona da lateral, porque quinze blocos abertos numa coluna de 340px empurram o contato para fora da tela justo quando alguém está esperando resposta. Fonte: `src/lib/script-apoio.ts`.
+
+Dois blocos dele — **Material** e **Convite ao canal** — aparecem sem botão de copiar. O link deles é por pessoa e sai do painel; texto colado com link de outro lugar não registra o clique daquele contato, e o clique é a única métrica confiável do projeto.
+
 1. "Pode / manda / sim" → Material → **Autorizou**
 2. "Não / não quero / para" → Saída → **Pediu saída**
 3. "Quem te passou meu número?" → Quem passou; se preferir sair, caso 2
@@ -167,6 +171,7 @@ Os 13 casos, cada um com resposta pronta para copiar e qual botão marcar. Enqua
 - [ ] cadastrar os atendentes (nome + e-mail)
 - [ ] escrever/editar os textos das mensagens (o editor aponta o que falta; a decisão é sua)
 - [ ] definir teto, horário e o dia bloqueado (eleição)
+- [ ] em **Números**, decidir número por número quem ainda precisa aquecer — chip comprado para a campanha fica em *Aquecendo* (5, 8, 12, 18, 25 conversas nos primeiros dias); número que a pessoa já usava no dia a dia vai direto para *Ativo* e segue o teto configurado. Enquanto está aquecendo, o número faz MENOS conversas que o teto, e a tela de Configuração mostra quem é quem.
 - [ ] cadastrar o destino dos links (material e canal)
 - [ ] subir a lista fria (com "entregue por" + data) e as origens quentes
 - [ ] conferir a tela de importação antes de confirmar

@@ -105,8 +105,35 @@ while read -r linha; do
 done <<< "$PARES"
 
 echo "  4 primeiras entregas: ${ORIGENS%,}"
-if [ "${ORIGENS%,}" = "site,site,site,lista_fria" ]; then
-  echo "  ✅ os 3 quentes saíram primeiro, e só então a fila fria"
+
+# ⚠️ A conferência é "nenhuma fria antes de uma quente", e NÃO a sequência
+#    literal `site,site,site,lista_fria`.
+#
+# Os atendentes de teste não têm lista atribuída, e quem não tem lista continua
+# recebendo os contatos que se cadastraram sozinhos (`lista_id is null`) — é a
+# regra de `listas_por_atendente`, e é ela que faz o cadastro do site cair para
+# todo mundo. Ou seja: a fila do teste inclui contatos QUENTES de verdade da
+# base, que os fixtures não criaram e não podem remover.
+#
+# Em 29/08 isso reprovou a suíte com `site,site,site,chamou`: um contato real
+# adicionado por um atendente no dia anterior entrou na quarta posição. O
+# produto estava certíssimo — quente antes de frio, que é o que este teste
+# existe para provar — e a asserção é que estava medindo outra coisa, a
+# composição da base.
+#
+# A ordem que importa é esta: depois da primeira fria, não pode vir quente.
+FALHOU_ORDEM=0
+VIU_FRIA=0
+for o in ${ORIGENS//,/ }; do
+  if [ "$o" = "lista_fria" ]; then
+    VIU_FRIA=1
+  elif [ "$VIU_FRIA" = 1 ]; then
+    FALHOU_ORDEM=1
+  fi
+done
+
+if [ "$FALHOU_ORDEM" = 0 ]; then
+  echo "  ✅ os quentes saíram primeiro, e só então a fila fria"
 else
   echo "  ❌ FALHOU: a fila fria foi atendida antes da quente"; FALHAS=1
 fi

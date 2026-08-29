@@ -713,6 +713,21 @@ export type SaudeChip = {
   conversas_hora: number;
 };
 
+/**
+ * O teto que vale HOJE para um número, e de onde ele veio.
+ *
+ * Sai de `teto_dos_chips()`, e não de uma cópia da tabela de rampa em
+ * JavaScript: no dia em que as duas divergirem, quem está certo é o banco,
+ * porque é ele que recusa a abordagem.
+ */
+export type TetoDoChip = {
+  chip_id: string;
+  dia_rampa: number;
+  teto: number;
+  intervalo_seg: number;
+  em_rampa: boolean;
+};
+
 export type DesempenhoAtendente = {
   atendente_id: string; atendente: string; ativo: boolean;
   hoje: number; total_abordados: number; autorizou: number; pediu_saida: number;
@@ -811,6 +826,17 @@ export type FilaStatus = {
   segundos_espera: number;
   dia_rampa: number;
   teto_hoje: number;
+  /**
+   * O teto de hoje veio da rampa de aquecimento, e não do que o gestor
+   * configurou.
+   *
+   * A tela precisa saber a diferença: "você já fez todas as conversas de hoje"
+   * com o gestor tendo prometido 30 e o número entregando 8 lê como painel
+   * quebrado. Só é `true` enquanto `chips.status = 'aquecendo'`.
+   */
+  em_rampa: boolean;
+  /** O teto de Gestor → Configuração, sem a rampa por cima. */
+  teto_gestor: number;
   enviados_hoje: number;
   restante_hoje: number;
   intervalo_seg: number;

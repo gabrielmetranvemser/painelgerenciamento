@@ -1,6 +1,6 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidarInterno } from '@/lib/revalidar';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { exigirGestorOuFalhar } from '@/lib/gestor';
@@ -66,7 +66,7 @@ export async function salvarModeloLivre(dados: {
     : await supabase.from('modelos_livres').insert(linha);
 
   if (error) return { ok: false, erro: error.message };
-  revalidatePath('/gestor/mensagens');
+  revalidarInterno('/gestor/mensagens');
   return { ok: true };
 }
 
@@ -83,6 +83,6 @@ export async function alternarModeloLivre(id: string, ativo: boolean): Promise<R
   const supabase = criarClienteAdmin();
   const { error } = await supabase.from('modelos_livres').update({ ativo }).eq('id', id);
   if (error) return { ok: false, erro: error.message };
-  revalidatePath('/gestor/mensagens');
+  revalidarInterno('/gestor/mensagens');
   return { ok: true };
 }

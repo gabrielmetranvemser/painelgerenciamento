@@ -56,6 +56,7 @@ export default async function PaginaPainel({ params }: { params: Promise<{ entra
       aguardandoInicial={aguardando ?? 0}
       listasIniciais={(listas ?? []) as ListaDoAtendente[]}
       rotaMeusContatos={rotas(entrada).meusContatos}
+      rotaScript={rotas(entrada).script}
     />
   );
 }

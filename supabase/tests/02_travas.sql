@@ -11,6 +11,19 @@
 --   psql -f supabase/tests/02_travas.sql
 begin;
 
+-- ⚠️ Tira a base REAL de circulação durante a transação (revertido pelo
+-- rollback, como tudo aqui).
+--
+-- A fila entrega quente antes de frio, e quem se cadastrou sozinho
+-- (`lista_id is null`) cai para todo atendente, inclusive os de teste. Bastou
+-- UM contato de verdade com origem `chamou` entrar na base em 28/08 para este
+-- arquivo passar a reprovar: o claim vinha certo, só que trazia a "eliane
+-- laboratório" em vez do "Contato Trava 1". O produto estava intacto — a
+-- medição é que estava olhando para a base inteira.
+--
+-- É o mesmo `adiado_ate` que 08, 15, 17 e 19 já usavam.
+update public.contatos set adiado_ate = now() + interval '1 day' where status = 'na_fila';
+
 -- ── Fixtures (revertidos pelo rollback) ─────────────────────────────────────
 do $$
 declare i int; v_uid uuid; v_cand uuid;

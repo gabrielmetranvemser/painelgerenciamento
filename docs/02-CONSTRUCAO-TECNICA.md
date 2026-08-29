@@ -442,7 +442,7 @@ Ao pedir o próximo contato, a função verifica:
 
 Se qualquer uma falhar, retorna o motivo e o frontend mostra o botão travado com contagem regressiva.
 
-**Rampa de aquecimento** (o `teto_hoje` sobe com `dia_rampa`):
+**Rampa de aquecimento** — vale **enquanto `chips.status = 'aquecendo'`**:
 
 | Dia do chip | Teto | Intervalo |
 |---|---|---|
@@ -453,7 +453,24 @@ Se qualquer uma falhar, retorna o motivo e o frontend mostra o botão travado co
 | 5 | 25 | 60s |
 | 6+ | 30 | 60s |
 
-Cron diário zera `enviados_hoje` e incrementa `dia_rampa` até 6.
+`dia_rampa` é **derivado** (dias operacionais distintos em que aquele chip abriu
+conversa), e não coluna incrementada por cron: assim o dia 3 é mesmo o terceiro
+dia de uso, não avança sozinho num fim de semana parado e não trava se o cron
+falhar.
+
+⚠️ **Quem sai da rampa é o gestor, no botão "Terminar aquecimento" da tela de
+Números.** Todo chip nasce `aquecendo`; marcado como `ativo`, ele passa a seguir
+o teto e o intervalo de `config`, e mais nada.
+
+Isso não é detalhe: a rampa aplicada para sempre é o defeito que travou uma
+atendente em 8 conversas por dia com o gestor tendo configurado 30 — porque
+dentro da rampa o gestor só pode APERTAR (`least(rampa, config)`), nunca
+afrouxar. Ele mexeu no campo três dias seguidos concluindo que o painel não
+salvava. Número comprado para a campanha precisa dos primeiros dias devagar;
+número que a pessoa já usava no dia a dia, não — e essa distinção só quem
+opera consegue fazer.
+
+Teste: `supabase/tests/20_rampa_e_variacao.sql`.
 
 ---
 
@@ -468,6 +485,15 @@ ao montar a mensagem de uma etapa para um chip:
     grava rotacao_chip[chip, modelo].ultima_variacao = proxima
     retorna texto(proxima) com variáveis substituídas
 ```
+
+**A variação escolhida fica congelada na linha de `interacoes` daquele contato** — recarregar a página não pode trocar o texto debaixo de quem está prestes a enviar. Mas o congelamento tem prazo:
+
+| Estado da linha | O que vale |
+|---|---|
+| `aberto_wa_em` preenchido | a variação **nunca** muda. É prova de auditoria do que foi enviado. |
+| ainda rascunho | só vale se a variação continuar **ativa** e for do modelo daquela etapa; se não, escolhe outra e regrava. |
+
+⚠️ Sem a segunda linha, variação desativada pelo gestor continuava saindo para quem já tinha passado pela fila — o gestor reescrevia as mensagens e via, na tela do atendente, o texto que ele acabara de desligar. Editar o TEXTO de uma variação ativa sempre chegou na hora: ele é lido de `variacoes` no momento do preparo. O que grudava era a ESCOLHA de qual variação.
 
 **Variáveis:** `{{saudacao}}` (por hora), `{{primeiro_nome}}`, `{{nome}}` (do atendente), `{{candidato}}`, `{{cargo}}`, `{{numero}}`, `{{link}}`, `{{link_grupo}}`, `{{municipio}}`.
 

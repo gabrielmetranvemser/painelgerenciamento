@@ -1,6 +1,6 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidarInterno } from '@/lib/revalidar';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { exigirGestorOuFalhar } from '@/lib/gestor';
 import { podeSalvar, validarModelo } from '@/lib/mensagem';
@@ -38,7 +38,7 @@ export async function salvarVariacao(
   const { error } = await supabase.from('variacoes').update({ texto }).eq('id', variacaoId);
   if (error) return { ok: false, erro: error.message };
 
-  revalidatePath('/gestor/mensagens');
+  revalidarInterno('/gestor/mensagens');
   return { ok: true };
 }
 
@@ -60,7 +60,7 @@ export async function adicionarVariacao(modeloId: string, etapa: EtapaMsg, texto
     .insert({ modelo_id: modeloId, texto, ordem: (ultima?.ordem ?? 0) + 1 });
 
   if (error) return { ok: false, erro: error.message };
-  revalidatePath('/gestor/mensagens');
+  revalidarInterno('/gestor/mensagens');
   return { ok: true };
 }
 
@@ -83,6 +83,6 @@ export async function alternarVariacao(variacaoId: string, ativa: boolean): Prom
 
   const { error } = await supabase.from('variacoes').update({ ativa }).eq('id', variacaoId);
   if (error) return { ok: false, erro: error.message };
-  revalidatePath('/gestor/mensagens');
+  revalidarInterno('/gestor/mensagens');
   return { ok: true };
 }

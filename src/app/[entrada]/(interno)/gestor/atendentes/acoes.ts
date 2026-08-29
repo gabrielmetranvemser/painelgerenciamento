@@ -1,6 +1,6 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidarInterno } from '@/lib/revalidar';
 import { z } from 'zod';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { criarClienteServidor } from '@/lib/supabase/server';
@@ -60,7 +60,7 @@ export async function criarAtendente(_anterior: ResultadoNovo | null, form: Form
     return { ok: false, erro: erroPerfil.message };
   }
 
-  revalidatePath('/gestor/atendentes');
+  revalidarInterno('/gestor/atendentes');
   return { ok: true, email, senha };
 }
 
@@ -68,7 +68,7 @@ export async function alternarAtivo(id: string, ativo: boolean) {
   await exigirGestorOuFalhar();
   const supabase = criarClienteAdmin();
   await supabase.from('usuarios').update({ ativo }).eq('id', id);
-  revalidatePath('/gestor/atendentes');
+  revalidarInterno('/gestor/atendentes');
 }
 
 /** Nova senha para quem esqueceu. Mostrada uma vez. */
@@ -117,7 +117,7 @@ export async function trocarEmail(id: string, email: string): Promise<ResultadoR
     };
   }
 
-  revalidatePath('/gestor/atendentes');
+  revalidarInterno('/gestor/atendentes');
   return { ok: true };
 }
 
@@ -143,7 +143,7 @@ export async function renomearAtendente(id: string, primeiroNome: string): Promi
   const { error } = await supabase.from('usuarios').update({ primeiro_nome: nome }).eq('id', id);
   if (error) return { ok: false, erro: error.message };
 
-  revalidatePath('/gestor/atendentes');
+  revalidarInterno('/gestor/atendentes');
   return { ok: true };
 }
 
@@ -243,6 +243,6 @@ export async function repararConsentimento(atendenteId: string): Promise<Resulta
     };
   }
 
-  revalidatePath('/gestor/atendentes');
+  revalidarInterno('/gestor/atendentes');
   return { ok: true, contatos: r.contatos ?? 0 };
 }
