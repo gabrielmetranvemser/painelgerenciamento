@@ -1,6 +1,6 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidarInterno } from '@/lib/revalidar';
 import { z } from 'zod';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { criarClienteServidor } from '@/lib/supabase/server';
@@ -53,7 +53,7 @@ export async function criarChip(_anterior: ResultadoChip | null, form: FormData)
     };
   }
 
-  revalidatePath('/gestor/chips');
+  revalidarInterno('/gestor/chips');
   return { ok: true };
 }
 
@@ -61,8 +61,8 @@ export async function mudarStatus(chipId: string, status: StatusChip) {
   await exigirGestorOuFalhar();
   const supabase = criarClienteAdmin();
   await supabase.from('chips').update({ status }).eq('id', chipId);
-  revalidatePath('/gestor/chips');
-  revalidatePath('/gestor');
+  revalidarInterno('/gestor/chips');
+  revalidarInterno('/gestor');
 }
 
 /**
@@ -77,7 +77,7 @@ export async function matarChip(chipId: string, detalhe?: string) {
   await exigirGestorOuFalhar();
   const supabase = await criarClienteServidor();
   const { data } = await supabase.rpc('marcar_chip_morto', { p_chip_id: chipId, p_detalhe: detalhe ?? null });
-  revalidatePath('/gestor/chips');
-  revalidatePath('/gestor');
+  revalidarInterno('/gestor/chips');
+  revalidarInterno('/gestor');
   return data as { ok: boolean; contatos_perdidos?: number };
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, LifeBuoy } from 'lucide-react';
+import { ChevronDown, ExternalLink, LifeBuoy, ScrollText } from 'lucide-react';
 import { Cartao, cx } from '@/components/ui';
 
 /**
@@ -76,11 +76,43 @@ function Copiar({ texto }: { texto: string }) {
  *    para o que a pessoa acabar de escrever — e leva o acento da campanha,
  *    porque é a única coisa da lateral que se USA em vez de ler.
  */
-export function ComoAgir() {
+export function ComoAgir({ rotaScript }: { rotaScript: string }) {
   const [aberto, setAberto] = useState(false);
 
   return (
     <Cartao className="overflow-hidden">
+      {/*
+        ⚠️ O roteiro NÃO entra nesta sanfona, e não é preguiça de layout.
+        São quinze blocos com o texto inteiro de cada resposta; abertos dentro
+        de uma coluna de 340px eles empurrariam o contato para fora da tela no
+        momento em que a pessoa está esperando resposta. Em aba própria, ele
+        fica aberto o turno inteiro ao lado do WhatsApp Web — que é como o
+        atendente já trabalha (docs/03-OPERACAO.md §2).
+
+        `rel="noopener"` porque `target="_blank"` sem ele dá à aba nova acesso
+        a `window.opener`.
+      */}
+      <a
+        href={rotaScript}
+        target="_blank"
+        rel="noopener"
+        className={cx(
+          'flex w-full items-start gap-3 border-b border-borda px-4 py-3.5 text-left',
+          'transition-colors hover:bg-superficie-alta',
+        )}
+      >
+        <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-acento/12 text-acento">
+          <ScrollText size={15} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">Roteiro da conversa</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-suave">
+            Do “oi” até depois da eleição, com o texto pronto de cada passo. Abre numa aba nova.
+          </span>
+        </span>
+        <ExternalLink size={14} className="mt-1 shrink-0 text-suave" />
+      </a>
+
       <button
         type="button"
         onClick={() => setAberto((v) => !v)}

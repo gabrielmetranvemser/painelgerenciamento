@@ -27,6 +27,11 @@ declare
 begin
   raise notice '── Pular contato e entregas ─────────────────────────────────────────────';
 
+  -- Tira a base REAL de circulação durante a transação. Ver a nota longa em
+  -- 02_travas: um único contato quente de verdade na fila faz este arquivo
+  -- medir a base em vez do que ele existe para provar.
+  update public.contatos set adiado_ate = now() + interval '1 day' where status = 'na_fila';
+
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
     created_at, updated_at, raw_app_meta_data, raw_user_meta_data, is_super_admin,

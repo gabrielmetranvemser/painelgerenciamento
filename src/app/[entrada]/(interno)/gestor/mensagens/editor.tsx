@@ -135,16 +135,38 @@ function EditorVariacao({
 }) {
   const [texto, setTexto] = useState(variacao.texto);
   const [erro, setErro] = useState<string | null>(null);
-  const [salvo, setSalvo] = useState(false);
   const [ocupado, iniciar] = useTransition();
   const { problemas, previa, impedido, temRisco } = useValidacao(etapa, texto, exemplo);
-  const mudou = texto !== variacao.texto;
+
+  /**
+   * O último texto que o SERVIDOR confirmou ter gravado.
+   *
+   * ⚠️ Antes, o "salvo ✓" dependia de `texto === variacao.texto` — a prop que
+   * vem do servidor. Só que a ação revalidava um caminho que não existe
+   * (`/gestor/mensagens`, sem o segmento secreto), a página nunca era
+   * renderizada de novo, a prop continuava com o texto ANTIGO, e a comparação
+   * dava "mudou" para sempre. Resultado: o gestor salvava e a tela não dizia
+   * nada — nem erro, nem confirmação. Ele concluiu que a tela estava recusando
+   * o texto dele, e passou a caçar qual regra o estaria impedindo.
+   *
+   * `revalidarInterno` corrigiu o caminho, mas a confirmação não pode depender
+   * de revalidação chegar: ela é a resposta a um clique, e sai da resposta do
+   * próprio clique.
+   */
+  const [salvoComo, setSalvoComo] = useState<string | null>(null);
+  const gravado = salvoComo ?? variacao.texto;
+  const mudou = texto !== gravado;
+  const salvo = salvoComo !== null && !mudou;
 
   return (
     <Cartao className={`p-4 ${!variacao.ativa ? 'opacity-60' : ''}`}>
       <div className="mb-2 flex items-center gap-3">
         <span className="text-xs font-medium text-suave">Variação {indice}</span>
-        {!variacao.ativa && <span className="text-xs text-suave">(desativada)</span>}
+        {!variacao.ativa && (
+          <span className="text-xs text-suave" title="Nenhum atendente recebe esta variação.">
+            desativada — não chega a ninguém
+          </span>
+        )}
         <button
           type="button"
           className="ml-auto text-xs text-suave hover:text-texto"
@@ -160,7 +182,7 @@ function EditorVariacao({
 
       <textarea
         value={texto}
-        onChange={(e) => { setTexto(e.target.value); setSalvo(false); setErro(null); }}
+        onChange={(e) => { setTexto(e.target.value); setErro(null); }}
         rows={4}
         className="w-full resize-y rounded-lg border border-borda bg-superficie p-3 text-sm"
       />
@@ -174,13 +196,22 @@ function EditorVariacao({
         <Botao tamanho="p" disabled={!mudou || impedido || ocupado}
           onClick={() => iniciar(async () => {
             const r = await salvarVariacao(variacao.id, etapa, texto);
-            if (r.ok) { setSalvo(true); } else { setErro(r.erro); }
+            if (r.ok) { setSalvoComo(texto); setErro(null); } else { setErro(r.erro); }
           })}>
           {/* "Mesmo assim" é o único atrito que sobrou: nomeia a escolha sem
               tirá-la de quem responde pela campanha. */}
           {ocupado ? 'Salvando…' : temRisco && !impedido ? 'Salvar mesmo assim' : 'Salvar'}
         </Botao>
-        {salvo && !mudou && <span className="text-xs text-ok">salvo ✓</span>}
+        {salvo && (
+          <span className="text-xs text-ok">
+            salvo ✓{' '}
+            <span className="text-suave">
+              {variacao.ativa
+                ? '— já vale para quem pedir contato agora'
+                : '— mas esta variação está desativada, então ninguém a recebe'}
+            </span>
+          </span>
+        )}
         {mudou && impedido && <span className="text-xs text-perigo">corrija para poder salvar</span>}
         {mudou && !impedido && temRisco && (
           <span className="text-xs text-suave">os pontos em vermelho ficam por sua conta</span>

@@ -63,7 +63,7 @@ const ETAPAS_DE_ABORDAGEM: EtapaMsg[] = ['permissao', 'material', 'convite_grupo
 
 export function Atendimento({
   primeiroNome, chips, municipios, filaInicial, aguardandoInicial, listasIniciais,
-  rotaMeusContatos,
+  rotaMeusContatos, rotaScript,
 }: {
   primeiroNome: string;
   chips: Chip[];
@@ -74,6 +74,8 @@ export function Atendimento({
   /** As listas que este atendente atende, com o que falta em cada uma. */
   listasIniciais: ListaDoAtendente[];
   rotaMeusContatos: string;
+  /** Endereço do roteiro completo, que abre em aba própria. */
+  rotaScript: string;
 }) {
   const [chipEscolhido, setChipEscolhido] = useState<string | null>(null);
   const chipSalvo = useChipSalvo();
@@ -606,8 +608,9 @@ export function Atendimento({
       </div>
 
       <aside className="space-y-5 lg:sticky lg:top-20 lg:self-start">
-        <Regras teto={fila?.teto_hoje ?? 30} inicio={fila?.hora_inicio ?? 9} fim={fila?.hora_fim ?? 20} />
-        <ComoAgir />
+        <Regras teto={fila?.teto_hoje ?? 30} inicio={fila?.hora_inicio ?? 9} fim={fila?.hora_fim ?? 20}
+                emRampa={fila?.em_rampa ?? false} diaRampa={fila?.dia_rampa ?? 1} />
+        <ComoAgir rotaScript={rotaScript} />
       </aside>
     </div>
   );
@@ -784,9 +787,23 @@ function Travado({
             </p>
           )}
           {fila.motivo === 'teto_atingido' && (
-            <p className="mt-2 text-sm text-suave">
-              Foram {fila.enviados_hoje} conversas hoje. Amanhã tem mais.
-            </p>
+            <>
+              <p className="mt-2 text-sm text-suave">
+                Foram {fila.enviados_hoje} conversas hoje. Amanhã tem mais.
+              </p>
+              {/* ⚠️ Sem esta frase, o atendente lê "acabou" onde o gestor
+                  prometeu 30 e conclui que o painel está errado — foi o que
+                  aconteceu em 28/08. O limite de hoje é MENOR de propósito, e
+                  quem precisa saber disso é quem está com o número na mão. */}
+              {fila.em_rampa && fila.teto_hoje < fila.teto_gestor && (
+                <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-suave">
+                  Seu número ainda está aquecendo: hoje ele para em {fila.teto_hoje}, e não nas{' '}
+                  {fila.teto_gestor} do resto da operação. É o dia {fila.dia_rampa} de uso — o
+                  limite sobe sozinho a cada dia trabalhado. Número novo que fala com muita gente
+                  de uma vez é bloqueado pelo WhatsApp.
+                </p>
+              )}
+            </>
           )}
           {fila.motivo === 'sem_lista' && (
             <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-suave">
@@ -1401,13 +1418,21 @@ function Entrega({
 
 /* ── Regras fixas ────────────────────────────────────────────────────────── */
 
-function Regras({ teto, inicio, fim }: { teto: number; inicio: number; fim: number }) {
+function Regras({
+  teto, inicio, fim, emRampa, diaRampa,
+}: {
+  teto: number; inicio: number; fim: number; emRampa: boolean; diaRampa: number;
+}) {
   const regras = [
     'Primeiro só o pedido de permissão.',
     'Material só depois do “pode”.',
     'Uma tentativa por pessoa. Nunca insista.',
     '“Não” é não: marque Pediu saída e agradeça.',
-    `Até ${teto} conversas, das ${inicio}h às ${fim}h.`,
+    // O teto do dia com a origem junto: quem lê "até 8" sem saber do
+    // aquecimento acha que o gestor configurou 8.
+    emRampa
+      ? `Até ${teto} conversas hoje (número aquecendo, dia ${diaRampa}), das ${inicio}h às ${fim}h.`
+      : `Até ${teto} conversas, das ${inicio}h às ${fim}h.`,
   ];
   return (
     <Cartao className="p-5">

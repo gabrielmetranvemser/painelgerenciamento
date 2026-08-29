@@ -16,6 +16,8 @@ export function rotas(entrada: string) {
     gestorSuporte: `${raiz}/gestor/suporte`,
     painel: `${raiz}/painel`,
     meusContatos: `${raiz}/painel/meus-contatos`,
+    /** O roteiro completo da conversa. Abre em aba própria, ao lado do WhatsApp. */
+    script: `${raiz}/painel/script`,
     contato: (id: string) => `${raiz}/painel/contatos/${id}`,
     gestor: `${raiz}/gestor`,
     gestorCandidatos: `${raiz}/gestor/candidatos`,

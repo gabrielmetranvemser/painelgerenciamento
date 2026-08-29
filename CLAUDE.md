@@ -41,7 +41,9 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `src/lib/bots.ts` | o pré-carregamento de link do WhatsApp vira "clique" → métrica inútil |
 | `src/lib/mensagem.ts` | o editor deixa de APONTAR o que falta no texto → o gestor escolhe sem saber o que está abrindo mão (as regras avisam, não travam: só texto quebrado impede salvar) |
 | `src/lib/importacao.ts` | dedup e casamento de município da planilha |
-| `pegar_proximo_contato` | dois atendentes pegam o mesmo contato, ou um contato cai para quem não atende aquela lista
+| `pegar_proximo_contato` | dois atendentes pegam o mesmo contato, ou um contato cai para quem não atende aquela lista |
+| `rampa_do_chip` | a rampa só vale enquanto `chips.status = 'aquecendo'`. Aplicá-la sempre faz o teto do gestor virar letra morta (`least(rampa, config)`), e ele mexe no campo achando que não salva |
+| `preparar_mensagem` | a variação congela por contato. Congelar cedo demais faz texto desativado continuar saindo; congelar de menos reescreve o histórico do que já foi enviado |
 
 ### 2. Toda trava é validada no SERVIDOR
 

@@ -1,9 +1,9 @@
 'use client';
 
 import { useActionState, useState, useTransition } from 'react';
-import { Pause, Play, Skull, SmartphoneCharging } from 'lucide-react';
+import { Flame, Pause, Play, Skull, SmartphoneCharging } from 'lucide-react';
 import { Avatar, Aviso, Botao, Campo, Cartao, Farol, Selecao } from '@/components/ui';
-import type { SaudeChip, StatusChip, Usuario } from '@/lib/tipos-banco';
+import type { SaudeChip, StatusChip, TetoDoChip, Usuario } from '@/lib/tipos-banco';
 import { criarChip, matarChip, mudarStatus } from './acoes';
 
 const ROTULO_STATUS: Record<StatusChip, string> = {
@@ -14,7 +14,12 @@ const ROTULO_STATUS: Record<StatusChip, string> = {
   morto: 'Morto',
 };
 
-export function GerenciarChips({ chips, atendentes }: { chips: SaudeChip[]; atendentes: Usuario[] }) {
+export function GerenciarChips({
+  chips, atendentes, tetos,
+}: {
+  chips: SaudeChip[]; atendentes: Usuario[]; tetos: TetoDoChip[];
+}) {
+  const porChip = new Map(tetos.map((t) => [t.chip_id, t]));
   const [estado, acao] = useActionState(criarChip, null);
   const [ocupado, iniciar] = useTransition();
   const [confirmandoMorte, setConfirmandoMorte] = useState<string | null>(null);
@@ -48,6 +53,19 @@ export function GerenciarChips({ chips, atendentes }: { chips: SaudeChip[]; aten
         {estado && !estado.ok && <Aviso tom="erro">{estado.erro}</Aviso>}
         {aviso && <Aviso tom="alerta">{aviso}</Aviso>}
 
+        {/* ⚠️ O gestor não sabia que "Aquecendo" mudava o teto. Ele configurou
+            30 conversas por dia, a atendente travou em 8, e ele passou a tarde
+            mexendo no campo achando que não salvava. A explicação e o botão
+            precisam estar na mesma tela — e o botão já estava. */}
+        <Cartao className="p-4 text-xs leading-relaxed text-suave">
+          <p className="mb-1 font-medium text-texto">Aquecendo x Ativo</p>
+          <strong className="text-texto">Aquecendo</strong> segue a rampa: 5 conversas no primeiro
+          dia de uso, 8 no segundo, 12, 18, 25 e só então o limite cheio. Todo número entra assim,
+          porque chip novo que fala com 30 desconhecidos no primeiro dia cai.{' '}
+          <strong className="text-texto">Ativo</strong> segue o que está em Configuração. Marque
+          ativo o número que já era usado no dia a dia antes da campanha — esse não precisa aquecer.
+        </Cartao>
+
         <Cartao className="p-4 text-xs leading-relaxed text-suave">
           <p className="mb-1 font-medium text-texto">Termômetro</p>
           Vermelho em qualquer eixo — mais de 30% pedindo saída, mais de 12% de número inválido,
@@ -79,6 +97,12 @@ export function GerenciarChips({ chips, atendentes }: { chips: SaudeChip[]; aten
               <Farol estado={c.farol} />
             </div>
 
+            {/* O limite de HOJE, com a origem escrita. É a resposta à pergunta
+                que ficou três dias sem lugar na tela: "por que 8, se eu pus 30?" */}
+            {c.status !== 'morto' && porChip.get(c.chip_id) && (
+              <TetoDeHoje teto={porChip.get(c.chip_id)!} />
+            )}
+
             {c.ultimas_abordagens > 0 && (
               <div className="mt-3 grid grid-cols-2 gap-3 border-t border-borda pt-3 text-xs sm:grid-cols-4">
                 <Indicador rotulo="Pediram saída" valor={c.pct_saida} limite={[15, 30]} />
@@ -92,8 +116,19 @@ export function GerenciarChips({ chips, atendentes }: { chips: SaudeChip[]; aten
               <div className="mt-3 flex flex-wrap gap-2 border-t border-borda pt-3">
                 {c.status !== 'ativo' && (
                   <Botao variante="neutro" tamanho="p" disabled={ocupado}
+                    title={c.status === 'aquecendo'
+                      ? 'Encerra a rampa: este número passa a seguir o limite de Configuração.'
+                      : undefined}
                     onClick={() => iniciar(async () => { await mudarStatus(c.chip_id, 'ativo'); })}>
-                    <Play size={12} /> Marcar ativo
+                    <Play size={12} />
+                    {c.status === 'aquecendo' ? 'Terminar aquecimento' : 'Marcar ativo'}
+                  </Botao>
+                )}
+                {c.status === 'ativo' && (
+                  <Botao variante="neutro" tamanho="p" disabled={ocupado}
+                    title="Volta o número para a rampa dos primeiros dias."
+                    onClick={() => iniciar(async () => { await mudarStatus(c.chip_id, 'aquecendo'); })}>
+                    <Flame size={12} /> Voltar a aquecer
                   </Botao>
                 )}
                 {c.status !== 'pausado' && (
@@ -129,6 +164,29 @@ export function GerenciarChips({ chips, atendentes }: { chips: SaudeChip[]; aten
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * O limite que este número tem hoje, e de onde ele vem.
+ *
+ * Vem de `teto_dos_chips()` — a mesma função que a fila chama para recusar. O
+ * gestor precisa poder olhar para um número e saber, sem contar dias na mão,
+ * quantas conversas ele vai conseguir fazer.
+ */
+function TetoDeHoje({ teto }: { teto: TetoDoChip }) {
+  return (
+    <p className={`mt-3 border-t border-borda pt-3 text-xs leading-relaxed ${
+      teto.em_rampa ? 'text-alerta' : 'text-suave'
+    }`}>
+      <span className="font-medium tabular-nums">
+        {teto.teto} conversas hoje · {teto.intervalo_seg}s de intervalo
+      </span>
+      {teto.em_rampa
+        ? ` — aquecendo, dia ${teto.dia_rampa} de uso. Enquanto estiver aquecendo, este número não
+           chega ao limite de Configuração.`
+        : ' — o limite de Configuração.'}
+    </p>
   );
 }
 
