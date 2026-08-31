@@ -667,26 +667,10 @@ export function Atendimento({
         {erro && <Aviso tom="erro" icone={<AlertTriangle size={16} />}>{erro}</Aviso>}
         {aviso && <Aviso tom="info">{aviso}</Aviso>}
 
-        {/* ⚠️ O TETO PASSOU A AVISAR EM VEZ DE TRAVAR (pedido de quem opera,
-            31/08). Então este aviso é a única coisa que resta entre o atendente
-            e um número derrubado — ele precisa ser grande, ficar na tela o
-            tempo todo e dizer o que acontece, não só que "passou do limite".
-            Cor de perigo, e não de alerta: âmbar é orientação, vermelho é
-            "isto custa caro". */}
         {fila?.teto_estourado && !fila.teto_bloqueia && (
-          <Aviso tom="erro" icone={<Siren size={16} />}>
-            <p className="font-medium">
-              Você já fez {fila.enviados_hoje} conversas hoje — o combinado eram{' '}
-              {fila.teto_hoje}.
-            </p>
-            <p className="mt-1 text-sm leading-relaxed">
-              Daqui pra frente é por sua conta. Número que fala com muita gente nova no mesmo dia
-              é o padrão que o WhatsApp derruba
-              {fila.em_rampa && ', e o seu ainda está aquecendo'} — e quando cai, as conversas
-              abertas caem junto e não voltam. O melhor a fazer é parar por aqui e continuar
-              amanhã.
-            </p>
-          </Aviso>
+          <AvisoDoTeto
+            feitas={fila.enviados_hoje} teto={fila.teto_hoje} emRampa={fila.em_rampa}
+          />
         )}
 
         {chip?.status === 'amarelo' && (
@@ -894,6 +878,72 @@ function Contador({ rotulo, valor, cor, icone }: {
 }
 
 /* ── Estado travado ──────────────────────────────────────────────────────── */
+
+/**
+ * "Você passou do combinado" — a linha fica, o parágrafo encolhe.
+ *
+ * ⚠️ Desde que o teto avisa em vez de travar, este aviso é a única coisa entre
+ * o atendente e um número derrubado. Por isso ele NÃO se fecha e NÃO some: o
+ * título continua na tela o resto do dia, em vermelho, com a conta na frente.
+ *
+ * O que encolhe é a explicação. Ela ocupava metade da coluna do atendimento e é
+ * a mesma em toda conversa — quem já leu uma vez lê o título e sabe do que se
+ * trata. Deixá-la aberta para sempre não avisa mais ninguém: vira paisagem, que
+ * é a forma mais rápida de um aviso parar de funcionar.
+ *
+ * Abre na PRIMEIRA vez do dia, e só encolhe depois que a pessoa fecha. É a
+ * ordem certa: ninguém decide não ler o que ainda não viu. A memória é do dia,
+ * porque amanhã o número acorda inteiro e a conversa recomeça.
+ */
+function AvisoDoTeto({
+  feitas, teto, emRampa,
+}: {
+  feitas: number; teto: number; emRampa: boolean;
+}) {
+  const chave = `painel:teto-encolhido:${new Date().toISOString().slice(0, 10)}`;
+
+  // Falhar aqui (anônima, dados limpos) abre o aviso, que é o lado seguro.
+  const [aberto, setAberto] = useState(() => {
+    try { return localStorage.getItem(chave) !== '1'; } catch { return true; }
+  });
+
+  function alternar() {
+    const proximo = !aberto;
+    setAberto(proximo);
+    try {
+      if (proximo) localStorage.removeItem(chave);
+      else localStorage.setItem(chave, '1');
+    } catch { /* sem memória, reabre amanhã do mesmo jeito */ }
+  }
+
+  return (
+    <Aviso tom="erro" icone={<Siren size={16} />}>
+      <button
+        type="button"
+        onClick={alternar}
+        aria-expanded={aberto}
+        className="flex w-full cursor-pointer items-start gap-2 text-left"
+      >
+        <span className="mr-auto font-medium">
+          Você já fez {feitas} conversas hoje — o combinado eram {teto}.
+        </span>
+        <ChevronDown
+          size={15}
+          className={cx('mt-0.5 shrink-0 transition-transform duration-200', aberto && 'rotate-180')}
+        />
+      </button>
+
+      {aberto && (
+        <p className="mt-1.5 text-sm leading-relaxed">
+          Daqui pra frente é por sua conta. Número que fala com muita gente nova no mesmo dia é o
+          padrão que o WhatsApp derruba{emRampa && ', e o seu ainda está aquecendo'} — e quando
+          cai, as conversas abertas caem junto e não voltam. O melhor a fazer é parar por aqui e
+          continuar amanhã.
+        </p>
+      )}
+    </Aviso>
+  );
+}
 
 function Travado({
   fila, espera, ocupado, listaEscolhida, aoVerTodas, aoPularIntervalo,
