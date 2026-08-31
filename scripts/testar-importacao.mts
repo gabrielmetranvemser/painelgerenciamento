@@ -72,36 +72,46 @@ const { data: lista, error: erroLista } = await supabase.from('listas').insert({
 
 if (erroLista) { console.error(`❌ ${erroLista.message}`); process.exit(1); }
 
+// ⚠️ CHAMA `importar_contatos`, a MESMA RPC da tela do gestor.
+//
+// Antes este trecho repetia a gravação à mão, com `upsert ignoreDuplicates`.
+// Quando a regra mudou — reimportar passou a MOVER a pessoa em vez de
+// descartá-la —, este script continuou exercitando o caminho antigo e teria
+// dado "tudo certo" sobre um comportamento que não existe mais. Script de teste
+// que reimplementa o que testa não testa nada.
 const { data: municipios } = await supabase.from('municipios').select('id, nome');
-let importados = 0, duplicados = 0;
+let novos = 0, atualizados = 0, devolvidos = 0;
 
 for (const bloco of emBlocos(a.validas, 500)) {
-  const comHash = bloco.map((l) => ({ ...l, hash: hmac(l.chaveDedup) }));
-  const { data: bl } = await supabase.from('bloqueios').select('telefone_hmac')
-    .in('telefone_hmac', comHash.map((l) => l.hash));
-  const setB = new Set((bl ?? []).map((x) => x.telefone_hmac));
-
-  const paraInserir = comHash.filter((l) => !setB.has(l.hash)).map((l) => ({
-    lista_id: lista.id, origem: 'lista_fria' as const,
-    nome: l.nome, primeiro_nome: l.primeiroNome,
-    telefone_e164: l.e164, chave_dedup: l.chaveDedup,
-    telefone_hmac: l.hash, hmac_versao: 1,
+  const linhas = bloco.map((l) => ({
+    nome: l.nome,
+    primeiro_nome: l.primeiroNome,
+    e164: l.e164,
+    chave_dedup: l.chaveDedup,
+    hmac: hmac(l.chaveDedup),
+    hmac_versao: 1,
     municipio_id: casarMunicipio(l.municipioNome, municipios ?? []),
-    status: 'na_fila' as const,
   }));
 
-  const { data, error } = await supabase.from('contatos')
-    .upsert(paraInserir, { onConflict: 'telefone_hmac', ignoreDuplicates: true }).select('id');
+  const { data, error } = await supabase.rpc('importar_contatos', {
+    p_lista_id: lista.id, p_origem: 'lista_fria', p_linhas: linhas,
+  });
   if (error) { console.error(`❌ ${error.message}`); process.exit(1); }
-  importados += data?.length ?? 0;
-  duplicados += paraInserir.length - (data?.length ?? 0);
+  const r = data as { novos: number; atualizados: number; devolvidos: number };
+  novos += r.novos;
+  atualizados += r.atualizados;
+  devolvidos += r.devolvidos;
 }
 
+// `importar_contatos` já soma os totais da lista bloco a bloco. Aqui só entram
+// os dois que o navegador conta e o banco não vê: o que foi rejeitado antes de
+// chegar lá.
 await supabase.from('listas').update({
-  total_importados: importados, total_duplicados: duplicados + a.duplicadasNoArquivo,
-  total_bloqueados: bloqueados, total_invalidos: a.invalidas,
+  total_duplicados: a.duplicadasNoArquivo,
+  total_invalidos: a.invalidas,
 }).eq('id', lista.id);
 
 console.log(`\n── gravado ──`);
-console.log(`  importados:             ${importados}`);
-console.log(`  ignorados (já existiam):${duplicados}`);
+console.log(`  pessoas novas:          ${novos}`);
+console.log(`  já existiam, vieram:    ${atualizados}`);
+console.log(`  voltaram para a fila:   ${devolvidos}`);

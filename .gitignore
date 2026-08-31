@@ -54,3 +54,6 @@ next-env.d.ts
 # o histórico do git não se apaga.
 /listas/
 *.csv
+
+# As listas de teste são geradas sob demanda e não precisam de histórico.
+/listas-teste/
