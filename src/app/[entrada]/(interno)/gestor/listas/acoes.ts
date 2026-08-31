@@ -183,3 +183,97 @@ export async function apagarLista(listaId: string, confirmar = false): Promise<R
   }
   return { ok: false, motivo: motivo === 'lista_nao_existe' ? 'lista_nao_existe' : 'somente_gestor' };
 }
+
+
+/* ── Grupos de lista ─────────────────────────────────────────────────────── */
+
+/**
+ * ⚠️ Estas quatro passam pelo CLIENTE DO USUÁRIO, e não pelo admin como o resto
+ * deste arquivo: as RPC conferem `is_gestor()` dentro do banco, e com a chave
+ * de serviço não existe usuário logado — `auth.uid()` volta nulo e a função
+ * recusa quem tem todo o direito. Foi o que aconteceu com `apagar_lista` na
+ * primeira versão.
+ */
+
+export async function criarGrupo(nome: string): Promise<Resultado> {
+  await exigirGestorOuFalhar();
+  const limpo = nome.trim();
+  if (limpo.length < 2) return { ok: false, erro: 'Dê um nome com pelo menos 2 letras.' };
+  if (limpo.length > 60) return { ok: false, erro: 'Nome muito longo (máximo 60 caracteres).' };
+
+  const supabase = criarClienteAdmin();
+  const { error } = await supabase.from('grupos_lista').insert({ nome: limpo });
+  if (error) {
+    return {
+      ok: false,
+      erro: error.message.includes('duplicate') || error.message.includes('grupos_lista_nome_uk')
+        ? 'Já existe um grupo com esse nome.'
+        : error.message,
+    };
+  }
+  return { ok: true };
+}
+
+export async function renomearGrupo(grupoId: string, nome: string): Promise<Resultado> {
+  await exigirGestorOuFalhar();
+  const limpo = nome.trim();
+  if (limpo.length < 2) return { ok: false, erro: 'Dê um nome com pelo menos 2 letras.' };
+
+  const supabase = criarClienteAdmin();
+  const { error } = await supabase.from('grupos_lista').update({ nome: limpo }).eq('id', grupoId);
+  if (error) {
+    return {
+      ok: false,
+      erro: error.message.includes('duplicate') || error.message.includes('grupos_lista_nome_uk')
+        ? 'Já existe um grupo com esse nome.'
+        : error.message,
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Liga ou desliga o grupo inteiro.
+ *
+ * Desligar pausa todas as listas ATIVAS dele; religar traz de volta só as que
+ * ele mesmo pausou. Lista que o gestor tirou do ar à mão continua fora — ele
+ * não pediu para religar aquela.
+ */
+export async function alternarGrupo(
+  grupoId: string,
+  ativo: boolean,
+): Promise<{ ok: true; listasAfetadas: number } | { ok: false; erro: string }> {
+  await exigirGestorOuFalhar();
+  const supabase = await criarClienteServidor();
+  const { data, error } = await supabase.rpc('alternar_grupo', {
+    p_grupo_id: grupoId, p_ativo: ativo,
+  });
+  if (error) return { ok: false, erro: error.message };
+  const r = data as { ok: boolean; motivo?: string; listas_afetadas?: number };
+  if (!r.ok) return { ok: false, erro: r.motivo === 'somente_gestor' ? 'Só o gestor mexe em grupos.' : 'Esse grupo já não existe.' };
+  return { ok: true, listasAfetadas: Number(r.listas_afetadas ?? 0) };
+}
+
+export async function moverListaParaGrupo(listaId: string, grupoId: string | null): Promise<Resultado> {
+  await exigirGestorOuFalhar();
+  const supabase = await criarClienteServidor();
+  const { data, error } = await supabase.rpc('mover_lista_para_grupo', {
+    p_lista_id: listaId, p_grupo_id: grupoId,
+  });
+  if (error) return { ok: false, erro: error.message };
+  const r = data as { ok: boolean; motivo?: string };
+  return r.ok ? { ok: true } : { ok: false, erro: `Não consegui mover (${r.motivo}).` };
+}
+
+/** Apagar o grupo não apaga lista nenhuma — só desfaz o vínculo. */
+export async function apagarGrupo(
+  grupoId: string,
+): Promise<{ ok: true; listasReligadas: number } | { ok: false; erro: string }> {
+  await exigirGestorOuFalhar();
+  const supabase = await criarClienteServidor();
+  const { data, error } = await supabase.rpc('apagar_grupo', { p_grupo_id: grupoId });
+  if (error) return { ok: false, erro: error.message };
+  const r = data as { ok: boolean; motivo?: string; listas_religadas?: number };
+  if (!r.ok) return { ok: false, erro: 'Só o gestor mexe em grupos.' };
+  return { ok: true, listasReligadas: Number(r.listas_religadas ?? 0) };
+}

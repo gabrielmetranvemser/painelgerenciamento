@@ -267,6 +267,10 @@ export type Lista = {
   total_bloqueados: number;
   total_invalidos: number;
   ativa: boolean;
+  /** O grupo a que ela pertence. Nulo = solta. */
+  grupo_id: string | null;
+  /** Foi o GRUPO que a pausou, não o gestor. Ver `GrupoDeLista`. */
+  pausada_pelo_grupo: boolean;
   /**
    * Quando a importação chegou ao fim. Nulo significa que a aba foi fechada no
    * meio — parte da planilha entrou na fila e o resto não. A tela de importar
@@ -285,6 +289,28 @@ export type ListaComContagem = Lista & {
   contatos_total: number;
   contatos_na_fila: number;
   contatos_falados: number;
+  /** Nulo quando a lista não está em grupo nenhum. */
+  grupo_nome: string | null;
+  grupo_ativo: boolean | null;
+  grupo_ordem: number | null;
+};
+
+/**
+ * Um bloco de listas que liga e desliga junto — "semelhante campanhas do Meta",
+ * nas palavras de quem pediu.
+ *
+ * ⚠️ Desligar o grupo ESCREVE em `listas.ativa` (ver a migration
+ * `grupos_de_lista`): a lista desligada pelo grupo está de verdade desligada, e
+ * as sete consultas que perguntam `l.ativa` continuam corretas sem saber que
+ * grupos existem. `pausada_pelo_grupo` é o que permite religar sem ressuscitar
+ * a lista que o gestor tinha pausado à mão.
+ */
+export type GrupoDeLista = {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  ordem: number;
+  criado_em: string;
 };
 
 export type Contato = {

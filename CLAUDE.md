@@ -48,6 +48,7 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `importar_contatos` | reimportar MOVE a pessoa e preserva o histórico. Quem pediu saída, quem está na mão de alguém e quem teve o telefone apagado não podem ser tocados |
 | `pular_intervalo` | um pulo libera UMA abordagem, consumida em `registrar_abertura`. Se liberar mais de uma, "pular o intervalo" vira "desligar o intervalo" |
 | `apagar_lista` | apagar a linha da lista sozinha joga os contatos dela na fila de TODO mundo (`lista_id is null` = "cadastrou-se sozinho"). Lista com gente já abordada não se apaga: ali há histórico e procedência |
+| `alternar_grupo` | o grupo ESCREVE em `listas.ativa`, e `pausada_pelo_grupo` é o que impede religar de ressuscitar lista que o gestor pausou à mão |
 
 ### 2. Toda trava é validada no SERVIDOR
 

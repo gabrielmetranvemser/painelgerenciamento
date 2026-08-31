@@ -236,6 +236,21 @@ pré-visualização automática do WhatsApp; o gestor abrindo no navegador conta
 como clique de verdade e suja a única métrica confiável do projeto. A mesma
 explicação está dentro do painel, embaixo do formulário de peças.
 
+### Grupos de lista
+
+Blocos que ligam e desligam junto — a ideia é a de campanhas do Meta. Em Listas,
+"Novo grupo", e cada lista escolhe o grupo dela num seletor.
+
+**Desligar o grupo tira todas as listas dele da fila de uma vez**, sem apagar
+nada. Ligar de volta devolve ao ar exatamente as que ele desligou: a lista que
+você tinha pausado à mão continua pausada, porque não foi o grupo que a parou.
+
+Apagar o grupo não apaga lista nenhuma — só desfaz o vínculo, e devolve ao ar o
+que ele tinha desligado.
+
+Os blocos nascem fechados, mostrando quantas listas e quantos contatos estão na
+fila por cada um. Lista sem grupo aparece embaixo, solta.
+
 ### Apagar uma lista
 
 Em Listas, ao lado de Pausar. Duas regras, e as duas são do banco:

@@ -2,38 +2,246 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
-import { Check, Pause, Pencil, Play, Plus, Trash2, Users, X } from 'lucide-react';
-import { Aviso, Botao, Cartao, EtiquetaOrigem, Pilula, PontoLista, Selecao, cx } from '@/components/ui';
-import type { ListaComContagem, Usuario } from '@/lib/tipos-banco';
 import {
-  alternarAtendenteNaLista, alternarListaAtiva, apagarLista, atribuirListaATodos, renomearLista,
+  Check, ChevronDown, FolderPlus, Layers, Pause, Pencil, Play, Plus, Trash2, Users, X,
+} from 'lucide-react';
+import { Aviso, Botao, Campo, Cartao, EtiquetaOrigem, Pilula, PontoLista, Selecao, cx } from '@/components/ui';
+import type { GrupoDeLista, ListaComContagem, Usuario } from '@/lib/tipos-banco';
+import {
+  alternarAtendenteNaLista, alternarGrupo, alternarListaAtiva, apagarGrupo, apagarLista,
+  atribuirListaATodos, criarGrupo, moverListaParaGrupo, renomearGrupo, renomearLista,
 } from './acoes';
 
+/**
+ * As listas, em BLOCOS por grupo.
+ *
+ * ⚠️ Depois da reimportação de 31/08 esta tela tinha quase quarenta linhas
+ * iguais — as novas e as antigas misturadas — e não havia como olhar para ela e
+ * entender o que estava no ar. O grupo dá o corte que faltava, e o interruptor
+ * do bloco desliga um conjunto inteiro sem apagar nada.
+ *
+ * "Sem grupo" fica por ÚLTIMO e só aparece quando existe alguma. É o resto, não
+ * um grupo — pô-lo no topo faria a lista recém-importada, que ainda não foi
+ * organizada, parecer a mais importante da tela.
+ */
 export function Listas({
-  listas, atendentes, porLista,
+  listas, grupos, atendentes, porLista,
 }: {
   listas: ListaComContagem[];
+  grupos: GrupoDeLista[];
   atendentes: Usuario[];
   porLista: Record<string, string[]>;
 }) {
+  const soltas = listas.filter((l) => !l.grupo_id);
+
   return (
-    <div className="space-y-4">
-      {listas.map((l) => (
-        <CartaoLista
-          key={l.id}
-          lista={l}
-          atendentes={atendentes}
-          atribuidos={porLista[l.id] ?? []}
+    <div className="space-y-5">
+      <NovoGrupo />
+
+      {grupos.map((g) => (
+        <BlocoGrupo
+          key={g.id} grupo={g} grupos={grupos}
+          listas={listas.filter((l) => l.grupo_id === g.id)}
+          atendentes={atendentes} porLista={porLista}
         />
       ))}
+
+      {soltas.length > 0 && (
+        <section>
+          {grupos.length > 0 && (
+            <p className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-suave">
+              <Layers size={13} /> Sem grupo
+            </p>
+          )}
+          <div className="space-y-3">
+            {soltas.map((l) => (
+              <CartaoLista key={l.id} lista={l} grupos={grupos}
+                           atendentes={atendentes} atribuidos={porLista[l.id] ?? []} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
 
+function NovoGrupo() {
+  const [aberto, setAberto] = useState(false);
+  const [nome, setNome] = useState('');
+  const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, iniciar] = useTransition();
+  const router = useRouter();
+
+  if (!aberto) {
+    return (
+      <button type="button" onClick={() => setAberto(true)}
+              className="flex items-center gap-1.5 text-xs font-semibold text-acento">
+        <FolderPlus size={14} /> Novo grupo
+      </button>
+    );
+  }
+
+  return (
+    <Cartao className="p-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-48 flex-1">
+          <Campo rotulo="Nome do grupo" value={nome} autoFocus
+                 placeholder="Ex.: Listas de setembro"
+                 onChange={(e) => { setNome(e.target.value); setErro(null); }} />
+        </div>
+        <Botao disabled={!nome.trim() || ocupado}
+               onClick={() => iniciar(async () => {
+                 const r = await criarGrupo(nome);
+                 if (r.ok) { setNome(''); setAberto(false); setErro(null); router.refresh(); }
+                 else setErro(r.erro);
+               })}>
+          Criar
+        </Botao>
+        <Botao variante="fantasma" onClick={() => { setAberto(false); setNome(''); setErro(null); }}>
+          Cancelar
+        </Botao>
+      </div>
+      {erro && <Aviso tom="erro" className="mt-3">{erro}</Aviso>}
+    </Cartao>
+  );
+}
+
+/**
+ * Um grupo, com o interruptor que desliga o bloco inteiro.
+ *
+ * O cabeçalho diz quantas listas e quantos contatos estão na fila POR ELE —
+ * porque é esse o número que muda quando se desliga, e é ele que o gestor
+ * precisa ver antes de clicar.
+ */
+function BlocoGrupo({
+  grupo, grupos, listas, atendentes, porLista,
+}: {
+  grupo: GrupoDeLista;
+  grupos: GrupoDeLista[];
+  listas: ListaComContagem[];
+  atendentes: Usuario[];
+  porLista: Record<string, string[]>;
+}) {
+  /**
+   * Nasce FECHADO, e é esse o pedido: "na aba de listas fica mais organizado do
+   * que várias linhas de listas — fica os blocos de grupos".
+   *
+   * Aberto por padrão, a tela volta a ser as quarenta linhas de antes, só que
+   * com um cabeçalho no meio. Fechado, cada grupo é uma linha que já diz o que
+   * importa: quantas listas e quantos contatos estão na fila por ele.
+   */
+  const [aberto, setAberto] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [nome, setNome] = useState(grupo.nome);
+  const [confirmandoApagar, setConfirmandoApagar] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, iniciar] = useTransition();
+  const router = useRouter();
+
+  const naFila = listas.reduce((n, l) => n + (l.ativa ? l.contatos_na_fila : 0), 0);
+
+  function agir(acao: () => Promise<{ ok: true } | { ok: false; erro: string }>) {
+    iniciar(async () => {
+      const r = await acao();
+      if (r.ok) { setErro(null); router.refresh(); } else setErro(r.erro);
+    });
+  }
+
+  return (
+    <section className={cx(
+      'rounded-bloco border p-4',
+      grupo.ativo ? 'border-borda bg-superficie/40' : 'border-alerta/35 bg-alerta/[0.04]',
+    )}>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" onClick={() => setAberto((v) => !v)} aria-expanded={aberto}
+                className="grid size-6 shrink-0 place-items-center rounded-lg text-suave transition-colors hover:bg-superficie-alta hover:text-texto">
+          <ChevronDown size={15} className={cx('transition-transform', !aberto && '-rotate-90')} />
+        </button>
+
+        {editando ? (
+          <div className="flex flex-1 items-center gap-2">
+            <input value={nome} autoFocus onChange={(e) => setNome(e.target.value)}
+                   className="min-w-0 flex-1 rounded-lg border border-borda bg-superficie px-2.5 py-1.5 text-sm" />
+            <button className="text-acento" disabled={ocupado}
+                    onClick={() => { agir(() => renomearGrupo(grupo.id, nome)); setEditando(false); }}>
+              <Check size={15} />
+            </button>
+            <button className="text-suave" onClick={() => { setNome(grupo.nome); setEditando(false); }}>
+              <X size={15} />
+            </button>
+          </div>
+        ) : (
+          <div className="mr-auto flex min-w-0 items-center gap-2">
+            <h2 className="font-display text-lg font-semibold tracking-tight">{grupo.nome}</h2>
+            <button onClick={() => setEditando(true)} className="text-suave hover:text-texto">
+              <Pencil size={12} />
+            </button>
+            {!grupo.ativo && <Pilula cor="alerta"><Pause size={11} /> desligado</Pilula>}
+          </div>
+        )}
+
+        <span className="text-xs text-suave">
+          {listas.length} {listas.length === 1 ? 'lista' : 'listas'}
+          {grupo.ativo && ` · ${naFila.toLocaleString('pt-BR')} na fila`}
+        </span>
+
+        <Botao variante={grupo.ativo ? 'neutro' : 'principal'} tamanho="p" disabled={ocupado}
+               onClick={() => agir(() => alternarGrupo(grupo.id, !grupo.ativo))}>
+          {grupo.ativo
+            ? <><Pause size={12} /> Desligar o grupo</>
+            : <><Play size={12} /> Ligar o grupo</>}
+        </Botao>
+
+        {confirmandoApagar ? (
+          <>
+            <Botao variante="perigo" tamanho="p" disabled={ocupado}
+                   onClick={() => { setConfirmandoApagar(false); agir(() => apagarGrupo(grupo.id)); }}>
+              Confirmar: apagar o grupo
+            </Botao>
+            <Botao variante="fantasma" tamanho="p" onClick={() => setConfirmandoApagar(false)}>
+              Cancelar
+            </Botao>
+          </>
+        ) : (
+          <Botao variante="fantasma" tamanho="p"
+                 title="Apaga só o grupo. As listas ficam, e as que ele tinha desligado voltam ao ar."
+                 onClick={() => setConfirmandoApagar(true)}>
+            <Trash2 size={12} />
+          </Botao>
+        )}
+      </div>
+
+      {!grupo.ativo && aberto && (
+        <p className="mt-2 pl-9 text-xs leading-relaxed text-alerta">
+          As listas deste grupo não entregam contato para ninguém. Nada foi apagado — ligar o
+          grupo devolve ao ar exatamente as que ele desligou.
+        </p>
+      )}
+
+      {erro && <Aviso tom="erro" className="mt-3">{erro}</Aviso>}
+
+      {aberto && (
+        <div className="mt-4 space-y-3">
+          {listas.length === 0 ? (
+            <p className="text-xs text-suave">
+              Nenhuma lista aqui ainda. Use o campo &ldquo;Grupo&rdquo; de cada lista para
+              trazê-la.
+            </p>
+          ) : listas.map((l) => (
+            <CartaoLista key={l.id} lista={l} grupos={grupos}
+                         atendentes={atendentes} atribuidos={porLista[l.id] ?? []} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function CartaoLista({
-  lista, atendentes, atribuidos,
+  lista, grupos, atendentes, atribuidos,
 }: {
   lista: ListaComContagem;
+  grupos: GrupoDeLista[];
   atendentes: Usuario[];
   atribuidos: string[];
 }) {
@@ -145,7 +353,24 @@ function CartaoLista({
         )}
 
         <EtiquetaOrigem origem={lista.origem} />
-        {!lista.ativa && <Pilula cor="alerta"><Pause size={11} /> pausada</Pilula>}
+        {/* "pelo grupo" e "pausada" são coisas diferentes para quem lê: a
+            primeira volta sozinha quando o grupo religar, a segunda não. */}
+        {!lista.ativa && (
+          <Pilula cor="alerta">
+            <Pause size={11} /> {lista.pausada_pelo_grupo ? 'pelo grupo' : 'pausada'}
+          </Pilula>
+        )}
+
+        {grupos.length > 0 && (
+          <Selecao compacto value={lista.grupo_id ?? ''} disabled={ocupado}
+                   title="Grupo desta lista"
+                   onChange={(e) => agir(() => moverListaParaGrupo(lista.id, e.target.value || null))}>
+            <option value="">sem grupo</option>
+            {grupos.map((g) => (
+              <option key={g.id} value={g.id}>{g.nome}{g.ativo ? '' : ' (desligado)'}</option>
+            ))}
+          </Selecao>
+        )}
 
         <Botao
           variante={lista.ativa ? 'neutro' : 'principal'}
