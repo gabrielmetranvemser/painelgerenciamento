@@ -25,7 +25,7 @@ import {
 import {
   carregarEntregas, carregarFilaDoAtendente, carregarMinhasListas, consultarFila,
   definirMunicipio, pegarEscolhido, pegarProximo, prepararMensagem, pularContato,
-  registrarAbertura, registrarResultado, sinalizarChip,
+  pularIntervalo, registrarAbertura, registrarResultado, sinalizarChip,
   type ContatoNaFila, type MensagemPronta,
 } from './acoes';
 
@@ -114,7 +114,21 @@ export function Atendimento({
   const [espera, setEspera] = useState(filaInicial?.segundos_espera ?? 0);
   const [municipioId, setMunicipioId] = useState<number | ''>('');
   const [encaminhamento, setEncaminhamento] = useState('');
-  const [confirmandoSaida, setConfirmandoSaida] = useState(false);
+  /**
+   * O desfecho que está ARMADO, esperando o segundo clique.
+   *
+   * ⚠️ Antes era um booleano só para "Pediu saída". Passou a valer para TODOS,
+   * a pedido de quem opera: com onze botões numa grade e atalho de teclado, o
+   * clique errado é rotina — e um desfecho errado tira a pessoa da fila, ou a
+   * põe de volta, sem ninguém perceber. Dois cliques em todos custa um clique a
+   * mais por conversa; um "Autorizou" no lugar de "Número inválido" custa uma
+   * pessoa recebendo material que ela não pediu.
+   *
+   * Mora AQUI, e não dentro de `Desfechos`, porque o atalho de teclado também
+   * passa por ele — e é justamente o "2" apertado sem querer o caso que mais
+   * dói.
+   */
+  const [confirmando, setConfirmando] = useState<Resultado | null>(null);
   /** A folha de escolher contato está aberta. */
   const [escolhendo, setEscolhendo] = useState(false);
   const [aguardando, setAguardando] = useState(aguardandoInicial);
@@ -169,6 +183,26 @@ export function Atendimento({
     // do trabalho dos colegas que atendem a mesma lista.
     setListas(ls);
   }, [chipId, listaId]);
+
+  /**
+   * Pula o intervalo — depois do segundo clique, e só uma vez.
+   *
+   * Quem conta quantas vezes já pulou é o SERVIDOR: o aviso que a tela mostra
+   * sai de `fila.intervalos_pulados_hoje`, e a trava real está em
+   * `registrar_abertura`. Contar aqui seria contar num lugar que se zera
+   * recarregando a página.
+   */
+  function pularOIntervalo() {
+    iniciar(async () => {
+      const r = await pularIntervalo(chipId);
+      if (!r.ok) {
+        setErro(MOTIVO_ENVIO[r.motivo] ?? `Não consegui pular o intervalo (${r.motivo}).`);
+        return;
+      }
+      setErro(null);
+      await atualizarFila();
+    });
+  }
 
   function trocarLista(id: string | null) {
     setListaEscolhida(id);
@@ -412,13 +446,16 @@ export function Atendimento({
   }
 
   /**
-   * Marca o resultado.
+   * Marca o resultado. SEMPRE em dois tempos.
    *
-   * "Pediu saída" pede confirmação, e só ele. Os outros quatro se corrigem à
-   * vontade no perfil do contato; este cria bloqueio permanente e agenda o
-   * apagamento dos dados, e desde a migration 340300 desfazê-lo passou a
-   * depender do gestor. Com atalho de teclado no meio de 30 conversas por dia,
-   * um "2" apertado sem querer custava caro demais para ser um clique só.
+   * O primeiro clique (ou a primeira tecla) só ARMA o botão; o segundo é que
+   * grava. Clicar noutro desfecho antes disso desarma o primeiro e arma o
+   * segundo — ninguém confirma sem querer o que não escolheu.
+   *
+   * "Pediu saída" já era assim desde a migration 340300, porque cria bloqueio
+   * permanente e desfazer depende do gestor. Os outros dez ganharam a mesma
+   * proteção depois dos testes com os atendentes: onze botões numa grade, com
+   * atalho de teclado, no meio de trinta conversas por dia.
    */
   function marcar(resultado: Resultado) {
     // ⚠️ Antes exigia `fase === 'aberta'`, ou seja, os três passos completos.
@@ -434,12 +471,12 @@ export function Atendimento({
         : 'Escreva em uma linha o que aconteceu — senão "Outro" não diz nada a ninguém.');
       return;
     }
-    if (resultado === 'pediu_saida' && !confirmandoSaida) {
-      setConfirmandoSaida(true);
+    if (confirmando !== resultado) {
+      setConfirmando(resultado);
       setErro(null);
       return;
     }
-    setConfirmandoSaida(false);
+    setConfirmando(null);
     setErro(null);
     iniciar(async () => {
       // O campo livre só acompanha "Encaminhar" e "Outro". Antes ia em todo
@@ -517,7 +554,7 @@ export function Atendimento({
 
   function limparEBuscar() {
     setContato(null); setMensagem(null); setEntregas([]); setFase('ocioso');
-    setConfirmandoSaida(false);
+    setConfirmando(null);
     buscarProximo();
   }
 
@@ -660,9 +697,10 @@ export function Atendimento({
 
         {travado && (
           <Travado
-            fila={fila} espera={espera}
+            fila={fila} espera={espera} ocupado={ocupado}
             listaEscolhida={lista?.rotulo ?? null}
             aoVerTodas={() => trocarLista(null)}
+            aoPularIntervalo={pularOIntervalo}
           />
         )}
 
@@ -705,7 +743,7 @@ export function Atendimento({
           <CartaoAtendimento
             contato={contato} mensagem={mensagem} fase={fase} ocupado={ocupado}
             entregas={entregas} refBotao={botaoAbrir} espera={espera}
-            confirmandoSaida={confirmandoSaida}
+            confirmando={confirmando}
             municipios={municipios} municipioId={municipioId}
             encaminhamento={encaminhamento}
             aoMudarMunicipio={(id) => {
@@ -857,13 +895,15 @@ function Contador({ rotulo, valor, cor, icone }: {
 /* ── Estado travado ──────────────────────────────────────────────────────── */
 
 function Travado({
-  fila, espera, listaEscolhida, aoVerTodas,
+  fila, espera, ocupado, listaEscolhida, aoVerTodas, aoPularIntervalo,
 }: {
   fila: FilaStatus;
   espera: number;
+  ocupado: boolean;
   /** O nome da lista sendo trabalhada, quando o atendente escolheu uma só. */
   listaEscolhida: string | null;
   aoVerTodas: () => void;
+  aoPularIntervalo: () => void;
 }) {
   const total = fila.intervalo_seg || 1;
   const volta = 2 * Math.PI * 52;
@@ -891,6 +931,12 @@ function Travado({
           <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-suave">
             O intervalo existe para o WhatsApp não ler seu número como disparo.
           </p>
+
+          <PularIntervalo
+            pulosHoje={fila.intervalos_pulados_hoje}
+            ocupado={ocupado}
+            aoPular={aoPularIntervalo}
+          />
         </>
       ) : (
         <>
@@ -962,19 +1008,115 @@ function Travado({
   );
 }
 
+/**
+ * O aviso de pular o intervalo, que endurece a cada repetição.
+ *
+ * ⚠️ DOIS CLIQUES, sempre. O primeiro só abre o aviso; o segundo é que age.
+ * Não é para dificultar: é para o atendente LER antes de decidir. Um botão de
+ * um clique no meio da tela de espera seria clicado por impulso, que é
+ * exatamente o oposto do que "assumir o risco" quer dizer.
+ *
+ * O texto muda conforme quantas vezes AQUELE NÚMERO já pulou hoje, e o número
+ * vem do servidor — contar aqui seria contar num lugar que se zera recarregando
+ * a página. Do terceiro em diante o gestor também recebe alerta.
+ *
+ * A escala existe porque um pulo é acidente e cinco é hábito, e o mesmo texto
+ * nas duas situações vira ruído: quem lê "tem certeza?" pela quinta vez não lê
+ * mais nada.
+ */
+const AVISO_PULO = [
+  {
+    titulo: 'Tem certeza?',
+    texto:
+      'Pular o intervalo pode fazer o WhatsApp bloquear o seu número. Ele é o espaçamento que ' +
+      'impede o mesmo número de parecer disparo.',
+    botao: 'Pular mesmo assim',
+  },
+  {
+    titulo: 'Você já fez isso antes hoje',
+    texto:
+      'É arriscado. Cada vez que você emenda uma abordagem na outra, seu número fica mais ' +
+      'parecido com um robô aos olhos do WhatsApp.',
+    botao: 'Pular mesmo assim',
+  },
+  {
+    titulo: 'Essa é a terceira vez hoje',
+    texto:
+      'É melhor tomar cuidado. Números que pulam o intervalo com frequência são os que caem — e ' +
+      'quando um número cai, as conversas abertas dele caem junto e não voltam. O gestor vai ver ' +
+      'este aviso.',
+    botao: 'Pular mesmo assim',
+  },
+] as const;
+
+function PularIntervalo({
+  pulosHoje, ocupado, aoPular,
+}: {
+  pulosHoje: number;
+  ocupado: boolean;
+  aoPular: () => void;
+}) {
+  const [armado, setArmado] = useState(false);
+
+  // Da quarta vez em diante o texto para de aumentar e passa a nomear a
+  // escolha. Não há aviso mais forte que fazer a pessoa dizer o que está
+  // fazendo.
+  const passouDoLimite = pulosHoje >= AVISO_PULO.length;
+  const aviso = passouDoLimite
+    ? {
+        titulo: `Você já pulou o intervalo ${pulosHoje} vezes hoje`,
+        texto:
+          'Quando o número cai, as conversas abertas caem junto e não voltam — e a pessoa do ' +
+          'outro lado fica esperando uma resposta que não chega. O gestor está vendo isso.',
+        botao: 'Assumo o risco de bloquear o número',
+      }
+    : AVISO_PULO[pulosHoje];
+
+  if (!armado) {
+    return (
+      <button
+        type="button"
+        onClick={() => setArmado(true)}
+        disabled={ocupado}
+        className="mt-6 text-xs text-suave underline underline-offset-4 transition-colors hover:text-texto disabled:opacity-45"
+      >
+        Pular intervalo
+      </button>
+    );
+  }
+
+  return (
+    <div className="mx-auto mt-6 max-w-sm rounded-2xl border border-perigo/35 bg-perigo/[0.07] p-4 text-left">
+      <p className="flex items-center gap-2 text-sm font-semibold text-perigo">
+        <AlertTriangle size={15} /> {aviso.titulo}
+      </p>
+      <p className="mt-1.5 text-xs leading-relaxed text-suave">{aviso.texto}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Botao variante="perigo" tamanho="p" disabled={ocupado}
+               onClick={() => { setArmado(false); aoPular(); }}>
+          {ocupado ? 'Liberando…' : aviso.botao}
+        </Botao>
+        <Botao variante="fantasma" tamanho="p" onClick={() => setArmado(false)}>
+          Esperar
+        </Botao>
+      </div>
+    </div>
+  );
+}
+
 /* ── Cartão do atendimento ───────────────────────────────────────────────── */
 
 function CartaoAtendimento({
   contato, mensagem, fase, ocupado, entregas, refBotao, municipios, municipioId, encaminhamento,
-  espera, confirmandoSaida, aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoCopiar, aoMarcar,
+  espera, confirmando, aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoCopiar, aoMarcar,
   aoProximo, aoPular, aoPrepararMaterial,
 }: {
   contato: ContatoDaFila; mensagem: MensagemPronta | null; fase: Fase; ocupado: boolean;
   entregas: EntregaDoContato[];
   /** Segundos que faltam do intervalo. Trava os botões de abordagem. */
   espera: number;
-  /** "Pediu saída" armado, esperando o segundo clique. */
-  confirmandoSaida: boolean;
+  /** O desfecho armado, esperando o segundo clique. `null` = nenhum. */
+  confirmando: Resultado | null;
   refBotao: React.RefObject<HTMLButtonElement | null>;
   municipios: Municipio[]; municipioId: number | ''; encaminhamento: string;
   aoMudarMunicipio: (id: number | '') => void;
@@ -1089,7 +1231,7 @@ function CartaoAtendimento({
           </Selecao>
 
           <Desfechos
-            ocupado={ocupado} confirmandoSaida={confirmandoSaida}
+            ocupado={ocupado} confirmando={confirmando}
             texto={encaminhamento}
             aoMarcar={aoMarcar} aoMudarTexto={aoMudarEncaminhamento}
           />
@@ -1315,10 +1457,11 @@ function EscolherContato({
  * mesma ideia de `DICA_MOTIVO` na tela de suporte.
  */
 function Desfechos({
-  ocupado, confirmandoSaida, texto, aoMarcar, aoMudarTexto,
+  ocupado, confirmando, texto, aoMarcar, aoMudarTexto,
 }: {
   ocupado: boolean;
-  confirmandoSaida: boolean;
+  /** O desfecho armado, esperando o segundo clique. */
+  confirmando: Resultado | null;
   texto: string;
   aoMarcar: (r: Resultado) => void;
   aoMudarTexto: (v: string) => void;
@@ -1351,16 +1494,21 @@ function Desfechos({
           {RESULTADOS_RAPIDOS.map((r, i) => (
             <BotaoDesfecho
               key={r} resultado={r} atalho={i + 1} ocupado={ocupado}
-              rotulo={r === 'pediu_saida' && confirmandoSaida ? 'Confirmar saída' : ROTULO_RESULTADO[r]}
+              armado={confirmando === r}
               aoClicar={() => clicar(r)}
             />
           ))}
         </div>
 
-        {confirmandoSaida && (
+        {/* A frase muda com o peso do desfecho. "Pediu saída" tem consequência
+            que não se desfaz sozinha; o resto se corrige no perfil do contato,
+            e dizer o contrário faria o atendente parar de ler o aviso que
+            importa. */}
+        {confirmando && (
           <p className="mt-2.5 text-xs leading-relaxed text-perigo">
-            Clique de novo para confirmar. &ldquo;Pediu saída&rdquo; bloqueia o número para
-            sempre e apaga os dados em 48h — e desfazer depois depende do gestor.
+            {confirmando === 'pediu_saida'
+              ? 'Clique de novo para confirmar. “Pediu saída” bloqueia o número para sempre e apaga os dados em 48h — e desfazer depois depende do gestor.'
+              : `Clique de novo para confirmar “${ROTULO_RESULTADO[confirmando]}”. Se errou, é só clicar noutro desfecho.`}
           </p>
         )}
 
@@ -1378,7 +1526,7 @@ function Desfechos({
             {RESULTADOS_OUTROS.map((r) => (
               <BotaoDesfecho
                 key={r} resultado={r} ocupado={ocupado}
-                rotulo={ROTULO_RESULTADO[r]}
+                armado={confirmando === r}
                 aoClicar={() => clicar(r)}
               />
             ))}
@@ -1414,13 +1562,25 @@ function Desfechos({
   );
 }
 
+/**
+ * Um desfecho, em dois tempos.
+ *
+ * ⚠️ ARMADO, o botão muda de CARA — não só de texto. Um "Confirmar" discreto no
+ * meio de onze botões iguais é lido como mais um botão, e o segundo clique sai
+ * no automático, que é exatamente o engano que os dois tempos existem para
+ * evitar. Armado ele fica cheio, vermelho e com o dedo apontando o que vai
+ * acontecer.
+ *
+ * O atalho de teclado some enquanto está armado: a tecla continua funcionando,
+ * mas mostrar "2" ao lado de "Confirmar" convida a apertar de novo sem ler.
+ */
 function BotaoDesfecho({
-  resultado, rotulo, atalho, ocupado, aoClicar,
+  resultado, atalho, ocupado, armado, aoClicar,
 }: {
   resultado: Resultado;
-  rotulo: string;
   atalho?: number;
   ocupado: boolean;
+  armado: boolean;
   aoClicar: () => void;
 }) {
   const perigoso = resultado === 'pediu_saida';
@@ -1429,21 +1589,29 @@ function BotaoDesfecho({
       type="button" onClick={aoClicar} disabled={ocupado}
       className={cx(
         'rounded-2xl border p-3.5 text-left transition-colors disabled:opacity-45',
-        perigoso
-          ? 'border-perigo/40 hover:border-perigo hover:bg-perigo/10'
-          : 'border-borda hover:border-borda-forte hover:bg-superficie-alta',
+        armado
+          ? 'border-perigo bg-perigo/15'
+          : perigoso
+            ? 'border-perigo/40 hover:border-perigo hover:bg-perigo/10'
+            : 'border-borda hover:border-borda-forte hover:bg-superficie-alta',
       )}
     >
       <span className="flex items-center gap-2">
-        <span className={cx('mr-auto text-sm font-semibold', perigoso && 'text-perigo')}>{rotulo}</span>
-        {atalho !== undefined && (
+        <span className={cx(
+          'mr-auto text-sm font-semibold',
+          (perigoso || armado) && 'text-perigo',
+        )}>
+          {armado ? `Confirmar: ${ROTULO_RESULTADO[resultado]}` : ROTULO_RESULTADO[resultado]}
+        </span>
+        {atalho !== undefined && !armado && (
           <kbd className="shrink-0 rounded-md border border-borda bg-fundo px-1.5 py-0.5 font-sans text-[10px] text-suave">
             {atalho}
           </kbd>
         )}
+        {armado && <Check size={15} className="shrink-0 text-perigo" />}
       </span>
       <span className="mt-1 block text-xs leading-relaxed text-suave">
-        {DICA_RESULTADO[resultado]}
+        {armado ? 'Clique de novo para gravar.' : DICA_RESULTADO[resultado]}
       </span>
     </button>
   );

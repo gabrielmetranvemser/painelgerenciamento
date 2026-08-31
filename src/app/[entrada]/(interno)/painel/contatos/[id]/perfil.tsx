@@ -668,28 +668,62 @@ function MudarResultado({
 }) {
   const [abertos, setAbertos] = useState(RESULTADOS_OUTROS.includes(atual as Resultado));
 
-  const botao = (r: Resultado) => (
-    <button key={r} type="button" disabled={ocupado} onClick={() => aoMarcar(r)}
-            className={cx(
-              'rounded-2xl border p-3.5 text-left transition-colors disabled:opacity-45',
-              r === atual
-                ? 'border-acento/50 bg-acento/10'
-                : r === 'pediu_saida'
-                  ? 'border-perigo/40 hover:border-perigo hover:bg-perigo/10'
-                  : 'border-borda hover:border-borda-forte hover:bg-superficie-alta',
-            )}>
-      <span className={cx('block text-sm font-semibold', r === 'pediu_saida' && r !== atual && 'text-perigo')}>
-        {ROTULO_RESULTADO[r]}
-      </span>
-      <span className="mt-1 block text-xs leading-relaxed text-suave">{DICA_RESULTADO[r]}</span>
-    </button>
-  );
+  /**
+   * O desfecho armado, esperando o segundo clique.
+   *
+   * ⚠️ Dois cliques aqui também, pelo mesmo motivo da tela de atendimento: são
+   * onze botões parecidos numa grade, e trocar o desfecho de alguém por engano
+   * tira a pessoa da fila ou a põe de volta sem ninguém perceber. Clicar noutro
+   * desfecho desarma o primeiro — ninguém confirma o que não escolheu.
+   */
+  const [confirmando, setConfirmando] = useState<Resultado | null>(null);
+
+  function clicar(r: Resultado) {
+    if (confirmando !== r) { setConfirmando(r); return; }
+    setConfirmando(null);
+    aoMarcar(r);
+  }
+
+  const botao = (r: Resultado) => {
+    const armado = confirmando === r;
+    return (
+      <button key={r} type="button" disabled={ocupado} onClick={() => clicar(r)}
+              className={cx(
+                'rounded-2xl border p-3.5 text-left transition-colors disabled:opacity-45',
+                armado
+                  ? 'border-perigo bg-perigo/15'
+                  : r === atual
+                    ? 'border-acento/50 bg-acento/10'
+                    : r === 'pediu_saida'
+                      ? 'border-perigo/40 hover:border-perigo hover:bg-perigo/10'
+                      : 'border-borda hover:border-borda-forte hover:bg-superficie-alta',
+              )}>
+        <span className={cx(
+          'block text-sm font-semibold',
+          armado ? 'text-perigo' : r === 'pediu_saida' && r !== atual && 'text-perigo',
+        )}>
+          {armado ? `Confirmar: ${ROTULO_RESULTADO[r]}` : ROTULO_RESULTADO[r]}
+        </span>
+        <span className="mt-1 block text-xs leading-relaxed text-suave">
+          {armado ? 'Clique de novo para gravar.' : DICA_RESULTADO[r]}
+        </span>
+      </button>
+    );
+  };
 
   return (
     <>
       <div className="grid gap-2.5 sm:grid-cols-2">
         {RESULTADOS_RAPIDOS.map(botao)}
       </div>
+
+      {confirmando && (
+        <p className="mt-2.5 text-xs leading-relaxed text-perigo">
+          {confirmando === 'pediu_saida'
+            ? 'Clique de novo para confirmar. “Pediu saída” bloqueia o número para sempre e apaga os dados em 48h — e desfazer depois depende do gestor.'
+            : `Clique de novo para confirmar “${ROTULO_RESULTADO[confirmando]}”. Se errou, é só clicar noutro desfecho.`}
+        </p>
+      )}
 
       <button type="button" onClick={() => setAbertos((v) => !v)} aria-expanded={abertos}
               className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-acento">
