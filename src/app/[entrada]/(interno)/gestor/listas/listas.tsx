@@ -2,11 +2,11 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
-import { Check, Pause, Pencil, Play, Plus, Users, X } from 'lucide-react';
+import { Check, Pause, Pencil, Play, Plus, Trash2, Users, X } from 'lucide-react';
 import { Aviso, Botao, Cartao, EtiquetaOrigem, Pilula, PontoLista, Selecao, cx } from '@/components/ui';
 import type { ListaComContagem, Usuario } from '@/lib/tipos-banco';
 import {
-  alternarAtendenteNaLista, alternarListaAtiva, atribuirListaATodos, renomearLista,
+  alternarAtendenteNaLista, alternarListaAtiva, apagarLista, atribuirListaATodos, renomearLista,
 } from './acoes';
 
 export function Listas({
@@ -43,6 +43,45 @@ function CartaoLista({
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
   const router = useRouter();
+
+  /**
+   * Quantos contatos vão junto se apagar. `null` = ainda não perguntei.
+   *
+   * Duas voltas de propósito: a primeira chamada ao servidor só CONTA, e é ela
+   * que dá o número para a pergunta. Perguntar "tem certeza?" sem dizer quantas
+   * pessoas somem é pedir uma confirmação que ninguém tem como avaliar.
+   */
+  const [confirmandoApagar, setConfirmandoApagar] = useState<number | null>(null);
+
+  function apagar(confirmar: boolean) {
+    iniciar(async () => {
+      const r = await apagarLista(lista.id, confirmar);
+      if (r.ok) { setErro(null); router.refresh(); return; }
+
+      if (r.motivo === 'precisa_confirmar') { setErro(null); setConfirmandoApagar(r.total); return; }
+      setConfirmandoApagar(null);
+
+      if (r.motivo === 'tem_historico') {
+        setErro(
+          `Não dá para apagar: ${r.abordados} ${r.abordados === 1 ? 'pessoa desta lista já foi abordada' : 'pessoas desta lista já foram abordadas'}. ` +
+          'O histórico da conversa e a procedência do contato ficam nela — apagar seria apagar a ' +
+          'defesa da campanha sobre gente com quem a gente realmente falou. Use Pausar: sai da ' +
+          'fila na hora e não perde nada.',
+        );
+        return;
+      }
+      if (r.motivo === 'contato_em_atendimento') {
+        setErro(
+          `${r.naMao} contato(s) desta lista ${r.naMao === 1 ? 'está' : 'estão'} na mão de um atendente agora. ` +
+          'Espere a reserva vencer (ou peça para ele soltar) e tente de novo.',
+        );
+        return;
+      }
+      setErro(r.motivo === 'lista_nao_existe'
+        ? 'Essa lista já não existe. Atualize a página.'
+        : ('erro' in r && r.erro) || 'Só o gestor apaga listas.');
+    });
+  }
 
   const dentro = new Set(atribuidos);
   const naLista = atendentes.filter((a) => dentro.has(a.id));
@@ -116,7 +155,42 @@ function CartaoLista({
         >
           {lista.ativa ? <><Pause size={12} /> Pausar</> : <><Play size={12} /> Reativar</>}
         </Botao>
+
+        {/* Apagar fica ao lado de Pausar porque é a mesma pergunta feita duas
+            vezes — "tirar da frente" e "tirar de vez". Separá-los faria o
+            gestor procurar o segundo depois de já ter usado o primeiro. */}
+        {confirmandoApagar === null ? (
+          <Botao variante="fantasma" tamanho="p" disabled={ocupado}
+                 title="Apaga a lista. Os contatos que ninguém abordou vão junto."
+                 onClick={() => apagar(false)}>
+            <Trash2 size={12} /> Apagar
+          </Botao>
+        ) : (
+          <>
+            <Botao variante="perigo" tamanho="p" disabled={ocupado}
+                   onClick={() => apagar(true)}>
+              {ocupado
+                ? 'Apagando…'
+                : confirmandoApagar === 0
+                  ? 'Confirmar: apagar a lista'
+                  : `Confirmar: apagar a lista e ${confirmandoApagar.toLocaleString('pt-BR')} contato(s)`}
+            </Botao>
+            <Botao variante="fantasma" tamanho="p"
+                   onClick={() => setConfirmandoApagar(null)}>
+              Cancelar
+            </Botao>
+          </>
+        )}
       </div>
+
+      {confirmandoApagar !== null && confirmandoApagar > 0 && (
+        <Aviso tom="alerta" className="mx-5 mb-4">
+          Os {confirmandoApagar.toLocaleString('pt-BR')} contatos desta lista somem da base junto
+          com ela, e não tem como desfazer. Ninguém foi abordado, então nada de histórico se
+          perde — mas se você só quer tirar da fila, <strong>Pausar</strong> faz isso e mantém
+          tudo.
+        </Aviso>
+      )}
 
       <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-borda px-5 py-3 text-xs text-suave">
         <span>

@@ -106,3 +106,65 @@ export async function atribuirListaATodos(listaId: string): Promise<Resultado> {
   if (error) return { ok: false, erro: error.message };
   return { ok: true };
 }
+
+/**
+ * Apagar uma lista de vez.
+ *
+ * ⚠️ NÃO É `delete from listas`, e a diferença importa.
+ *
+ * `contatos.lista_id` é `on delete set null`, e `lista_id is null` tem
+ * significado próprio na fila: é "cadastrou-se sozinho", e cai para TODO
+ * atendente. Apagar a linha da lista despejaria os contatos dela na fila de
+ * todo mundo de uma vez — o oposto do que "apagar" quer dizer. Quem apaga é a
+ * RPC `apagar_lista`, que leva os contatos junto.
+ *
+ * E ela RECUSA a lista em que alguém já foi abordado: ali há histórico em
+ * `interacoes`, e a lista é a procedência daquela gente — de quem veio e
+ * quando, que é exigência jurídica para lista fria. Nesse caso o caminho é
+ * Pausar, que tira da fila na hora e não perde nada.
+ *
+ * Duas voltas de propósito: a primeira chamada só CONTA quantos contatos vão
+ * junto, para a tela poder dizer o número antes de perguntar "tem certeza?".
+ */
+export type ResultadoApagar =
+  | { ok: true; rotulo: string; contatosApagados: number }
+  | { ok: false; motivo: 'precisa_confirmar'; total: number; rotulo: string }
+  | { ok: false; motivo: 'tem_historico'; total: number; abordados: number; rotulo: string }
+  | { ok: false; motivo: 'contato_em_atendimento'; naMao: number; rotulo: string }
+  | { ok: false; motivo: 'somente_gestor' | 'lista_nao_existe' | 'erro'; erro?: string };
+
+export async function apagarLista(listaId: string, confirmar = false): Promise<ResultadoApagar> {
+  await exigirGestorOuFalhar();
+  const supabase = criarClienteAdmin();
+
+  const { data, error } = await supabase.rpc('apagar_lista', {
+    p_lista_id: listaId,
+    p_confirmar: confirmar,
+  });
+  if (error) return { ok: false, motivo: 'erro', erro: error.message };
+
+  const r = data as Record<string, unknown>;
+  if (r.ok === true) {
+    return {
+      ok: true,
+      rotulo: String(r.rotulo ?? ''),
+      contatosApagados: Number(r.contatos_apagados ?? 0),
+    };
+  }
+
+  const motivo = String(r.motivo);
+  if (motivo === 'precisa_confirmar') {
+    return { ok: false, motivo, total: Number(r.total ?? 0), rotulo: String(r.rotulo ?? '') };
+  }
+  if (motivo === 'tem_historico') {
+    return {
+      ok: false, motivo,
+      total: Number(r.total ?? 0), abordados: Number(r.abordados ?? 0),
+      rotulo: String(r.rotulo ?? ''),
+    };
+  }
+  if (motivo === 'contato_em_atendimento') {
+    return { ok: false, motivo, naMao: Number(r.na_mao ?? 0), rotulo: String(r.rotulo ?? '') };
+  }
+  return { ok: false, motivo: motivo === 'lista_nao_existe' ? 'lista_nao_existe' : 'somente_gestor' };
+}
