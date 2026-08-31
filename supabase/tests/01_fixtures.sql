@@ -61,8 +61,16 @@ select
   case when g <= 3 then 'site'::public.origem_contato else 'lista_fria'::public.origem_contato end,
   'Contato Teste ' || g,
   'Teste',
-  '55699' || lpad(g::text, 8, '0'),
-  '69' || lpad(g::text, 8, '0'),
+  -- ⚠️ DDD 95 (Roraima), e não 69. Não é capricho: os fixtures usavam
+  -- 69 90000-000X, que é exatamente o bloco que alguém escolhe à mão ao montar
+  -- uma planilha de teste — foi o que aconteceu em 31/08, e a suíte inteira
+  -- passou a falhar em "não consegui criar os fixtures" por causa de um
+  -- contato de teste importado pela TELA horas antes.
+  --
+  -- A operação é em Rondônia. Um número de Roraima não colide com a base real
+  -- nem com nenhuma lista de teste que um gestor daqui vá inventar.
+  '55959' || lpad(g::text, 8, '0'),
+  '95' || lpad(g::text, 8, '0'),
   'hmac-teste-' || lpad(g::text, 4, '0'),
   'na_fila',
   -- Um ano no passado: a fila ordena por criado_em, então os contatos de teste

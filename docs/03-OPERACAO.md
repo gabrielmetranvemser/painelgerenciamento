@@ -217,6 +217,20 @@ pré-visualização automática do WhatsApp; o gestor abrindo no navegador conta
 como clique de verdade e suja a única métrica confiável do projeto. A mesma
 explicação está dentro do painel, embaixo do formulário de peças.
 
+### Apagar uma lista
+
+Em Listas, ao lado de Pausar. Duas regras, e as duas são do banco:
+
+- **Ninguém foi abordado** → a lista some e os contatos dela vão junto. A tela
+  diz quantos antes de perguntar "tem certeza?".
+- **Alguém já foi abordado** → recusa. Ali há histórico de conversa, e a lista é
+  a procedência daquela gente — de quem veio e quando. O caminho é **Pausar**,
+  que tira da fila na hora e não perde nada.
+
+⚠️ O bloqueio de quem pediu saída **não** vai junto: ele é por HMAC do telefone
+e sobrevive ao apagamento do contato. Se sumisse, o mesmo número voltaria na
+próxima importação — e mensagem para quem pediu saída é multa por mensagem.
+
 ### Importação
 Ao subir a planilha, o sistema mostra antes de importar:
 > "10.000 linhas · 8.740 aproveitáveis · 1.190 repetidas · 70 bloqueadas"

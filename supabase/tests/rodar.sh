@@ -83,6 +83,9 @@ echo
 "${PSQL[@]}" -f supabase/tests/21_reimportacao.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
 
 echo
+"${PSQL[@]}" -f supabase/tests/22_apagar_lista.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
+
+echo
 echo "── Concorrência da fila ─────────────────────────────────────────────────"
 
 # ⚠️ Este é o único bloco que precisa de dados COMMITADOS — são várias conexões
@@ -114,7 +117,12 @@ echo "  (abrindo a janela de horário — ${JANELA_INI}h–${JANELA_FIM}h volta 
 if "${PSQL[@]}" -f supabase/tests/01_fixtures.sql >/dev/null 2>&1; then
   PGPASSWORD="" PSQL_URL="$SUPABASE_DB_URL" ./supabase/tests/concorrencia.sh || falhou=1
 else
-  echo "  ❌ não consegui criar os fixtures"; falhou=1
+  # ⚠️ A mensagem antiga era só "não consegui criar os fixtures", e ela custou
+  # meia hora: a causa real (um contato de teste com o mesmo telefone, criado
+  # pela tela) estava no erro do psql, que era jogado fora com o 2>&1 >/dev/null.
+  echo "  ❌ não consegui criar os fixtures. O erro:"
+  "${PSQL[@]}" -f supabase/tests/01_fixtures.sql 2>&1 | sed 's/^/     /' | tail -5
+  falhou=1
 fi
 "${PSQL[@]}" -f supabase/tests/99_limpeza.sql >/dev/null 2>&1
 restaurar_janela
