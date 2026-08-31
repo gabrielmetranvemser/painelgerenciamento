@@ -152,6 +152,34 @@ export function dentroDoPainelLateral(): boolean {
   }
 }
 
+/**
+ * Marca, no navegador, que esta pessoa USA a extensão.
+ *
+ * ⚠️ Existe para resolver um ponto cego real, relatado em 31/08: numa aba
+ * normal do Chrome, a extensão ANTIGA é indistinguível de "nenhuma extensão" —
+ * ela não declara `externally_connectable`, então não responde. O atendente
+ * abria "Preparar máquina" numa aba comum, com a versão velha instalada, e a
+ * página não dizia nada sobre trocar.
+ *
+ * A memória fecha essa lacuna: se o painel já se viu rodando dentro do painel
+ * lateral neste navegador, a extensão existe. Se depois disso ela para de
+ * responder numa aba comum, é porque é antiga.
+ *
+ * `localStorage` é por perfil do Chrome, que é exatamente a granularidade
+ * certa: extensão no Chrome também é por perfil. Pode falhar (janela anônima,
+ * dados limpos, cookie de terceiro bloqueado) — e falhar aqui só devolve o
+ * comportamento de antes, que é não avisar. Nunca o contrário.
+ */
+const CHAVE_MEMORIA = 'painel:usa-extensao';
+
+function lembrarQueUsaExtensao() {
+  try { localStorage.setItem(CHAVE_MEMORIA, '1'); } catch { /* sem memória, sem problema */ }
+}
+
+function jaUsouExtensao(): boolean {
+  try { return localStorage.getItem(CHAVE_MEMORIA) === '1'; } catch { return false; }
+}
+
 /** Compara "1.1.0" com "1.0.0" sem depender de biblioteca. */
 function versaoAtende(versao: string, minima: string): boolean {
   const a = versao.split('.').map((n) => Number(n) || 0);
@@ -172,12 +200,17 @@ function versaoAtende(versao: string, minima: string): boolean {
  * `dentroDoPainelLateral()` precisa entrar na conta.
  */
 export function estadoDaExtensao(): Promise<Exclude<EstadoDaExtensao, 'verificando'>> {
+  const noPainelLateral = dentroDoPainelLateral();
+  if (noPainelLateral) lembrarQueUsaExtensao();
+
+  /** Não respondeu: é antiga se sabemos que ela existe, ausente se não sabemos. */
+  const semResposta = (): Exclude<EstadoDaExtensao, 'verificando'> =>
+    noPainelLateral || jaUsouExtensao() ? 'antiga' : 'ausente';
+
   const runtime = extensao();
   const enviar = runtime?.sendMessage;
 
-  if (!runtime || !enviar) {
-    return Promise.resolve(dentroDoPainelLateral() ? 'antiga' : 'ausente');
-  }
+  if (!runtime || !enviar) return Promise.resolve(semResposta());
 
   return new Promise((resolver) => {
     let respondido = false;
@@ -186,20 +219,19 @@ export function estadoDaExtensao(): Promise<Exclude<EstadoDaExtensao, 'verifican
       respondido = true;
       resolver(v);
     };
-    const relogio = setTimeout(() => terminar(dentroDoPainelLateral() ? 'antiga' : 'ausente'), 1200);
+    const relogio = setTimeout(() => terminar(semResposta()), 1200);
 
     try {
       enviar(ID_DA_EXTENSAO, { tipo: 'versao' }, (r) => {
         clearTimeout(relogio);
-        if (runtime.lastError || !r?.ok || !r.versao) {
-          terminar(dentroDoPainelLateral() ? 'antiga' : 'ausente');
-          return;
-        }
+        if (runtime.lastError || !r?.ok || !r.versao) { terminar(semResposta()); return; }
+        // Respondeu: a extensão existe. Vale lembrar mesmo numa aba comum.
+        lembrarQueUsaExtensao();
         terminar(versaoAtende(r.versao, VERSAO_MINIMA) ? 'atual' : 'antiga');
       });
     } catch {
       clearTimeout(relogio);
-      terminar(dentroDoPainelLateral() ? 'antiga' : 'ausente');
+      terminar(semResposta());
     }
   });
 }

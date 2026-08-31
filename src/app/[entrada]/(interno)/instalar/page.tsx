@@ -58,7 +58,14 @@ export default async function PaginaInstalar({
             É ela que coloca o painel na lateral do navegador, encostado no WhatsApp Web. O
             arquivo já vem configurado — você não precisa editar nada.
           </p>
-          <BotaoLink href={`/${entrada}/extensao`} prefetch={false} tamanho="g" className="mt-5">
+          {/* ⚠️ `target="_blank"` NÃO é preferência: dentro do painel lateral da
+              extensão o painel roda num iframe com `sandbox`, e o Chrome bloqueia
+              download iniciado ali — em silêncio, sem arquivo e sem erro. A aba
+              nova não herda o sandbox (`allow-popups-to-escape-sandbox`), então
+              o download funciona. Vale inclusive para quem está na versão
+              ANTIGA da extensão, que é justamente quem precisa baixar. */}
+          <BotaoLink href={`/${entrada}/extensao`} prefetch={false} tamanho="g" className="mt-5"
+                     target="_blank" rel="noopener">
             <Download size={17} /> Baixar a extensão
           </BotaoLink>
           <p className="mt-4 text-xs">

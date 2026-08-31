@@ -21,10 +21,22 @@
     A extensão apenas exibe o MESMO painel que roda no navegador, numa barra
     lateral. Ela não lê, não toca e não injeta nada no WhatsApp Web — não tem
     nem permissão para isso no manifest. Para a Meta, é invisível.
+
+    ⚠️ `allow-downloads` FALTAVA, e o efeito foi caro: sem ele o Chrome bloqueia
+    qualquer download iniciado dentro deste iframe, EM SILÊNCIO. Quem abrisse
+    "Preparar máquina" pelo painel lateral clicava em "Baixar a extensão" e não
+    acontecia nada — nem arquivo, nem erro.
+
+    O pior é que isso cria uma armadilha circular: a correção está DENTRO da
+    extensão que a pessoa está tentando baixar. Por isso todo botão de download
+    do painel abre em aba nova (`target="_blank"`): com
+    `allow-popups-to-escape-sandbox`, a aba nova não herda o sandbox, e o
+    download funciona mesmo na versão antiga. Sem isso, quem já tinha a
+    extensão instalada não teria como sair dela.
   -->
   <iframe id="quadro" title="Painel de Atendimento"
           referrerpolicy="no-referrer"
-          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation"></iframe>
+          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-downloads"></iframe>
 
   <div id="socorro" hidden>
     <span>Não carregou?</span>
