@@ -87,17 +87,27 @@ export async function conferirBloco(chaves: string[]): Promise<ConferenciaBloco>
   // O HMAC é calculado aqui, no servidor: a chave secreta nunca vai ao navegador.
   const hashes = chaves.map((c) => hashTelefone(c).hash);
 
-  const [{ data: existentes }, { data: bloqueados }] = await Promise.all([
-    supabase.from('contatos').select('telefone_hmac').in('telefone_hmac', hashes),
-    supabase.from('bloqueios').select('telefone_hmac').in('telefone_hmac', hashes),
-  ]);
+  /**
+   * ⚠️ RPC, e não `.in('telefone_hmac', hashes)`.
+   *
+   * Um `.in()` do PostgREST vai na URL, e cada HMAC tem 64 caracteres. Com o
+   * bloco de 500 que esta tela usa, a URL passava de 32 mil caracteres e o
+   * servidor devolvia "Bad Request" — medido: quebra a partir de ~240 hashes.
+   *
+   * Pior que quebrar: quebrava EM SILÊNCIO. O código lia só `{ data }`, `data`
+   * vinha nulo, o contador somava zero, e a tela anunciava "0 já na base" com
+   * toda a confiança do mundo — para qualquer planilha com mais de 230 linhas,
+   * que são todas as de verdade. Alimentou a confusão de "importei e ficou
+   * zerada": o gestor via um número na conferência e outro no resultado.
+   *
+   * A RPC recebe os hashes no CORPO, onde não há limite prático. E o `error`
+   * agora é lido, e vira exceção: número errado em silêncio é pior que erro.
+   */
+  const { data, error } = await supabase.rpc('conferir_importacao', { p_hashes: hashes });
+  if (error) throw new Error(`Não consegui conferir contra a base: ${error.message}`);
 
-  const setBloqueados = new Set((bloqueados ?? []).map((b) => b.telefone_hmac));
-  // Um número bloqueado que também já é contato conta uma vez só, como bloqueado:
-  // é o motivo mais forte e o que o gestor precisa ver.
-  const jaExistem = (existentes ?? []).filter((e) => !setBloqueados.has(e.telefone_hmac)).length;
-
-  return { jaExistem, bloqueados: setBloqueados.size };
+  const r = data as { ja_existem: number; bloqueados: number };
+  return { jaExistem: Number(r.ja_existem ?? 0), bloqueados: Number(r.bloqueados ?? 0) };
 }
 
 export type ResultadoBloco = {
