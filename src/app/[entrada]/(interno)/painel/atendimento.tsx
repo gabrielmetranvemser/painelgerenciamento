@@ -204,6 +204,34 @@ export function Atendimento({
     });
   }
 
+  /**
+   * Vai direto para um passo da abordagem, escolhido pelo atendente.
+   *
+   * ⚠️ Existe porque a sequência é o CAMINHO COMUM, não uma regra. Quem já
+   * conhece a pessoa não precisa mandar "oi" antes de contar a escolha; quem
+   * pegou uma conversa no meio precisa ir para onde ela parou. Obrigar a passar
+   * pelos três faria o atendente mandar mensagem que ele sabe que não faz
+   * sentido — e o painel perde a confiança dele na primeira vez que isso
+   * acontece.
+   *
+   * Não fura nada: `registrar_abertura` continua sendo quem decide, e reenviar
+   * um passo já enviado é idempotente (não conta duas vezes no teto).
+   */
+  function escolherPasso(passo: PassoDaConversa) {
+    if (!contato) return;
+    iniciar(async () => {
+      const m = await prepararMensagem(contato.id, chipId, passo);
+      if (!m.ok) {
+        setErro(MOTIVO_ENVIO[m.motivo] ?? `Não consegui montar a mensagem (${m.motivo}).`);
+        return;
+      }
+      setErro(null);
+      setMensagem(m);
+      setFase('abordagem');
+      setTimeout(() => botaoAbrir.current?.focus(), 60);
+    });
+  }
+
   function trocarLista(id: string | null) {
     setListaEscolhida(id);
     guardarLista(id);
@@ -739,6 +767,7 @@ export function Atendimento({
             aoAbrir={abrirConversa} aoCopiar={copiarConversa}
             aoMarcar={marcar} aoProximo={limparEBuscar}
             aoPular={pularEBuscar} aoPrepararMaterial={prepararMaterial}
+            aoEscolherPasso={escolherPasso}
           />
         )}
       </div>
@@ -1157,10 +1186,90 @@ function PularIntervalo({
 
 /* ── Cartão do atendimento ───────────────────────────────────────────────── */
 
+/**
+ * Trocar o passo da conversa à mão.
+ *
+ * ⚠️ A sequência abertura → escolha → permissão é o CAMINHO COMUM, não uma
+ * regra. Quem já conhece a pessoa não precisa mandar "oi" antes de contar a
+ * escolha; quem pegou uma conversa no meio precisa ir para onde ela parou.
+ * Obrigar a passar pelos três faria o atendente mandar mensagem que ele sabe
+ * que não faz sentido — e o painel perde a confiança dele na primeira vez que
+ * isso acontece.
+ *
+ * Fica ENCOLHIDO por padrão, atrás de "pular etapa". Aberto o tempo todo, ele
+ * concorreria com o texto da mensagem, que é o que a pessoa veio ler; e a
+ * maioria das conversas segue a sequência sem ninguém tocar aqui.
+ *
+ * Os passos já enviados aparecem com ✓ e continuam clicáveis: reenviar é
+ * idempotente no servidor (não conta duas vezes no teto), e às vezes é
+ * exatamente o que se quer — a pessoa apagou, não recebeu, pediu de novo.
+ */
+const ROTULO_PASSO_CURTO: Record<PassoDaConversa, string> = {
+  abertura: '1. Abertura',
+  minha_escolha: '2. Minha escolha',
+  permissao: '3. Permissão',
+};
+
+function EscolherPasso({
+  atual, feitos, ocupado, aoEscolher,
+}: {
+  atual: PassoDaConversa;
+  feitos: readonly PassoDaConversa[];
+  ocupado: boolean;
+  aoEscolher: (passo: PassoDaConversa) => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        aria-expanded={aberto}
+        className="flex items-center gap-1 text-[11px] font-medium text-suave transition-colors hover:text-texto"
+      >
+        <ChevronDown
+          size={13}
+          className={cx('transition-transform duration-200', aberto ? 'rotate-180' : '-rotate-90')}
+        />
+        pular etapa
+      </button>
+
+      {aberto && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {PASSOS_DA_CONVERSA.map((p) => {
+            const eAtual = p === atual;
+            const jaFoi = feitos.includes(p);
+            return (
+              <button
+                key={p}
+                type="button"
+                disabled={ocupado || eAtual}
+                onClick={() => { setAberto(false); aoEscolher(p); }}
+                title={jaFoi ? 'Já enviada para esta pessoa — mandar de novo não conta duas vezes' : undefined}
+                className={cx(
+                  'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] transition-colors',
+                  eAtual
+                    ? 'border-acento/50 bg-acento/12 text-acento'
+                    : 'border-borda text-suave hover:border-borda-forte hover:text-texto',
+                  ocupado && !eAtual && 'opacity-45',
+                )}
+              >
+                {jaFoi && <Check size={11} />}
+                {ROTULO_PASSO_CURTO[p]}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CartaoAtendimento({
   contato, mensagem, fase, ocupado, entregas, refBotao, municipios, municipioId, encaminhamento,
   espera, puloGuardado, confirmando, aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoCopiar,
-  aoMarcar, aoProximo, aoPular, aoPrepararMaterial,
+  aoMarcar, aoProximo, aoPular, aoPrepararMaterial, aoEscolherPasso,
 }: {
   contato: ContatoDaFila; mensagem: MensagemPronta | null; fase: Fase; ocupado: boolean;
   entregas: EntregaDoContato[];
@@ -1177,6 +1286,7 @@ function CartaoAtendimento({
   aoAbrir: () => void; aoCopiar: () => void;
   aoMarcar: (r: Resultado) => void; aoProximo: () => void;
   aoPular: () => void; aoPrepararMaterial: (candidatoId: string) => void;
+  aoEscolherPasso: (passo: PassoDaConversa) => void;
 }) {
   const nome = contato.primeiro_nome ?? contato.nome ?? 'Sem nome';
   const titulo = mensagem?.candidato
@@ -1227,10 +1337,23 @@ function CartaoAtendimento({
       {mensagem && (
         <>
           <div className="px-6 py-5">
-            <p className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-suave">
-              <MessageSquare size={12} />
-              {titulo}
-            </p>
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-suave">
+                <MessageSquare size={12} />
+                {titulo}
+              </p>
+              {/* Só na abordagem: no material quem escolhe é o candidato, logo
+                  acima, e uma segunda lista de escolha ao lado confundiria as
+                  duas. */}
+              {mensagem && (PASSOS_DA_CONVERSA as readonly string[]).includes(mensagem.etapa) && (
+                <EscolherPasso
+                  atual={mensagem.etapa as PassoDaConversa}
+                  feitos={contato.passos}
+                  ocupado={ocupado}
+                  aoEscolher={aoEscolherPasso}
+                />
+              )}
+            </div>
             <div className="rounded-2xl rounded-tl-md border border-borda bg-superficie-alta p-5 text-[15px] leading-[1.7] whitespace-pre-wrap">
               {mensagem.texto}
             </div>

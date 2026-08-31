@@ -112,6 +112,12 @@ Um celular pode ter **duas contas** (dois chips ou eSIM), então ninguém precis
 > quero" logo no "oi" é marcado ali mesmo, sem receber mais duas mensagens.
 > Se a conversa parar no meio, ela continua por **Meus contatos**, que mostra
 > quais passos faltam.
+>
+> **A sequência é o caminho comum, não uma obrigação.** Ao lado do título da
+> mensagem tem um "› pular etapa": abre os três passos e você vai direto ao que
+> faz sentido. Quem já conhece a pessoa não precisa mandar "oi" antes de contar
+> a escolha. Os já enviados aparecem com ✓ e continuam clicáveis — reenviar não
+> conta duas vezes no teto.
 
 1. Abre o atalho do Chip A. Painel e WhatsApp Web já carregam.
 2. Login. Na primeira vez, lê e aceita o termo (fica gravado com data/hora). Sem aceite, não entra na fila.
