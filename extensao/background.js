@@ -35,6 +35,22 @@ chrome.sidePanel
 const WHATSAPP = 'https://web.whatsapp.com/*';
 
 chrome.runtime.onMessageExternal.addListener((mensagem, _remetente, responder) => {
+  /**
+   * "Que versão você é?"
+   *
+   * ⚠️ Existe para a PRÓXIMA atualização, não para esta. Hoje o painel
+   * distingue a extensão nova da antiga só pelo fato de conseguir falar com ela
+   * — a antiga não declara `externally_connectable`, então nem recebe a
+   * pergunta. Isso funciona uma vez. Da segunda em diante, as duas respondem, e
+   * o que separa é o número. Sem este bloco, a v1.2 seria indistinguível da
+   * v1.1 e a operação ficaria de novo com metade das máquinas desatualizadas
+   * sem ninguém saber.
+   */
+  if (mensagem && mensagem.tipo === 'versao') {
+    responder({ ok: true, versao: chrome.runtime.getManifest().version });
+    return false;
+  }
+
   if (!mensagem || mensagem.tipo !== 'abrir-conversa' || typeof mensagem.url !== 'string') {
     responder({ ok: false, motivo: 'mensagem_desconhecida' });
     return false;

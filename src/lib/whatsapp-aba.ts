@@ -40,7 +40,28 @@
  */
 export const ID_DA_EXTENSAO = 'pdpffmibfeikfffdbpfklhdkifmceden';
 
-type RespostaExtensao = { ok: boolean; criou?: boolean; motivo?: string };
+type RespostaExtensao = { ok: boolean; criou?: boolean; motivo?: string; versao?: string };
+
+/**
+ * A versão mínima que sabe reaproveitar a aba do WhatsApp.
+ *
+ * ⚠️ Quem tem uma anterior precisa REINSTALAR — não há atualização automática:
+ * a extensão é carregada sem compactação, direto de uma pasta na máquina de
+ * cada atendente (ver `COMO-INSTALAR.txt`). Enquanto não reinstalar, o painel
+ * segue funcionando pelo caminho antigo, abrindo aba nova.
+ */
+export const VERSAO_MINIMA = '1.1.0';
+
+/** O que o painel sabe sobre a extensão de quem está com a tela aberta. */
+export type EstadoDaExtensao =
+  /** Instalada e na versão que sabe achar a aba. */
+  | 'atual'
+  /** Instalada, mas velha demais: precisa reinstalar. */
+  | 'antiga'
+  /** Não instalada, ou o painel está numa aba comum. */
+  | 'ausente'
+  /** Ainda perguntando. */
+  | 'verificando';
 
 type ChromeExterno = {
   runtime?: {
@@ -99,6 +120,86 @@ export function abrirNaAbaDoWhatsapp(url: string): Promise<boolean> {
     } catch {
       clearTimeout(relogio);
       terminar(false);
+    }
+  });
+}
+
+/**
+ * O painel está rodando DENTRO do painel lateral da extensão?
+ *
+ * ⚠️ É o que distingue "extensão velha" de "extensão nenhuma", e sem essa
+ * distinção o aviso de atualizar apareceria para quem nunca instalou — que é
+ * quase todo mundo no começo, porque o painel funciona 100% numa aba comum.
+ *
+ * A extensão carrega o painel num iframe (`sidepanel.html`). Então: se estamos
+ * num iframe cujo ancestral é uma página de extensão, e mesmo assim ela não
+ * responde, a extensão instalada é anterior a `externally_connectable` — ou
+ * seja, velha.
+ *
+ * `ancestorOrigins` é do Chrome, que é o navegador da operação. Sem ele, o
+ * `window.top !== window.self` já basta: o painel não é embutido em nenhum
+ * outro lugar.
+ */
+export function dentroDoPainelLateral(): boolean {
+  try {
+    if (window.top === window.self) return false;
+    const ancestrais = window.location.ancestorOrigins;
+    if (!ancestrais || ancestrais.length === 0) return true;
+    return Array.from(ancestrais).some((o) => o.startsWith('chrome-extension://'));
+  } catch {
+    // Cross-origin ao ler `window.top` já é sinal de que estamos embutidos.
+    return true;
+  }
+}
+
+/** Compara "1.1.0" com "1.0.0" sem depender de biblioteca. */
+function versaoAtende(versao: string, minima: string): boolean {
+  const a = versao.split('.').map((n) => Number(n) || 0);
+  const b = minima.split('.').map((n) => Number(n) || 0);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (x !== y) return x > y;
+  }
+  return true;
+}
+
+/**
+ * Pergunta à extensão quem ela é.
+ *
+ * A extensão anterior a 1.1.0 não declara `externally_connectable`, então ela
+ * nem recebe a pergunta — o silêncio DELA é a resposta, e é por isso que
+ * `dentroDoPainelLateral()` precisa entrar na conta.
+ */
+export function estadoDaExtensao(): Promise<Exclude<EstadoDaExtensao, 'verificando'>> {
+  const runtime = extensao();
+  const enviar = runtime?.sendMessage;
+
+  if (!runtime || !enviar) {
+    return Promise.resolve(dentroDoPainelLateral() ? 'antiga' : 'ausente');
+  }
+
+  return new Promise((resolver) => {
+    let respondido = false;
+    const terminar = (v: Exclude<EstadoDaExtensao, 'verificando'>) => {
+      if (respondido) return;
+      respondido = true;
+      resolver(v);
+    };
+    const relogio = setTimeout(() => terminar(dentroDoPainelLateral() ? 'antiga' : 'ausente'), 1200);
+
+    try {
+      enviar(ID_DA_EXTENSAO, { tipo: 'versao' }, (r) => {
+        clearTimeout(relogio);
+        if (runtime.lastError || !r?.ok || !r.versao) {
+          terminar(dentroDoPainelLateral() ? 'antiga' : 'ausente');
+          return;
+        }
+        terminar(versaoAtende(r.versao, VERSAO_MINIMA) ? 'atual' : 'antiga');
+      });
+    } catch {
+      clearTimeout(relogio);
+      terminar(dentroDoPainelLateral() ? 'antiga' : 'ausente');
     }
   });
 }
