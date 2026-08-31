@@ -630,6 +630,28 @@ export function Atendimento({
         {erro && <Aviso tom="erro" icone={<AlertTriangle size={16} />}>{erro}</Aviso>}
         {aviso && <Aviso tom="info">{aviso}</Aviso>}
 
+        {/* ⚠️ O TETO PASSOU A AVISAR EM VEZ DE TRAVAR (pedido de quem opera,
+            31/08). Então este aviso é a única coisa que resta entre o atendente
+            e um número derrubado — ele precisa ser grande, ficar na tela o
+            tempo todo e dizer o que acontece, não só que "passou do limite".
+            Cor de perigo, e não de alerta: âmbar é orientação, vermelho é
+            "isto custa caro". */}
+        {fila?.teto_estourado && !fila.teto_bloqueia && (
+          <Aviso tom="erro" icone={<Siren size={16} />}>
+            <p className="font-medium">
+              Você já fez {fila.enviados_hoje} conversas hoje — o combinado eram{' '}
+              {fila.teto_hoje}.
+            </p>
+            <p className="mt-1 text-sm leading-relaxed">
+              Daqui pra frente é por sua conta. Número que fala com muita gente nova no mesmo dia
+              é o padrão que o WhatsApp derruba
+              {fila.em_rampa && ', e o seu ainda está aquecendo'} — e quando cai, as conversas
+              abertas caem junto e não voltam. O melhor a fazer é parar por aqui e continuar
+              amanhã.
+            </p>
+          </Aviso>
+        )}
+
         {chip?.status === 'amarelo' && (
           <Aviso tom="alerta" icone={<Siren size={16} />}>
             Seu número está marcado como <strong>atenção</strong>. Vá mais devagar e avise o gestor.
@@ -763,8 +785,14 @@ function Barra({
             <p className="font-display text-lg font-semibold leading-tight tracking-tight">
               Olá, {primeiroNome}
             </p>
-            <p className="text-xs text-suave">
-              {fila ? `${fila.restante_hoje} de ${teto} conversas restantes hoje` : '—'}
+            <p className={cx('text-xs', fila?.teto_estourado ? 'text-perigo' : 'text-suave')}>
+              {!fila
+                ? '—'
+                : fila.teto_estourado
+                  // Dizer "restam 0" e continuar deixando trabalhar seria a tela
+                  // discordando de si mesma.
+                  ? `${fila.enviados_hoje} conversas hoje — ${teto} era o combinado`
+                  : `${fila.restante_hoje} de ${teto} conversas restantes hoje`}
             </p>
           </div>
         </div>

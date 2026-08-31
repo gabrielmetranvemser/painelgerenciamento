@@ -437,7 +437,8 @@ Ao pedir o próximo contato, a função verifica:
 - `chips.status not in ('pausado','morto')`
 - `now()` dentro de `[hora_inicio, hora_fim]`
 - `today <> config.dia_bloqueado`
-- `chips.enviados_hoje < chips.teto_hoje`
+- `chips.enviados_hoje < chips.teto_hoje` — ⚠️ **avisa, não recusa**, salvo se
+  `config.teto_bloqueia`. Ver a migration `teto_avisa_em_vez_de_travar`
 - último `aberto_wa_em` de uma **abordagem** do chip há mais de `intervalo_seg` segundos
   (abordagem = etapa `abertura`, e as mensagens do gestor marcadas como tal)
 

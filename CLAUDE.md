@@ -53,6 +53,24 @@ Teto diário, janela de horário, intervalo mínimo, dia bloqueado, termo aceito
 lista de bloqueio: tudo dentro de RPC `security definer` no Postgres. O frontend
 só reflete o que o servidor respondeu. Frontend se burla abrindo o DevTools.
 
+**Mas nem toda trava recusa.** Duas naturezas diferentes, e não se misturam:
+
+| Recusa sempre | Por quê |
+|---|---|
+| `contato_bloqueado` | mensagem depois do pedido de saída é multa POR MENSAGEM |
+| `dia_bloqueado` | falar com eleitor no dia da eleição é regra eleitoral |
+| `termo_nao_aceito` | sem aceite datado não há defesa numa denúncia |
+| `sem_candidato` | a permissão sairia sem dizer de quem é o material |
+| `fora_de_horario` | a janela é do gestor; mexer nela é mexer no campo dele |
+| `intervalo` | é o espaçamento que o antispam mais olha |
+
+| Avisa e deixa passar | Por quê |
+|---|---|
+| `teto_atingido` | risco de OPERAÇÃO, não de lei: no pior caso o número cai e a campanha troca pelo reserva. Quem corre o risco decide — `config.teto_bloqueia` devolve a trava se o gestor quiser |
+
+A regra geral: **risco jurídico recusa, risco operacional avisa.** É a mesma
+divisão que `validarModelo` já usava para os textos.
+
 ### 3. Atendente não escreve em `contatos` pelo RLS
 
 `SELECT` só nas próprias linhas; `UPDATE`/`INSERT`/`DELETE` negados. Toda mutação

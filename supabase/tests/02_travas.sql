@@ -210,13 +210,15 @@ begin
    where contato_id = v_contato;
 
   -- ── 6. teto diário ───────────────────────────────────────────────────────
-  update public.config set teto_diario = 1 where id = 1;
+  -- `teto_bloqueia = true` porque é a trava que este teste existe para medir.
+  -- O PADRÃO da operação é avisar, e isso é medido em 15b/15c.
+  update public.config set teto_diario = 1, teto_bloqueia = true where id = 1;
   v_r := public.fila_status(v_chip);
   if v_r->>'motivo' = 'teto_atingido' then
     raise notice '  ✅ 6. teto do dia bloqueou o próximo contato';
   else raise warning '  ❌ 6. teto não bloqueou: %', v_r; v_falhas := v_falhas + 1;
   end if;
-  update public.config set teto_diario = v_cfg_teto where id = 1;
+  update public.config set teto_diario = v_cfg_teto, teto_bloqueia = false where id = 1;
 
   -- ── 7. janela de horário (no fuso de Porto Velho) ────────────────────────
   -- Fecha a janela EM VOLTA da hora atual, seja ela qual for. Os dois ramos
@@ -355,12 +357,33 @@ begin
           now() - interval '600 seconds', public.hoje_operacional());
 
   -- ── 15. teto do dia recusa a ABERTURA, não só o próximo contato ──────────
-  update public.config set teto_diario = 1 where id = 1;
+  -- ⚠️ Só quando o gestor manda recusar. Desde `teto_avisa_em_vez_de_travar` o
+  -- padrão é AVISAR, e a decisão de continuar é de quem está com o número na
+  -- mão — o teto é risco de operação, não regra eleitoral.
+  update public.config set teto_diario = 1, teto_bloqueia = true where id = 1;
   v_r := public.registrar_abertura(v_terceiro, v_chip, 'permissao', 'x');
   if v_r->>'motivo' = 'teto_atingido' then
-    raise notice '  ✅ 15. teto do dia recusa abrir conversa com pessoa nova';
+    raise notice '  ✅ 15. com o teto travando, recusa abrir conversa com pessoa nova';
   else raise warning '  ❌ 15. abriu acima do teto: %', v_r; v_falhas := v_falhas + 1;
   end if;
+
+  -- ── 15b. e no modo aviso, o mesmo envio PASSA — com o alerta ligado ───────
+  update public.config set teto_bloqueia = false where id = 1;
+  v_r := public.fila_status(v_chip);
+  if (v_r->>'pode')::boolean and (v_r->>'teto_estourado')::boolean then
+    raise notice '  ✅ 15b. no modo aviso a fila libera e marca que o teto estourou';
+  else raise warning '  ❌ 15b. o aviso não liberou: %', v_r; v_falhas := v_falhas + 1;
+  end if;
+
+  v_r := public.registrar_abertura(v_terceiro, v_chip, 'permissao', 'x');
+  if (v_r->>'ok')::boolean then
+    raise notice '  ✅ 15c. e a conversa acima do teto é registrada, por conta do atendente';
+  else raise warning '  ❌ 15c. continuou recusando: %', v_r; v_falhas := v_falhas + 1;
+  end if;
+
+  -- Desfaz, para o resto do arquivo medir o que ele espera medir.
+  delete from public.interacoes where contato_id = v_terceiro and etapa = 'permissao';
+  update public.config set teto_bloqueia = true where id = 1;
 
   -- ── 16. seguimento na MESMA pessoa não consome teto novo ─────────────────
   -- O teto conta com quantas pessoas o número falou, não quantas mensagens

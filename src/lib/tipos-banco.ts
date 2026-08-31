@@ -207,6 +207,7 @@ export type Config = {
   hora_fim: number;
   intervalo_seg: number;
   lease_minutos: number;
+  teto_bloqueia: boolean;
   termo_texto: string;
   termo_versao: number;
   /** Quem responde pelos dados (LGPD). É da operação, não de um candidato. */
@@ -886,6 +887,17 @@ export type FilaStatus = {
   em_rampa: boolean;
   /** O teto de Gestor → Configuração, sem a rampa por cima. */
   teto_gestor: number;
+  /**
+   * O teto RECUSA a conversa, ou só avisa?
+   *
+   * Padrão é avisar. O teto é risco de operação — no pior caso o WhatsApp
+   * derruba um número e a campanha troca pelo reserva. Quem decide correr esse
+   * risco é quem está com o número na mão, não uma regra que tranca a tela.
+   * Ver a migration `teto_avisa_em_vez_de_travar`.
+   */
+  teto_bloqueia: boolean;
+  /** Já passou do teto de hoje. Com `teto_bloqueia = false`, segue trabalhando. */
+  teto_estourado: boolean;
   enviados_hoje: number;
   restante_hoje: number;
   intervalo_seg: number;

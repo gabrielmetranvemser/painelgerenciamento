@@ -57,6 +57,12 @@ const Config = z.object({
   hora_fim: z.coerce.number().int().min(1).max(24),
   intervalo_seg: z.coerce.number().int().min(0).max(3600),
   lease_minutos: z.coerce.number().int().min(1).max(240),
+  /**
+   * Checkbox: só chega no FormData quando está marcado. Por isso o `transform`
+   * em vez de `z.coerce.boolean()` — `coerce` transforma a string vazia em
+   * false e a ausência em `undefined`, e o campo é obrigatório na tabela.
+   */
+  teto_bloqueia: z.preprocess((v) => v === 'on' || v === 'true' || v === true, z.boolean()),
   timezone: z.string().trim().min(3).refine(fusoExiste, {
     message:
       'Esse fuso horário não existe. Escreva como America/Porto_Velho — com barra, ' +
@@ -75,6 +81,7 @@ export async function salvarConfig(_anterior: Resultado | null, form: FormData):
     hora_fim: form.get('hora_fim'),
     intervalo_seg: form.get('intervalo_seg'),
     lease_minutos: form.get('lease_minutos'),
+    teto_bloqueia: form.get('teto_bloqueia'),
     timezone: form.get('timezone'),
     termo_texto: form.get('termo_texto') ?? '',
     responsavel_dados: form.get('responsavel_dados') ?? '',
