@@ -667,26 +667,10 @@ export function Atendimento({
         {erro && <Aviso tom="erro" icone={<AlertTriangle size={16} />}>{erro}</Aviso>}
         {aviso && <Aviso tom="info">{aviso}</Aviso>}
 
-        {/* ⚠️ O TETO PASSOU A AVISAR EM VEZ DE TRAVAR (pedido de quem opera,
-            31/08). Então este aviso é a única coisa que resta entre o atendente
-            e um número derrubado — ele precisa ser grande, ficar na tela o
-            tempo todo e dizer o que acontece, não só que "passou do limite".
-            Cor de perigo, e não de alerta: âmbar é orientação, vermelho é
-            "isto custa caro". */}
         {fila?.teto_estourado && !fila.teto_bloqueia && (
-          <Aviso tom="erro" icone={<Siren size={16} />}>
-            <p className="font-medium">
-              Você já fez {fila.enviados_hoje} conversas hoje — o combinado eram{' '}
-              {fila.teto_hoje}.
-            </p>
-            <p className="mt-1 text-sm leading-relaxed">
-              Daqui pra frente é por sua conta. Número que fala com muita gente nova no mesmo dia
-              é o padrão que o WhatsApp derruba
-              {fila.em_rampa && ', e o seu ainda está aquecendo'} — e quando cai, as conversas
-              abertas caem junto e não voltam. O melhor a fazer é parar por aqui e continuar
-              amanhã.
-            </p>
-          </Aviso>
+          <AvisoDoTeto
+            feitas={fila.enviados_hoje} teto={fila.teto_hoje} emRampa={fila.em_rampa}
+          />
         )}
 
         {chip?.status === 'amarelo' && (
@@ -743,6 +727,7 @@ export function Atendimento({
           <CartaoAtendimento
             contato={contato} mensagem={mensagem} fase={fase} ocupado={ocupado}
             entregas={entregas} refBotao={botaoAbrir} espera={espera}
+            puloGuardado={fila?.pulo_guardado ?? false}
             confirmando={confirmando}
             municipios={municipios} municipioId={municipioId}
             encaminhamento={encaminhamento}
@@ -893,6 +878,72 @@ function Contador({ rotulo, valor, cor, icone }: {
 }
 
 /* ── Estado travado ──────────────────────────────────────────────────────── */
+
+/**
+ * "Você passou do combinado" — a linha fica, o parágrafo encolhe.
+ *
+ * ⚠️ Desde que o teto avisa em vez de travar, este aviso é a única coisa entre
+ * o atendente e um número derrubado. Por isso ele NÃO se fecha e NÃO some: o
+ * título continua na tela o resto do dia, em vermelho, com a conta na frente.
+ *
+ * O que encolhe é a explicação. Ela ocupava metade da coluna do atendimento e é
+ * a mesma em toda conversa — quem já leu uma vez lê o título e sabe do que se
+ * trata. Deixá-la aberta para sempre não avisa mais ninguém: vira paisagem, que
+ * é a forma mais rápida de um aviso parar de funcionar.
+ *
+ * Abre na PRIMEIRA vez do dia, e só encolhe depois que a pessoa fecha. É a
+ * ordem certa: ninguém decide não ler o que ainda não viu. A memória é do dia,
+ * porque amanhã o número acorda inteiro e a conversa recomeça.
+ */
+function AvisoDoTeto({
+  feitas, teto, emRampa,
+}: {
+  feitas: number; teto: number; emRampa: boolean;
+}) {
+  const chave = `painel:teto-encolhido:${new Date().toISOString().slice(0, 10)}`;
+
+  // Falhar aqui (anônima, dados limpos) abre o aviso, que é o lado seguro.
+  const [aberto, setAberto] = useState(() => {
+    try { return localStorage.getItem(chave) !== '1'; } catch { return true; }
+  });
+
+  function alternar() {
+    const proximo = !aberto;
+    setAberto(proximo);
+    try {
+      if (proximo) localStorage.removeItem(chave);
+      else localStorage.setItem(chave, '1');
+    } catch { /* sem memória, reabre amanhã do mesmo jeito */ }
+  }
+
+  return (
+    <Aviso tom="erro" icone={<Siren size={16} />}>
+      <button
+        type="button"
+        onClick={alternar}
+        aria-expanded={aberto}
+        className="flex w-full cursor-pointer items-start gap-2 text-left"
+      >
+        <span className="mr-auto font-medium">
+          Você já fez {feitas} conversas hoje — o combinado eram {teto}.
+        </span>
+        <ChevronDown
+          size={15}
+          className={cx('mt-0.5 shrink-0 transition-transform duration-200', aberto && 'rotate-180')}
+        />
+      </button>
+
+      {aberto && (
+        <p className="mt-1.5 text-sm leading-relaxed">
+          Daqui pra frente é por sua conta. Número que fala com muita gente nova no mesmo dia é o
+          padrão que o WhatsApp derruba{emRampa && ', e o seu ainda está aquecendo'} — e quando
+          cai, as conversas abertas caem junto e não voltam. O melhor a fazer é parar por aqui e
+          continuar amanhã.
+        </p>
+      )}
+    </Aviso>
+  );
+}
 
 function Travado({
   fila, espera, ocupado, listaEscolhida, aoVerTodas, aoPularIntervalo,
@@ -1108,13 +1159,15 @@ function PularIntervalo({
 
 function CartaoAtendimento({
   contato, mensagem, fase, ocupado, entregas, refBotao, municipios, municipioId, encaminhamento,
-  espera, confirmando, aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoCopiar, aoMarcar,
-  aoProximo, aoPular, aoPrepararMaterial,
+  espera, puloGuardado, confirmando, aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoCopiar,
+  aoMarcar, aoProximo, aoPular, aoPrepararMaterial,
 }: {
   contato: ContatoDaFila; mensagem: MensagemPronta | null; fase: Fase; ocupado: boolean;
   entregas: EntregaDoContato[];
   /** Segundos que faltam do intervalo. Trava os botões de abordagem. */
   espera: number;
+  /** O atendente comprou um pulo e ele ainda não foi gasto. */
+  puloGuardado: boolean;
   /** O desfecho armado, esperando o segundo clique. `null` = nenhum. */
   confirmando: Resultado | null;
   refBotao: React.RefObject<HTMLButtonElement | null>;
@@ -1130,11 +1183,17 @@ function CartaoAtendimento({
     ? `Material de ${mensagem.candidato.nome}`
     : (mensagem ? TITULO_ETAPA[mensagem.etapa] ?? 'Mensagem' : '');
 
-  // O servidor recusa abordagem dentro do intervalo. A tela desabilita antes,
-  // para o atendente não clicar num botão que só devolve erro — e para a
-  // rajada de material (um por candidato) sair espaçada, que é a razão de o
-  // intervalo existir.
-  const noIntervalo = espera > 0;
+  /**
+   * O servidor recusa abordagem dentro do intervalo, e a tela desabilita antes
+   * para o atendente não clicar num botão que só devolve erro.
+   *
+   * ⚠️ `puloGuardado` PRECISA entrar na conta. Sem ele, o atendente clicava em
+   * "Pular intervalo", a tela de espera sumia — e o botão de abrir continuava
+   * dizendo "Aguarde 93s". O pulo não zera o relógio de propósito (o intervalo
+   * segue correndo, e o servidor mostra quanto falta); o que ele faz é liberar
+   * UMA abordagem. Quem não soubesse disso concluiria que o botão não funciona.
+   */
+  const noIntervalo = espera > 0 && !puloGuardado;
   const travadoPorIntervalo = noIntervalo && !!mensagem && ETAPAS_DE_ABORDAGEM.includes(mensagem.etapa);
 
   return (
@@ -1160,7 +1219,7 @@ function CartaoAtendimento({
       </header>
 
       {fase === 'entrega' && (
-        <Entrega entregas={entregas} ocupado={ocupado} espera={espera}
+        <Entrega entregas={entregas} ocupado={ocupado}
                  escolhido={mensagem?.candidato?.id ?? null}
                  aoPreparar={aoPrepararMaterial} />
       )}
@@ -1203,10 +1262,16 @@ function CartaoAtendimento({
               Os dois registram o envio. Use <strong className="text-texto">Copiar</strong> quando a
               conversa já estiver aberta do lado.
             </p>
+            {/* ⚠️ Este texto dizia que o intervalo "vale também para o
+                material". Deixou de valer quando a conversa virou quatro
+                passos: hoje só a ABERTURA espera, porque é a única mensagem que
+                chega a quem não está esperando. Aviso que descreve uma regra que
+                não existe mais é pior que aviso nenhum — ensina errado. */}
             {travadoPorIntervalo && (
               <p className="mt-2 text-center text-xs leading-relaxed text-suave">
-                O intervalo entre uma abordagem e outra vale também para o material. Emendar
-                mensagens seguidas do mesmo número é o padrão que o WhatsApp derruba.
+                O intervalo vale para a primeira mensagem de cada pessoa: é ela que chega sem
+                aviso, e é o padrão que o WhatsApp derruba. Continuar uma conversa já aberta não
+                espera.
               </p>
             )}
           </div>
@@ -1624,10 +1689,25 @@ function BotaoDesfecho({
  * primeira mensagem. Não é a chapa atual do atendente — quem entrou depois não
  * aparece, porque ela nunca foi avisada dele.
  */
+/**
+ * ⚠️ O MATERIAL NÃO ESPERA MAIS INTERVALO, e esta tela travava por isso.
+ *
+ * Até os quatro passos, `material` era uma etapa de abordagem e o intervalo
+ * valia para ela — daí os botões desabilitados com "aguarde 40s". Quando a
+ * conversa passou a ser abertura → minha escolha → permissão → material, quem
+ * ficou como abordagem foi só a ABERTURA: o material vai para quem acabou de
+ * dizer "pode", e fazer essa pessoa esperar não protege número nenhum.
+ *
+ * O servidor já parou de recusar. A tela continuava travando sozinha, contra
+ * uma regra que não existe mais — e o atendente ficava olhando um botão cinza
+ * sem nada acontecendo do outro lado.
+ *
+ * O conselho de mandar um de cada vez continua, como conselho. É o que ele é.
+ */
 function Entrega({
-  entregas, ocupado, espera, escolhido, aoPreparar,
+  entregas, ocupado, escolhido, aoPreparar,
 }: {
-  entregas: EntregaDoContato[]; ocupado: boolean; espera: number; escolhido: string | null;
+  entregas: EntregaDoContato[]; ocupado: boolean; escolhido: string | null;
   aoPreparar: (candidatoId: string) => void;
 }) {
   if (entregas.length === 0) {
@@ -1652,9 +1732,7 @@ function Entrega({
       <p className="mb-4 text-xs leading-relaxed text-suave">
         {faltam === 0
           ? 'Tudo entregue. Pode seguir para o próximo contato.'
-          : espera > 0
-            ? `Um de cada vez: o próximo material libera em ${espera}s. Emendar vários seguidos é o que derruba número.`
-            : 'Mande um de cada vez e espere a resposta. Emendar vários materiais seguidos é o que derruba número.'}
+          : 'Mande um de cada vez e espere a resposta. Emendar vários materiais seguidos, mesmo para quem autorizou, é o que derruba número.'}
       </p>
       <p className="mb-4 text-xs leading-relaxed text-suave">
         Sai um link só. Ele abre uma página da pessoa com todas as peças daquele candidato — não
@@ -1665,7 +1743,7 @@ function Entrega({
         {entregas.map((c) => {
           const enviado = c.material_enviado_em !== null;
           const semPeca = c.materiais === 0;
-          const bloqueado = ocupado || semPeca || !c.ativo || espera > 0;
+          const bloqueado = ocupado || semPeca || !c.ativo;
           return (
             <div key={c.candidato_id}
                  className={cx(
@@ -1695,9 +1773,7 @@ function Entrega({
 
               <Botao variante={enviado ? 'neutro' : 'principal'} tamanho="p"
                      disabled={bloqueado} onClick={() => aoPreparar(c.candidato_id)}>
-                {espera > 0
-                  ? `aguarde ${espera}s`
-                  : enviado ? 'Mandar de novo' : 'Preparar material'}
+                {enviado ? 'Mandar de novo' : 'Preparar material'}
               </Botao>
             </div>
           );
