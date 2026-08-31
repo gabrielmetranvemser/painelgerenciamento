@@ -3,7 +3,7 @@ import { Layers, Upload } from 'lucide-react';
 import { Aviso, BotaoLink, Titulo, Vazio } from '@/components/ui';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { rotas } from '@/lib/links-internos';
-import type { ListaComContagem, Usuario } from '@/lib/tipos-banco';
+import type { GrupoDeLista, ListaComContagem, Usuario } from '@/lib/tipos-banco';
 import { Listas } from './listas';
 
 export const metadata: Metadata = { title: 'Listas' };
@@ -14,8 +14,10 @@ export default async function PaginaListas({ params }: { params: Promise<{ entra
   const r = rotas(entrada);
   const supabase = await criarClienteServidor();
 
-  const [{ data: listas }, { data: usuarios }, { data: atribuicoes }, { data: semLista }] =
-    await Promise.all([
+  const [
+    { data: listas }, { data: usuarios }, { data: atribuicoes }, { data: semLista },
+    { data: grupos },
+  ] = await Promise.all([
       supabase.from('v_listas').select('*').order('criado_em', { ascending: false }),
       supabase
         .from('usuarios')
@@ -25,6 +27,7 @@ export default async function PaginaListas({ params }: { params: Promise<{ entra
         .order('primeiro_nome'),
       supabase.from('atendente_listas').select('atendente_id, lista_id'),
       supabase.from('v_atendentes_sem_lista').select('primeiro_nome'),
+      supabase.from('grupos_lista').select('*').order('ordem').order('nome'),
     ]);
 
   // "Quem atende a lista X" — o índice que a tela usa. Montado aqui, no
@@ -71,6 +74,7 @@ export default async function PaginaListas({ params }: { params: Promise<{ entra
       ) : (
         <Listas
           listas={(listas ?? []) as ListaComContagem[]}
+          grupos={(grupos ?? []) as GrupoDeLista[]}
           atendentes={(usuarios ?? []) as Usuario[]}
           porLista={porLista}
         />
