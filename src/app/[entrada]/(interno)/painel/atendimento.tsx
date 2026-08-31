@@ -743,6 +743,7 @@ export function Atendimento({
           <CartaoAtendimento
             contato={contato} mensagem={mensagem} fase={fase} ocupado={ocupado}
             entregas={entregas} refBotao={botaoAbrir} espera={espera}
+            puloGuardado={fila?.pulo_guardado ?? false}
             confirmando={confirmando}
             municipios={municipios} municipioId={municipioId}
             encaminhamento={encaminhamento}
@@ -1108,13 +1109,15 @@ function PularIntervalo({
 
 function CartaoAtendimento({
   contato, mensagem, fase, ocupado, entregas, refBotao, municipios, municipioId, encaminhamento,
-  espera, confirmando, aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoCopiar, aoMarcar,
-  aoProximo, aoPular, aoPrepararMaterial,
+  espera, puloGuardado, confirmando, aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoCopiar,
+  aoMarcar, aoProximo, aoPular, aoPrepararMaterial,
 }: {
   contato: ContatoDaFila; mensagem: MensagemPronta | null; fase: Fase; ocupado: boolean;
   entregas: EntregaDoContato[];
   /** Segundos que faltam do intervalo. Trava os botões de abordagem. */
   espera: number;
+  /** O atendente comprou um pulo e ele ainda não foi gasto. */
+  puloGuardado: boolean;
   /** O desfecho armado, esperando o segundo clique. `null` = nenhum. */
   confirmando: Resultado | null;
   refBotao: React.RefObject<HTMLButtonElement | null>;
@@ -1130,11 +1133,17 @@ function CartaoAtendimento({
     ? `Material de ${mensagem.candidato.nome}`
     : (mensagem ? TITULO_ETAPA[mensagem.etapa] ?? 'Mensagem' : '');
 
-  // O servidor recusa abordagem dentro do intervalo. A tela desabilita antes,
-  // para o atendente não clicar num botão que só devolve erro — e para a
-  // rajada de material (um por candidato) sair espaçada, que é a razão de o
-  // intervalo existir.
-  const noIntervalo = espera > 0;
+  /**
+   * O servidor recusa abordagem dentro do intervalo, e a tela desabilita antes
+   * para o atendente não clicar num botão que só devolve erro.
+   *
+   * ⚠️ `puloGuardado` PRECISA entrar na conta. Sem ele, o atendente clicava em
+   * "Pular intervalo", a tela de espera sumia — e o botão de abrir continuava
+   * dizendo "Aguarde 93s". O pulo não zera o relógio de propósito (o intervalo
+   * segue correndo, e o servidor mostra quanto falta); o que ele faz é liberar
+   * UMA abordagem. Quem não soubesse disso concluiria que o botão não funciona.
+   */
+  const noIntervalo = espera > 0 && !puloGuardado;
   const travadoPorIntervalo = noIntervalo && !!mensagem && ETAPAS_DE_ABORDAGEM.includes(mensagem.etapa);
 
   return (
@@ -1160,7 +1169,7 @@ function CartaoAtendimento({
       </header>
 
       {fase === 'entrega' && (
-        <Entrega entregas={entregas} ocupado={ocupado} espera={espera}
+        <Entrega entregas={entregas} ocupado={ocupado}
                  escolhido={mensagem?.candidato?.id ?? null}
                  aoPreparar={aoPrepararMaterial} />
       )}
@@ -1203,10 +1212,16 @@ function CartaoAtendimento({
               Os dois registram o envio. Use <strong className="text-texto">Copiar</strong> quando a
               conversa já estiver aberta do lado.
             </p>
+            {/* ⚠️ Este texto dizia que o intervalo "vale também para o
+                material". Deixou de valer quando a conversa virou quatro
+                passos: hoje só a ABERTURA espera, porque é a única mensagem que
+                chega a quem não está esperando. Aviso que descreve uma regra que
+                não existe mais é pior que aviso nenhum — ensina errado. */}
             {travadoPorIntervalo && (
               <p className="mt-2 text-center text-xs leading-relaxed text-suave">
-                O intervalo entre uma abordagem e outra vale também para o material. Emendar
-                mensagens seguidas do mesmo número é o padrão que o WhatsApp derruba.
+                O intervalo vale para a primeira mensagem de cada pessoa: é ela que chega sem
+                aviso, e é o padrão que o WhatsApp derruba. Continuar uma conversa já aberta não
+                espera.
               </p>
             )}
           </div>
@@ -1624,10 +1639,25 @@ function BotaoDesfecho({
  * primeira mensagem. Não é a chapa atual do atendente — quem entrou depois não
  * aparece, porque ela nunca foi avisada dele.
  */
+/**
+ * ⚠️ O MATERIAL NÃO ESPERA MAIS INTERVALO, e esta tela travava por isso.
+ *
+ * Até os quatro passos, `material` era uma etapa de abordagem e o intervalo
+ * valia para ela — daí os botões desabilitados com "aguarde 40s". Quando a
+ * conversa passou a ser abertura → minha escolha → permissão → material, quem
+ * ficou como abordagem foi só a ABERTURA: o material vai para quem acabou de
+ * dizer "pode", e fazer essa pessoa esperar não protege número nenhum.
+ *
+ * O servidor já parou de recusar. A tela continuava travando sozinha, contra
+ * uma regra que não existe mais — e o atendente ficava olhando um botão cinza
+ * sem nada acontecendo do outro lado.
+ *
+ * O conselho de mandar um de cada vez continua, como conselho. É o que ele é.
+ */
 function Entrega({
-  entregas, ocupado, espera, escolhido, aoPreparar,
+  entregas, ocupado, escolhido, aoPreparar,
 }: {
-  entregas: EntregaDoContato[]; ocupado: boolean; espera: number; escolhido: string | null;
+  entregas: EntregaDoContato[]; ocupado: boolean; escolhido: string | null;
   aoPreparar: (candidatoId: string) => void;
 }) {
   if (entregas.length === 0) {
@@ -1652,9 +1682,7 @@ function Entrega({
       <p className="mb-4 text-xs leading-relaxed text-suave">
         {faltam === 0
           ? 'Tudo entregue. Pode seguir para o próximo contato.'
-          : espera > 0
-            ? `Um de cada vez: o próximo material libera em ${espera}s. Emendar vários seguidos é o que derruba número.`
-            : 'Mande um de cada vez e espere a resposta. Emendar vários materiais seguidos é o que derruba número.'}
+          : 'Mande um de cada vez e espere a resposta. Emendar vários materiais seguidos, mesmo para quem autorizou, é o que derruba número.'}
       </p>
       <p className="mb-4 text-xs leading-relaxed text-suave">
         Sai um link só. Ele abre uma página da pessoa com todas as peças daquele candidato — não
@@ -1665,7 +1693,7 @@ function Entrega({
         {entregas.map((c) => {
           const enviado = c.material_enviado_em !== null;
           const semPeca = c.materiais === 0;
-          const bloqueado = ocupado || semPeca || !c.ativo || espera > 0;
+          const bloqueado = ocupado || semPeca || !c.ativo;
           return (
             <div key={c.candidato_id}
                  className={cx(
@@ -1695,9 +1723,7 @@ function Entrega({
 
               <Botao variante={enviado ? 'neutro' : 'principal'} tamanho="p"
                      disabled={bloqueado} onClick={() => aoPreparar(c.candidato_id)}>
-                {espera > 0
-                  ? `aguarde ${espera}s`
-                  : enviado ? 'Mandar de novo' : 'Preparar material'}
+                {enviado ? 'Mandar de novo' : 'Preparar material'}
               </Botao>
             </div>
           );
