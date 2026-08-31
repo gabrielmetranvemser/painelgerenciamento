@@ -11,8 +11,15 @@ import { carregarModelosLivres } from './livres';
 export const metadata: Metadata = { title: 'Mensagens' };
 export const dynamic = 'force-dynamic';
 
+/**
+ * A ordem de leitura da tela, e ela é a ordem da CONVERSA.
+ *
+ * Os três primeiros são os passos da abordagem, na sequência em que saem:
+ * abertura → minha escolha → permissão. Depois o material, e por último as
+ * respostas a quem escreveu. Espelha `ordem_da_etapa` no banco.
+ */
 const ORDEM: EtapaMsg[] = [
-  'permissao', 'material', 'saida', 'quem_passou',
+  'abertura', 'minha_escolha', 'permissao', 'material', 'saida', 'quem_passou',
   'quer_ajudar', 'encaminhamento', 'convite_grupo',
 ];
 

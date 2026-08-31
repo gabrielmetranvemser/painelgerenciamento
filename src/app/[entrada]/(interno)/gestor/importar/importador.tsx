@@ -22,7 +22,7 @@ type Etapa = 'arquivo' | 'mapear' | 'conferir' | 'importando' | 'pronto';
 type Conferencia = { jaExistem: number; bloqueados: number };
 type Cidades = { semCasar: number; exemplos: string[] };
 type Inacabada = { id: string; rotulo: string; total_importados: number; criado_em: string };
-type Totais = { importados: number; duplicados: number; bloqueados: number };
+type Totais = { novos: number; atualizados: number; bloqueados: number; devolvidos: number };
 
 const MOTIVO_LEGIVEL: Record<string, string> = {
   vazio: 'sem telefone',
@@ -178,13 +178,14 @@ export function Importador({ atendentes }: { atendentes: Atendente[] }) {
         }
 
         const blocos = emBlocos(analise.validas, BLOCO);
-        const soma: Totais = { importados: 0, duplicados: 0, bloqueados: 0 };
+        const soma: Totais = { novos: 0, atualizados: 0, bloqueados: 0, devolvidos: 0 };
 
         for (let i = 0; i < blocos.length; i++) {
           const r = await importarBloco(lista.id, origem, blocos[i]);
-          soma.importados += r.importados;
-          soma.duplicados += r.duplicados;
+          soma.novos += r.novos;
+          soma.atualizados += r.atualizados;
           soma.bloqueados += r.bloqueados;
+          soma.devolvidos += r.devolvidos;
           setProgresso(Math.round(((i + 1) / blocos.length) * 100));
         }
 
@@ -209,12 +210,29 @@ export function Importador({ atendentes }: { atendentes: Atendente[] }) {
           itens={[
             // "Entraram na base", e não "entraram na fila": a fila é de quem
             // tem a lista marcada, e isso é o passo seguinte desta tela.
-            ['Entraram na base', totais.importados, 'text-ok'],
-            ['Já estavam na base', totais.duplicados, ''],
+            ['Entraram na base', totais.novos, 'text-ok'],
+            ['Vieram para esta lista', totais.atualizados, 'text-ok'],
             ['Bloqueados (pediram saída)', totais.bloqueados, 'text-alerta'],
             ['Números inválidos', analise?.invalidas ?? 0, 'text-suave'],
           ]}
         />
+
+        {/* ⚠️ Esta frase existe porque a versão anterior mentia por omissão:
+            número repetido era descartado em silêncio, a lista nova nascia
+            vazia, e o gestor desativava a antiga achando que tinha substituído.
+            Agora o repetido MUDA de lista — e a tela conta o que foi feito com
+            ele, inclusive quantos voltaram para a fila. */}
+        {totais.atualizados > 0 && (
+          <p className="mt-4 text-sm leading-relaxed text-suave">
+            {totais.atualizados.toLocaleString('pt-BR')} pessoa(s) já estavam na base e
+            passaram para esta lista, com nome e município atualizados. O histórico de
+            atendimento delas foi mantido.
+            {totais.devolvidos > 0
+              ? ` Dessas, ${totais.devolvidos.toLocaleString('pt-BR')} ainda não tinham sido
+                  abordadas e voltaram para a fila.`
+              : ' Nenhuma voltou para a fila: todas já tinham sido abordadas, e o desfecho delas foi preservado.'}
+          </p>
+        )}
 
         {listaId && (
           <QuemAtende listaId={listaId} rotulo={rotulo} atendentes={atendentes} />
@@ -371,9 +389,10 @@ export function Importador({ atendentes }: { atendentes: Atendente[] }) {
           <Numeros
             itens={[
               ['Linhas no arquivo', analise.totalLinhas, ''],
-              ['Vão entrar na fila',
+              ['Pessoas novas',
                analise.validas.length - conferencia.jaExistem - conferencia.bloqueados, 'text-ok'],
-              ['Repetidas', analise.duplicadasNoArquivo + conferencia.jaExistem, ''],
+              ['Já na base — vêm para esta lista', conferencia.jaExistem, 'text-ok'],
+              ['Repetidas dentro do arquivo', analise.duplicadasNoArquivo, ''],
               ['Bloqueadas', conferencia.bloqueados, 'text-alerta'],
               ['Inválidas', analise.invalidas, 'text-suave'],
             ]}

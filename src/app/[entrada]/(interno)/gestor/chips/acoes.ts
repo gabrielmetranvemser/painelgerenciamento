@@ -13,6 +13,20 @@ const Novo = z.object({
   rotulo: z.string().trim().min(2, 'Dê um nome ao número, ex.: Chip A.').max(30),
   papel: z.enum(['ativo', 'reserva']),
   numero: z.string().trim().optional(),
+  /**
+   * ⚠️ O gestor escolhe se o número precisa aquecer, e isso não é detalhe.
+   *
+   * Todo chip nascia `aquecendo` — 5 conversas no primeiro dia. Quando a
+   * operação travou em 28/08, a reação foi cadastrar números NOVOS para
+   * destravar, e cada número novo entrava com o teto mais apertado que existe.
+   * Ficou pior, e ninguém tinha como saber por quê.
+   *
+   * Chip comprado para a campanha precisa da rampa: número novo que fala com 30
+   * desconhecidos no primeiro dia é derrubado. Número que a pessoa já usava no
+   * dia a dia, não — ele já tem histórico com o WhatsApp. Quem sabe a diferença
+   * é quem cadastra.
+   */
+  jaUsado: z.enum(['sim', 'nao']).default('nao'),
 });
 
 export type ResultadoChip = { ok: true } | { ok: false; erro: string };
@@ -25,6 +39,7 @@ export async function criarChip(_anterior: ResultadoChip | null, form: FormData)
     rotulo: form.get('rotulo'),
     papel: form.get('papel') ?? 'ativo',
     numero: form.get('numero') ?? undefined,
+    jaUsado: form.get('ja_usado') ?? 'nao',
   });
   if (!analise.success) return { ok: false, erro: analise.error.issues[0].message };
 
@@ -41,7 +56,7 @@ export async function criarChip(_anterior: ResultadoChip | null, form: FormData)
     rotulo: analise.data.rotulo,
     papel: analise.data.papel,
     numero_e164: e164,
-    status: 'aquecendo',
+    status: analise.data.jaUsado === 'sim' ? 'ativo' : 'aquecendo',
   });
 
   if (error) {

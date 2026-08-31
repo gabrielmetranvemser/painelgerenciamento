@@ -48,3 +48,9 @@ next-env.d.ts
 
 # pacote da extensão: montado na hora pela rota /{chave}/extensao
 /public/*-ext.zip
+
+# ⚠️ Planilhas de contato. NUNCA versionar: são telefones de pessoas reais, e
+# repositório não é lugar de base de dados pessoal — nem em repo privado, porque
+# o histórico do git não se apaga.
+/listas/
+*.csv

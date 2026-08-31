@@ -437,8 +437,10 @@ Ao pedir o próximo contato, a função verifica:
 - `chips.status not in ('pausado','morto')`
 - `now()` dentro de `[hora_inicio, hora_fim]`
 - `today <> config.dia_bloqueado`
-- `chips.enviados_hoje < chips.teto_hoje`
-- último `aberto_wa_em` do chip há mais de `intervalo_seg` segundos
+- `chips.enviados_hoje < chips.teto_hoje` — ⚠️ **avisa, não recusa**, salvo se
+  `config.teto_bloqueia`. Ver a migration `teto_avisa_em_vez_de_travar`
+- último `aberto_wa_em` de uma **abordagem** do chip há mais de `intervalo_seg` segundos
+  (abordagem = etapa `abertura`, e as mensagens do gestor marcadas como tal)
 
 Se qualquer uma falhar, retorna o motivo e o frontend mostra o botão travado com contagem regressiva.
 
@@ -539,6 +541,29 @@ A extensão injeta script no `web.whatsapp.com` e **lê** a tela: detecta envio,
 
 ### Nível 3 — Envio automático
 **Não fazer.** Vira disparo. Sai da posição defensável. E economiza só ~10 min/dia de alguém.
+
+### Atualizar a extensão depois de instalada
+
+⚠️ **Ela não se atualiza sozinha.** É carregada "sem compactação", de uma pasta
+na máquina de cada atendente — o preço de não depender da revisão da Chrome Web
+Store. Toda versão nova é uma troca manual, em cada perfil de cada máquina.
+
+Por isso a versão nova precisa ser DETECTÁVEL do painel:
+
+1. `manifest.version` sobe;
+2. `VERSAO_MINIMA` em `src/lib/whatsapp-aba.ts` sobe junto (há um teste que
+   falha se você esquecer);
+3. quem tem a antiga vê um aviso no alto do painel e um tutorial de troca em
+   "Preparar máquina" — os dois somem sozinhos quando a nova entra.
+
+A detecção separa "extensão velha" de "extensão nenhuma": quem roda dentro do
+painel lateral e mesmo assim não consegue falar com a extensão tem uma anterior.
+Sem essa distinção o aviso apareceria para quem nunca instalou — e o painel
+funciona 100% numa aba comum, então instalar nunca foi obrigatório.
+
+O id da extensão é fixo (vem do `key` do manifest), então a nova substitui a
+antiga no mesmo cartão do `chrome://extensions`. É também por isso que carregar
+as duas ao mesmo tempo dá "já existe uma extensão com este ID".
 
 ### Distribuição da extensão
 - **Chrome Web Store como "não listada"** é o ideal, mas a revisão leva de dias a mais de uma semana → **submeter cedo**. Extensão Nível 0 (só painel próprio) passa fácil; Nível 2 levanta bandeira.

@@ -19,11 +19,32 @@ export type StatusContato =
   // Desfechos que vieram dos testes com os atendentes (28/08/2026).
   | 'ja_apoia' | 'falar_depois' | 'nao_e_a_pessoa' | 'mudou_de_estado' | 'outro';
 
+/**
+ * As etapas da conversa, na ordem em que acontecem.
+ *
+ * ⚠️ A ORDEM AQUI É A ORDEM DO ENUM NO BANCO, e não é decoração: `ordem_da_etapa`
+ * sai de `enum_range`, e o histórico do contato e o editor do gestor ordenam por
+ * ela. Etapa nova entra na posição certa dos DOIS lados, ou as telas discordam.
+ */
 export type EtapaMsg =
+  /** Só o "oi". É a única que espera o intervalo entre abordagens. */
+  | 'abertura'
+  /** O coração: o atendente conta em quem votou e por quê. */
+  | 'minha_escolha'
   | 'permissao' | 'material' | 'saida' | 'quem_passou'
   | 'quer_ajudar' | 'encaminhamento' | 'convite_grupo'
   /** Mensagem que o gestor escreveu. Qual delas vive em `modelos_livres`. */
   | 'livre';
+
+/**
+ * Os passos da abordagem, em ordem. Depois deles a conversa está aberta e o
+ * atendente marca o desfecho.
+ *
+ * Arquivo neutro de propósito (CLAUDE.md §3.1): a tela do atendente e o editor
+ * do gestor importam daqui.
+ */
+export const PASSOS_DA_CONVERSA = ['abertura', 'minha_escolha', 'permissao'] as const;
+export type PassoDaConversa = (typeof PASSOS_DA_CONVERSA)[number];
 
 export type StatusChip = 'aquecendo' | 'ativo' | 'amarelo' | 'pausado' | 'morto';
 export type PapelUsuario = 'gestor' | 'atendente';
@@ -166,6 +187,8 @@ export type EtapaFixa = Exclude<EtapaMsg, 'livre'>;
 
 /** O nome de cada etapa de mensagem, no histórico e no editor do gestor. */
 export const ROTULO_ETAPA: Record<EtapaMsg, string> = {
+  abertura: 'Abertura',
+  minha_escolha: 'Minha escolha',
   permissao: 'Pedido de permissão',
   material: 'Material',
   saida: 'Saída',
@@ -184,6 +207,7 @@ export type Config = {
   hora_fim: number;
   intervalo_seg: number;
   lease_minutos: number;
+  teto_bloqueia: boolean;
   termo_texto: string;
   termo_versao: number;
   /** Quem responde pelos dados (LGPD). É da operação, não de um candidato. */
@@ -234,6 +258,12 @@ export type Lista = {
   total_linhas: number;
   total_importados: number;
   total_duplicados: number;
+  /**
+   * Contatos que já existiam e vieram para esta lista, com os dados
+   * atualizados e o histórico preservado. Antes eram descartados como
+   * "duplicados" — foi assim que uma lista de 719 linhas importou zero.
+   */
+  total_atualizados: number;
   total_bloqueados: number;
   total_invalidos: number;
   ativa: boolean;
@@ -728,6 +758,26 @@ export type TetoDoChip = {
   em_rampa: boolean;
 };
 
+/**
+ * Por que um atendente não vai receber contato hoje.
+ *
+ * Sai de `quem_nao_recebe_contato()`. Existe porque em 28–31/08 a operação
+ * parou e o motivo estava espalhado por quatro telas diferentes — lista
+ * desativada, lista sem atendente, número pausado, chapa faltando.
+ */
+export type DiagnosticoAtendente = {
+  atendente_id: string;
+  primeiro_nome: string;
+  motivo: 'ok' | 'sem_candidato' | 'sem_numero' | 'sem_lista' | 'fila_vazia';
+  na_fila: number;
+  listas_ativas: number;
+  chips_vivos: number;
+  tem_chapa: boolean;
+};
+
+/** Lista ativa, com gente na fila, que ninguém atende. */
+export type ListaSemAtendente = { lista_id: string; rotulo: string; contatos: number };
+
 export type DesempenhoAtendente = {
   atendente_id: string; atendente: string; ativo: boolean;
   hoje: number; total_abordados: number; autorizou: number; pediu_saida: number;
@@ -837,6 +887,17 @@ export type FilaStatus = {
   em_rampa: boolean;
   /** O teto de Gestor → Configuração, sem a rampa por cima. */
   teto_gestor: number;
+  /**
+   * O teto RECUSA a conversa, ou só avisa?
+   *
+   * Padrão é avisar. O teto é risco de operação — no pior caso o WhatsApp
+   * derruba um número e a campanha troca pelo reserva. Quem decide correr esse
+   * risco é quem está com o número na mão, não uma regra que tranca a tela.
+   * Ver a migration `teto_avisa_em_vez_de_travar`.
+   */
+  teto_bloqueia: boolean;
+  /** Já passou do teto de hoje. Com `teto_bloqueia = false`, segue trabalhando. */
+  teto_estourado: boolean;
   enviados_hoje: number;
   restante_hoje: number;
   intervalo_seg: number;
@@ -861,6 +922,16 @@ export type ContatoDaFila = {
   lista_id: string | null;
   lista: string | null;
   claim_expira_em: string;
+  /**
+   * Os passos da abordagem que já SAÍRAM para esta pessoa.
+   *
+   * ⚠️ Vem do servidor e não é calculado na tela. O contato volta para a fila,
+   * é adiado, é escolhido a dedo ou reaberto dias depois por "Meus contatos" —
+   * em todos esses caminhos ele pode já ter recebido a Abertura e não a Minha
+   * escolha. Adivinhar aqui produziria o pior erro deste sistema: mandar de
+   * novo uma mensagem que a pessoa já recebeu.
+   */
+  passos: PassoDaConversa[];
 };
 
 /** Uma lista que o atendente atende, com quanto ainda falta nela. */

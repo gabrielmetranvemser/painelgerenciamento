@@ -3,6 +3,7 @@ import Link from 'next/link';
 import {
   ArrowRight, Blocks, Download, Puzzle, ShieldCheck, TriangleAlert, UserRoundPlus,
 } from 'lucide-react';
+import { TrocarExtensao } from './trocar-extensao';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { usuarioAtual } from '@/lib/sessao';
 import { Aviso, BotaoLink, Cartao, Pilula } from '@/components/ui';
@@ -44,6 +45,12 @@ export default async function PaginaInstalar({
           pronto para atender, com o painel na lateral e o WhatsApp do lado.
         </p>
       </header>
+
+      {/* ⚠️ FICA ANTES DOS CINCO PASSOS, e some para quem já está na versão
+          nova. Quem chega aqui pelo aviso do painel não veio instalar do zero:
+          veio TROCAR, e mandar essa pessoa ler cinco passos que ela já fez
+          semana passada é a forma mais rápida de ela desistir no meio. */}
+      <TrocarExtensao entrada={entrada} />
 
       <ol className="space-y-4">
         <Passo n={1} titulo="Baixar a extensão" icone={<Download size={16} />}>

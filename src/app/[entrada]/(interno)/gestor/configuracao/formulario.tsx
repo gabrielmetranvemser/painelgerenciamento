@@ -139,6 +139,31 @@ function CamposRitmo({ config }: { config: Config }) {
                dica="Depois disso, volta para a fila se ninguém falou com a pessoa." />
       </div>
 
+      {/* ⚠️ O TETO AVISA POR PADRÃO, e este interruptor é o que devolve a
+          escolha a quem responde pela campanha. Ele fica AQUI, colado no campo
+          "Conversas por dia", porque a pergunta que ele responde é justamente
+          "e se o atendente passar?" — em qualquer outro lugar da tela seria
+          uma configuração que ninguém acha. */}
+      <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-borda bg-superficie-alta p-4">
+        <input type="checkbox" name="teto_bloqueia" defaultChecked={config.teto_bloqueia}
+               className="mt-0.5 size-4 shrink-0 accent-[var(--acento)]" />
+        <span className="min-w-0">
+          <span className="block text-[13px] font-semibold">
+            Travar o atendente ao chegar no limite do dia
+          </span>
+          <span className="mt-1 block text-xs leading-relaxed text-suave">
+            Desmarcado (o padrão), o limite vira um <strong>aviso grande e vermelho</strong> na
+            tela do atendente, e ele decide se continua. Marcado, o painel recusa a conversa e não
+            tem como seguir.
+            <br />
+            O teto é risco de operação: no pior caso o WhatsApp derruba um número e a campanha
+            troca pelo reserva. As travas que existem por lei — quem pediu saída, dia da eleição,
+            termo não aceito — continuam recusando de qualquer jeito, e este campo não as
+            alcança.
+          </span>
+        </span>
+      </label>
+
       {(madrugada || semIntervalo) && (
         <Aviso tom="alerta" className="mt-4">
           <p className="font-medium">Isto desliga uma proteção do número.</p>

@@ -69,10 +69,29 @@ export async function pacoteDaExtensao(): Promise<{ nome: string; bytes: Buffer 
 
   for (const caminho of lista) {
     const nome = relative(raiz, caminho).split(sep).join('/');
-    // config.js e o LEIA-ME são gerados/omitidos abaixo.
-    if (nome === 'config.js' || nome === 'LEIA-ME.md') continue;
+    // config.js e o LEIA-ME são gerados/omitidos abaixo; o manifest é reescrito.
+    if (nome === 'config.js' || nome === 'LEIA-ME.md' || nome === 'manifest.json') continue;
     zip.file(nome, await readFile(caminho), { date: DATA_FIXA });
   }
+
+  /**
+   * O manifest sai com o endereço REAL do painel em `externally_connectable`.
+   *
+   * ⚠️ Sem isso a extensão não conversa com o painel, e o reaproveitamento da
+   * aba do WhatsApp não funciona. O Chrome só expõe `chrome.runtime` a uma
+   * página quando alguma extensão instalada declara aquela ORIGEM aqui — e a
+   * origem do painel varia por instalação, então ela não pode estar fixa no
+   * arquivo do repositório.
+   *
+   * A entrada é a ORIGEM com `/*`, e não o caminho do painel: `matches` do
+   * `externally_connectable` não aceita caminho com segmento variável, e o que
+   * está sendo autorizado é "esta página pode pedir para abrir uma aba de
+   * WhatsApp" — nada que dependa do caminho. O segmento secreto continua fora
+   * do arquivo.
+   */
+  const manifest = JSON.parse(await readFile(join(raiz, 'manifest.json'), 'utf8'));
+  manifest.externally_connectable = { matches: [`${new URL(base).origin}/*`] };
+  zip.file('manifest.json', JSON.stringify(manifest, null, 2) + '\n', { date: DATA_FIXA });
 
   zip.file(
     'config.js',
@@ -112,6 +131,13 @@ function instrucoes(painelUrl: string): string {
 4. Clique em "Carregar sem compactação" e escolha a pasta descompactada.
 
 5. Fixe o ícone na barra e clique nele para abrir o painel na lateral.
+
+6. Deixe o WhatsApp Web aberto numa aba. A partir daí, toda conversa que
+   você abrir pelo painel usa ESSA aba — não abre mais uma aba nova a cada
+   contato.
+
+   (A extensão só troca o endereço da aba. Ela não lê, não clica e não envia
+   nada por você: quem revisa e aperta enviar continua sendo você.)
 
 IMPORTANTE: extensão no Chrome é por PERFIL. Se você tem dois perfis
 (um para cada número), repita os passos 2 a 5 em cada um.

@@ -192,6 +192,13 @@ begin
   end if;
 
   -- ── 5. intervalo mínimo entre conversas ──────────────────────────────────
+  -- ⚠️ Desde `conversa_em_quatro_passos`, quem conta para o intervalo é a
+  -- ABERTURA, e só ela: é a única mensagem que chega sem aviso, para quem não
+  -- espera. A permissão de cima é o terceiro passo de uma conversa que a pessoa
+  -- já respondeu duas vezes, e fazer o atendente esperar dois minutos no meio
+  -- dela é o que faz ELE parecer robô.
+  perform public.preparar_mensagem(v_contato, v_chip, 'abertura');
+  perform public.registrar_abertura(v_contato, v_chip, 'abertura', 'oi');
   v_r := public.fila_status(v_chip);
   if v_r->>'motivo' = 'intervalo' and (v_r->>'segundos_espera')::int > 0 then
     raise notice '  ✅ 5. intervalo travou o botão (% s restantes)', v_r->>'segundos_espera';
@@ -203,13 +210,15 @@ begin
    where contato_id = v_contato;
 
   -- ── 6. teto diário ───────────────────────────────────────────────────────
-  update public.config set teto_diario = 1 where id = 1;
+  -- `teto_bloqueia = true` porque é a trava que este teste existe para medir.
+  -- O PADRÃO da operação é avisar, e isso é medido em 15b/15c.
+  update public.config set teto_diario = 1, teto_bloqueia = true where id = 1;
   v_r := public.fila_status(v_chip);
   if v_r->>'motivo' = 'teto_atingido' then
     raise notice '  ✅ 6. teto do dia bloqueou o próximo contato';
   else raise warning '  ❌ 6. teto não bloqueou: %', v_r; v_falhas := v_falhas + 1;
   end if;
-  update public.config set teto_diario = v_cfg_teto where id = 1;
+  update public.config set teto_diario = v_cfg_teto, teto_bloqueia = false where id = 1;
 
   -- ── 7. janela de horário (no fuso de Porto Velho) ────────────────────────
   -- Fecha a janela EM VOLTA da hora atual, seja ela qual for. Os dois ramos
@@ -335,19 +344,46 @@ begin
 
   -- Zera o histórico do chip e deixa UMA abordagem, velha o bastante para o
   -- intervalo não interferir na trava de teto.
+  --
+  -- ⚠️ `abertura`, e não `permissao`: desde `conversa_em_quatro_passos` a
+  -- abordagem que conta para o intervalo é só ela. Com `permissao` aqui, o
+  -- teste 17 media o vazio — havia uma interação, mas nenhuma ABORDAGEM, então
+  -- não havia intervalo para recusar e a trava "passava" sem ser exercitada.
+  -- Para o teto (teste 15) tanto faz: ele conta PESSOAS, seja qual for a etapa.
   delete from public.interacoes where chip_id = v_chip;
   insert into public.interacoes (contato_id, atendente_id, chip_id, etapa,
                                  aberto_wa_em, dia_operacional)
-  values (v_quarto, v_uid, v_chip, 'permissao',
+  values (v_quarto, v_uid, v_chip, 'abertura',
           now() - interval '600 seconds', public.hoje_operacional());
 
   -- ── 15. teto do dia recusa a ABERTURA, não só o próximo contato ──────────
-  update public.config set teto_diario = 1 where id = 1;
+  -- ⚠️ Só quando o gestor manda recusar. Desde `teto_avisa_em_vez_de_travar` o
+  -- padrão é AVISAR, e a decisão de continuar é de quem está com o número na
+  -- mão — o teto é risco de operação, não regra eleitoral.
+  update public.config set teto_diario = 1, teto_bloqueia = true where id = 1;
   v_r := public.registrar_abertura(v_terceiro, v_chip, 'permissao', 'x');
   if v_r->>'motivo' = 'teto_atingido' then
-    raise notice '  ✅ 15. teto do dia recusa abrir conversa com pessoa nova';
+    raise notice '  ✅ 15. com o teto travando, recusa abrir conversa com pessoa nova';
   else raise warning '  ❌ 15. abriu acima do teto: %', v_r; v_falhas := v_falhas + 1;
   end if;
+
+  -- ── 15b. e no modo aviso, o mesmo envio PASSA — com o alerta ligado ───────
+  update public.config set teto_bloqueia = false where id = 1;
+  v_r := public.fila_status(v_chip);
+  if (v_r->>'pode')::boolean and (v_r->>'teto_estourado')::boolean then
+    raise notice '  ✅ 15b. no modo aviso a fila libera e marca que o teto estourou';
+  else raise warning '  ❌ 15b. o aviso não liberou: %', v_r; v_falhas := v_falhas + 1;
+  end if;
+
+  v_r := public.registrar_abertura(v_terceiro, v_chip, 'permissao', 'x');
+  if (v_r->>'ok')::boolean then
+    raise notice '  ✅ 15c. e a conversa acima do teto é registrada, por conta do atendente';
+  else raise warning '  ❌ 15c. continuou recusando: %', v_r; v_falhas := v_falhas + 1;
+  end if;
+
+  -- Desfaz, para o resto do arquivo medir o que ele espera medir.
+  delete from public.interacoes where contato_id = v_terceiro and etapa = 'permissao';
+  update public.config set teto_bloqueia = true where id = 1;
 
   -- ── 16. seguimento na MESMA pessoa não consome teto novo ─────────────────
   -- O teto conta com quantas pessoas o número falou, não quantas mensagens
@@ -361,8 +397,11 @@ begin
   update public.config set teto_diario = v_cfg_teto where id = 1;
 
   -- ── 17. intervalo recusa a ABERTURA de outra abordagem ───────────────────
+  -- "Abordagem" passou a ser só a etapa `abertura`. Continuar uma conversa em
+  -- andamento não espera — abrir uma conversa NOVA, sim.
   update public.interacoes set aberto_wa_em = now() where chip_id = v_chip;
-  v_r := public.registrar_abertura(v_terceiro, v_chip, 'permissao', 'x');
+  perform public.preparar_mensagem(v_terceiro, v_chip, 'abertura');
+  v_r := public.registrar_abertura(v_terceiro, v_chip, 'abertura', 'x');
   if v_r->>'motivo' = 'intervalo' and (v_r->>'segundos_espera')::int > 0 then
     raise notice '  ✅ 17. intervalo recusa abordagem emendada (% s restantes)',
                  v_r->>'segundos_espera';

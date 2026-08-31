@@ -15,11 +15,12 @@ import { guardarChip, useChipSalvo } from '@/components/chip-salvo';
 import { guardarLista, useListaSalva } from '@/components/lista-salva';
 import { ComoAgir } from '@/components/como-agir';
 import { formatarExibicao } from '@/lib/telefone';
+import { abrirNaAbaDoWhatsapp, temExtensao } from '@/lib/whatsapp-aba';
 import {
-  DICA_RESULTADO, RESULTADOS_COM_TEXTO, RESULTADOS_OUTROS, RESULTADOS_RAPIDOS,
-  ROTULO_CARGO, ROTULO_RESULTADO, TEXTO_MOTIVO,
+  DICA_RESULTADO, PASSOS_DA_CONVERSA, RESULTADOS_COM_TEXTO, RESULTADOS_OUTROS,
+  RESULTADOS_RAPIDOS, ROTULO_CARGO, ROTULO_RESULTADO, TEXTO_MOTIVO,
   type Chip, type ContatoDaFila, type EntregaDoContato, type EtapaMsg, type FilaStatus,
-  type ListaDoAtendente, type Municipio, type Resultado,
+  type ListaDoAtendente, type Municipio, type PassoDaConversa, type Resultado,
 } from '@/lib/tipos-banco';
 import {
   carregarEntregas, carregarFilaDoAtendente, carregarMinhasListas, consultarFila,
@@ -28,7 +29,12 @@ import {
   type ContatoNaFila, type MensagemPronta,
 } from './acoes';
 
-type Fase = 'ocioso' | 'permissao' | 'aberta' | 'entrega' | 'seguimento';
+/**
+ * 'abordagem' cobre os TRÊS passos que abrem a conversa — abertura, minha
+ * escolha e permissão. Não são três fases porque a tela é a mesma: o que muda
+ * é qual texto está no cartão e qual botão vem depois. Ver `PASSOS_DA_CONVERSA`.
+ */
+type Fase = 'ocioso' | 'abordagem' | 'aberta' | 'entrega' | 'seguimento';
 
 /**
  * A mensagem que cada resultado carrega (docs/03-OPERACAO.md §4).
@@ -43,7 +49,9 @@ const SEGUIMENTO: Partial<Record<Resultado, EtapaMsg>> = {
 };
 
 const TITULO_ETAPA: Partial<Record<EtapaMsg, string>> = {
-  permissao: 'Primeira mensagem — só o pedido de permissão',
+  abertura: 'Passo 1 de 3 — só o oi, e espere responder',
+  minha_escolha: 'Passo 2 de 3 — conte a sua escolha',
+  permissao: 'Passo 3 de 3 — peça permissão para mandar o material',
   saida: 'Confirme que o contato saiu da lista',
   quer_ajudar: 'Resposta para quem quer ajudar',
   encaminhamento: 'Resposta para quem pediu algo que não podemos prometer',
@@ -54,12 +62,28 @@ const JANELA_WA = 'whatsapp-atendimento';
 
 /**
  * As etapas em que o intervalo vale — as mesmas de `etapa_de_abordagem()` no
- * banco. As outras são resposta a quem acabou de escrever, e fazer o atendente
- * esperar para responder é o que faz ELE parecer robô.
+ * banco. Hoje é só a ABERTURA: ela é a única mensagem que chega sem aviso, para
+ * quem não espera. Tudo depois dela é conversa com quem já respondeu, e fazer o
+ * atendente esperar dois minutos para continuar falando com a mesma pessoa é o
+ * que faz ELE parecer robô.
  *
  * Isto aqui é espelho da trava, não a trava: quem decide é o servidor.
  */
-const ETAPAS_DE_ABORDAGEM: EtapaMsg[] = ['permissao', 'material', 'convite_grupo'];
+const ETAPAS_DE_ABORDAGEM: EtapaMsg[] = ['abertura'];
+
+/**
+ * O próximo passo da abordagem para esta pessoa, ou `null` quando os três já
+ * saíram e a conversa está aberta.
+ *
+ * ⚠️ Lê `contato.passos`, que vem do SERVIDOR. Não guarda estado próprio de
+ * propósito: o mesmo contato pode voltar pela fila, ser escolhido a dedo ou ser
+ * reaberto por "Meus contatos" dias depois, e em qualquer um desses caminhos a
+ * tela nasce sem memória do que já foi mandado. Repetir uma mensagem que a
+ * pessoa já recebeu é o erro mais caro que esta tela pode cometer.
+ */
+function proximoPasso(passos: readonly PassoDaConversa[]): PassoDaConversa | null {
+  return PASSOS_DA_CONVERSA.find((e) => !passos.includes(e)) ?? null;
+}
 
 export function Atendimento({
   primeiroNome, chips, municipios, filaInicial, aguardandoInicial, listasIniciais,
@@ -178,6 +202,33 @@ export function Atendimento({
     return () => clearInterval(t);
   }, [fase, atualizarFila]);
 
+  /**
+   * Monta o próximo passo da abordagem e coloca o cartão na tela.
+   *
+   * Existe como função porque três caminhos chegam ao mesmo lugar — buscar o
+   * próximo, escolher da fila e seguir depois de um envio — e três cópias disto
+   * sairiam de sincronia no primeiro ajuste da sequência.
+   *
+   * Quando não falta passo nenhum, a conversa já está aberta: a tela vai direto
+   * para o desfecho, sem oferecer uma mensagem que a pessoa já recebeu.
+   */
+  async function abrirPassoDaConversa(
+    alvo: ContatoDaFila,
+    aoFalhar: (motivo: string) => void,
+  ) {
+    const passo = proximoPasso(alvo.passos);
+    if (!passo) {
+      setMensagem(null);
+      setFase('aberta');
+      return;
+    }
+    const m = await prepararMensagem(alvo.id, chipId, passo);
+    if (!m.ok) { aoFalhar(m.motivo); return; }
+    setMensagem(m);
+    setFase('abordagem');
+    setTimeout(() => botaoAbrir.current?.focus(), 60);
+  }
+
   function buscarProximo() {
     // `setErro` fica DENTRO da transição para esta função poder ser chamada de
     // um efeito (a chegada pelo `?novo=`) sem disparar renderização em cascata.
@@ -195,15 +246,26 @@ export function Atendimento({
       setEncaminhamento('');
       setEntregas([]);
 
-      const m = await prepararMensagem(r.contato.id, chipId, 'permissao');
-      if (!m.ok) {
-        setErro(`Não consegui montar a mensagem (${m.motivo}). Fale com o gestor.`);
-        return;
-      }
-      setMensagem(m);
-      setFase('permissao');
-      setTimeout(() => botaoAbrir.current?.focus(), 60);
+      await abrirPassoDaConversa(r.contato, (msg) =>
+        setErro(`Não consegui montar a mensagem (${msg}). Fale com o gestor.`));
     });
+  }
+
+  /**
+   * Leva o endereço da conversa para o WhatsApp, na melhor via disponível.
+   *
+   * A extensão é tentada primeiro porque é a única que enxerga a aba que o
+   * atendente abriu sozinho. Se ela não estiver instalada, ou recusar, cai no
+   * `window.open` nomeado — que é o que sempre funcionou.
+   */
+  async function levarParaOWhatsapp(
+    url: string,
+    janela: Window | null,
+    pelaExtensao: boolean,
+  ) {
+    if (pelaExtensao && (await abrirNaAbaDoWhatsapp(url))) return;
+    if (janela && !janela.closed) { janela.location.href = url; return; }
+    window.open(url, JANELA_WA);
   }
 
   /**
@@ -222,7 +284,11 @@ export function Atendimento({
    */
   function abrirConversa() {
     if (!contato || !mensagem) return;
-    const janela = window.open('', JANELA_WA);
+    // Com a extensão instalada, quem acha a aba do WhatsApp é ela — inclusive a
+    // que o atendente abriu por conta própria, que o `window.open` nomeado não
+    // alcança. Sem extensão, o caminho de sempre. Ver `src/lib/whatsapp-aba.ts`.
+    const pelaExtensao = temExtensao();
+    const janela = pelaExtensao ? null : window.open('', JANELA_WA);
     setErro(null);
     const enviada = mensagem;
     iniciar(async () => {
@@ -240,8 +306,7 @@ export function Atendimento({
         await atualizarFila();
         return;
       }
-      if (janela && !janela.closed) janela.location.href = enviada.urlWhatsApp;
-      else window.open(enviada.urlWhatsApp, JANELA_WA);
+      await levarParaOWhatsapp(enviada.urlWhatsApp, janela, pelaExtensao);
       seguirDepoisDoEnvio(enviada, r.fila);
     });
   }
@@ -305,7 +370,33 @@ export function Atendimento({
     setFila(filaNova);
     setEspera(filaNova.segundos_espera);
 
-    if (enviada.etapa === 'permissao') { setFase('aberta'); return; }
+    // Avança na sequência da abordagem. `contato.passos` vem do servidor e
+    // ainda não sabe do envio que acabou de acontecer, então some a etapa
+    // enviada aqui — senão a tela ofereceria o mesmo passo de novo.
+    if ((PASSOS_DA_CONVERSA as readonly string[]).includes(enviada.etapa)) {
+      const feitos = [...(contato?.passos ?? []), enviada.etapa as PassoDaConversa];
+      setContato((c) => (c ? { ...c, passos: feitos } : c));
+
+      const proximo = proximoPasso(feitos);
+      if (!proximo) { setMensagem(null); setFase('aberta'); return; }
+
+      iniciar(async () => {
+        const m = await prepararMensagem(contato!.id, chipId, proximo);
+        if (!m.ok) {
+          // A conversa JÁ foi aberta; o que falhou foi o passo seguinte. Cair
+          // para o desfecho é melhor que travar o atendente com a pessoa
+          // esperando do outro lado.
+          setErro(MOTIVO_ENVIO[m.motivo] ?? `Não consegui montar o passo seguinte (${m.motivo}).`);
+          setMensagem(null);
+          setFase('aberta');
+          return;
+        }
+        setMensagem(m);
+        setFase('abordagem');
+        setTimeout(() => botaoAbrir.current?.focus(), 60);
+      });
+      return;
+    }
 
     // Material de um candidato: risca aquele da lista e volta para ela, para
     // o atendente ver o que ainda falta sem perder o contexto.
@@ -330,7 +421,13 @@ export function Atendimento({
    * um "2" apertado sem querer custava caro demais para ser um clique só.
    */
   function marcar(resultado: Resultado) {
-    if (!contato || fase !== 'aberta') return;
+    // ⚠️ Antes exigia `fase === 'aberta'`, ou seja, os três passos completos.
+    // Com quatro passos isso trancaria o caso mais comum de todos: a pessoa
+    // responde "não quero" logo no "oi". O servidor já garante o que importa —
+    // `registrar_resultado` recusa desfecho sem nenhuma mensagem enviada.
+    if (!contato) return;
+    if (fase !== 'aberta' && fase !== 'abordagem') return;
+    if (fase === 'abordagem' && contato.passos.length === 0) return;
     if (RESULTADOS_COM_TEXTO.includes(resultado) && !encaminhamento.trim()) {
       setErro(resultado === 'encaminhado'
         ? 'Escreva em uma linha o que a pessoa pediu, para a equipe saber o que encaminhar.'
@@ -413,14 +510,8 @@ export function Atendimento({
       setEncaminhamento('');
       setEntregas([]);
 
-      const m = await prepararMensagem(r.contato.id, chipId, 'permissao');
-      if (!m.ok) {
-        setErro(MOTIVO_ENVIO[m.motivo] ?? `Não consegui montar a mensagem (${m.motivo}). Fale com o gestor.`);
-        return;
-      }
-      setMensagem(m);
-      setFase('permissao');
-      setTimeout(() => botaoAbrir.current?.focus(), 60);
+      await abrirPassoDaConversa(r.contato, (msg) =>
+        setErro(MOTIVO_ENVIO[msg] ?? `Não consegui montar a mensagem (${msg}). Fale com o gestor.`));
     });
   }
 
@@ -538,6 +629,28 @@ export function Atendimento({
 
         {erro && <Aviso tom="erro" icone={<AlertTriangle size={16} />}>{erro}</Aviso>}
         {aviso && <Aviso tom="info">{aviso}</Aviso>}
+
+        {/* ⚠️ O TETO PASSOU A AVISAR EM VEZ DE TRAVAR (pedido de quem opera,
+            31/08). Então este aviso é a única coisa que resta entre o atendente
+            e um número derrubado — ele precisa ser grande, ficar na tela o
+            tempo todo e dizer o que acontece, não só que "passou do limite".
+            Cor de perigo, e não de alerta: âmbar é orientação, vermelho é
+            "isto custa caro". */}
+        {fila?.teto_estourado && !fila.teto_bloqueia && (
+          <Aviso tom="erro" icone={<Siren size={16} />}>
+            <p className="font-medium">
+              Você já fez {fila.enviados_hoje} conversas hoje — o combinado eram{' '}
+              {fila.teto_hoje}.
+            </p>
+            <p className="mt-1 text-sm leading-relaxed">
+              Daqui pra frente é por sua conta. Número que fala com muita gente nova no mesmo dia
+              é o padrão que o WhatsApp derruba
+              {fila.em_rampa && ', e o seu ainda está aquecendo'} — e quando cai, as conversas
+              abertas caem junto e não voltam. O melhor a fazer é parar por aqui e continuar
+              amanhã.
+            </p>
+          </Aviso>
+        )}
 
         {chip?.status === 'amarelo' && (
           <Aviso tom="alerta" icone={<Siren size={16} />}>
@@ -672,8 +785,14 @@ function Barra({
             <p className="font-display text-lg font-semibold leading-tight tracking-tight">
               Olá, {primeiroNome}
             </p>
-            <p className="text-xs text-suave">
-              {fila ? `${fila.restante_hoje} de ${teto} conversas restantes hoje` : '—'}
+            <p className={cx('text-xs', fila?.teto_estourado ? 'text-perigo' : 'text-suave')}>
+              {!fila
+                ? '—'
+                : fila.teto_estourado
+                  // Dizer "restam 0" e continuar deixando trabalhar seria a tela
+                  // discordando de si mesma.
+                  ? `${fila.enviados_hoje} conversas hoje — ${teto} era o combinado`
+                  : `${fila.restante_hoje} de ${teto} conversas restantes hoje`}
             </p>
           </div>
         </div>
@@ -952,7 +1071,12 @@ function CartaoAtendimento({
         </>
       )}
 
-      {fase === 'aberta' && (
+      {/* ⚠️ Os desfechos aparecem assim que a PRIMEIRA mensagem sai, e não só
+          no fim dos três passos. O "não quero" mais comum chega logo depois do
+          "oi": travar o desfecho até a permissão obrigaria o atendente a mandar
+          mais duas mensagens para quem acabou de dizer que não quer — que é
+          exatamente o que a lei chama de insistência. */}
+      {(fase === 'aberta' || (fase === 'abordagem' && contato.passos.length > 0)) && (
         <div className="space-y-4 border-t border-borda px-6 py-5">
           {/* A cidade fica AQUI, e não só na entrega. Ela costuma aparecer no
               meio da conversa ("sou de Ji-Paraná"), muito antes de se saber o
@@ -1012,7 +1136,13 @@ function CartaoAtendimento({
           outra pessoa pode pegar. Depois de aberta é outra coisa, e por isso o
           botão grande lá em cima: ali a conversa já existe e ninguém mais pode
           reabordar quem já foi abordado. */}
-      {fase === 'permissao' && (
+      {/* Devolver à fila só faz sentido ENQUANTO nada saiu. Depois da primeira
+          mensagem a pessoa já foi abordada, e o caminho certo é o botão grande
+          acima — que deixa a conversa aberta em "Meus contatos" em vez de
+          oferecê-la a outro atendente, com outro número. O servidor faz essa
+          distinção sozinho (`pular_contato`); a tela só não pode prometer o
+          que ele não vai fazer. */}
+      {fase === 'abordagem' && contato.passos.length === 0 && (
         <div className="border-t border-borda px-6 py-4 text-center">
           <button type="button" onClick={aoPular} disabled={ocupado}
                   className="inline-flex items-center gap-1.5 text-xs text-suave transition-colors hover:text-texto disabled:opacity-45">

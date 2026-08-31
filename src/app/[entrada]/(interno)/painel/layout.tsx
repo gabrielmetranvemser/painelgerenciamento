@@ -5,6 +5,7 @@ import { rotas } from '@/lib/links-internos';
 import { sair } from '@/app/[entrada]/(interno)/entrar/acoes';
 import { Avatar } from '@/components/ui';
 import { BarraNav } from '@/components/barra-nav';
+import { AvisoExtensaoAntiga } from '@/components/aviso-extensao-antiga';
 import { NovoContato } from '@/components/novo-contato';
 import type { Chip, Municipio } from '@/lib/tipos-banco';
 
@@ -63,6 +64,11 @@ export default async function LayoutPainel({
           agir", que é o bloco consultado no meio da conversa. Some ainda a
           barra de socorro da extensão, que também é fixa no rodapé. */}
       <main className="surgir mx-auto w-full max-w-6xl flex-1 px-4 pb-28 pt-6 sm:px-6">
+        {/* No layout, e não numa tela só: quem está com a versão antiga precisa
+            ver isso em qualquer lugar do painel, porque o problema que ela
+            causa (aba nova a cada conversa) acontece em qualquer lugar do
+            painel. */}
+        <AvisoExtensaoAntiga rotaInstalar={r.instalar} />
         {children}
       </main>
 
