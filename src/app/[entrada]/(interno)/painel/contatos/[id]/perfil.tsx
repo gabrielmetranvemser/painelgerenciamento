@@ -17,10 +17,13 @@ import { TAMANHOS_CAMISETA, type EnderecoEstruturado } from '@/lib/cep';
 import { carregarItensKit } from '@/lib/acoes-itens-kit';
 import { pedeTamanho, type ItemKit } from '@/lib/itens-kit';
 import { formatarExibicao } from '@/lib/telefone';
+import { abrirNaAbaDoWhatsapp, temExtensao } from '@/lib/whatsapp-aba';
 import {
   DICA_RESULTADO, RESULTADOS_COM_TEXTO, RESULTADOS_OUTROS, RESULTADOS_RAPIDOS,
   COR_STATUS_CONTATO, ROTULO_CARGO, ROTULO_ETAPA, ROTULO_RESULTADO, ROTULO_STATUS_CONTATO,
-  type Chip, type Contato, type EntregaDoContato, type EtapaMsg, type Municipio, type Resultado,
+  PASSOS_DA_CONVERSA,
+  type Chip, type Contato, type EntregaDoContato, type EtapaMsg, type Municipio,
+  type PassoDaConversa, type Resultado,
 } from '@/lib/tipos-banco';
 import {
   carregarCorrecoes, carregarEntregas, corrigirContato, definirMunicipio, prepararMensagem,
@@ -37,6 +40,25 @@ const JANELA_WA = 'whatsapp-atendimento';
  * Material e convite ao canal NÃO estão aqui: são de um candidato específico e
  * ganham a própria lista, montada a partir de quem foi declarado a esta pessoa.
  */
+/**
+ * Os passos da abordagem que ainda faltam para esta pessoa.
+ *
+ * ⚠️ Precisa existir AQUI, e não só na tela de atender. Com quatro passos, o
+ * caminho mais comum passou a ser: manda o "oi", a pessoa não responde na hora,
+ * o contato vai para "Meus contatos" — e é por esta tela que a conversa
+ * continua, dias depois. Sem isto, quem recebeu só a Abertura nunca receberia o
+ * resto, e a conversa morreria no "oi".
+ *
+ * Sai do HISTÓRICO, que é o que o servidor gravou. A tela não guarda memória
+ * própria de qual mensagem já saiu: repetir uma que a pessoa já recebeu é o
+ * erro mais caro que ela pode cometer.
+ */
+const ROTULO_PASSO: Record<PassoDaConversa, { rotulo: string; dica: string }> = {
+  abertura: { rotulo: '1. Abertura', dica: 'só o oi — e espere responder' },
+  minha_escolha: { rotulo: '2. Minha escolha', dica: 'conte em quem você votou e por quê' },
+  permissao: { rotulo: '3. Permissão', dica: 'peça para mandar o material' },
+};
+
 const MENSAGENS: { etapa: EtapaMsg; rotulo: string; dica: string }[] = [
   { etapa: 'quem_passou', rotulo: 'Quem passou meu número', dica: 'quando ela pergunta de onde veio' },
   { etapa: 'quer_ajudar', rotulo: 'Quer ajudar', dica: 'quando se oferece para ajudar' },
@@ -108,6 +130,13 @@ export function Perfil({
   const chipId = contato.chip_id ?? chips[0]?.id ?? '';
   const apagado = contato.anonimizado_em !== null;
 
+  // Os passos da abordagem que ainda faltam. `null` de histórico ainda
+  // carregando NÃO vira "faltam todos": ofereceria remandar o que já saiu.
+  const enviadas = historico?.ok ? historico.interacoes.map((i) => i.etapa) : null;
+  const passosQueFaltam = enviadas
+    ? PASSOS_DA_CONVERSA.filter((e) => !enviadas.includes(e))
+    : [];
+
   /**
    * Recarrega tudo que a tela mostra sobre este contato.
    *
@@ -142,7 +171,10 @@ export function Perfil({
    */
   function abrir() {
     if (!mensagem) return;
-    const janela = window.open('', JANELA_WA);
+    // Com a extensão, quem acha a aba do WhatsApp é ela — inclusive a que o
+    // atendente abriu sozinho. Ver `src/lib/whatsapp-aba.ts`.
+    const pelaExtensao = temExtensao();
+    const janela = pelaExtensao ? null : window.open('', JANELA_WA);
     setErro(null); setOk(null);
     const enviada = mensagem;
     iniciar(async () => {
@@ -155,8 +187,10 @@ export function Perfil({
         setErro(MOTIVO[r.motivo] ?? `O sistema não registrou o envio: ${r.motivo}`);
         return;
       }
-      if (janela && !janela.closed) janela.location.href = enviada.urlWhatsApp;
-      else window.open(enviada.urlWhatsApp, JANELA_WA);
+      if (!pelaExtensao || !(await abrirNaAbaDoWhatsapp(enviada.urlWhatsApp))) {
+        if (janela && !janela.closed) janela.location.href = enviada.urlWhatsApp;
+        else window.open(enviada.urlWhatsApp, JANELA_WA);
+      }
       setOk('Envio registrado.');
       recarregar();
     });
@@ -287,6 +321,29 @@ export function Perfil({
             <p className="mb-3 text-xs text-suave">
               Valem para a conversa inteira, sem candidato. O texto sai pronto.
             </p>
+            {passosQueFaltam.length > 0 && (
+              <div className="mb-4 rounded-2xl border border-acento/30 bg-acento/5 p-3.5">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-acento">
+                  A conversa parou no meio
+                </p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {passosQueFaltam.map((e) => (
+                    <button key={e} type="button" disabled={ocupado}
+                            onClick={() => preparar(e)}
+                            className={cx(
+                              'rounded-xl border p-3 text-left transition-colors disabled:opacity-50',
+                              mensagem?.etapa === e && !mensagem.candidato
+                                ? 'border-acento/50 bg-acento/10'
+                                : 'border-borda hover:border-borda-forte hover:bg-superficie-alta',
+                            )}>
+                      <span className="block text-sm font-medium">{ROTULO_PASSO[e].rotulo}</span>
+                      <span className="block text-xs text-suave">{ROTULO_PASSO[e].dica}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {MENSAGENS.map((m) => (
                 <button key={m.etapa} type="button" disabled={ocupado}

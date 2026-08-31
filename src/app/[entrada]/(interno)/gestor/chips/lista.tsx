@@ -46,6 +46,11 @@ export function GerenciarChips({
             </Selecao>
             <Campo rotulo="Número (opcional)" name="numero" placeholder="(69) 99999-0000"
                    dica="Só para o relatório. O sistema não acessa o WhatsApp." />
+            <Selecao rotulo="Este número já era usado no dia a dia?" name="ja_usado" defaultValue="nao"
+                     dica="Chip comprado para a campanha precisa dos primeiros dias devagar, senão o WhatsApp derruba. Número que a pessoa já usava não precisa.">
+              <option value="nao">Não — é novo, começa aquecendo</option>
+              <option value="sim">Sim — já pode fazer o limite cheio</option>
+            </Selecao>
             <Botao type="submit" disabled={ocupado}>Cadastrar</Botao>
           </form>
         </Cartao>

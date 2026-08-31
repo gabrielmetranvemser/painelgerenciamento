@@ -166,12 +166,20 @@ begin
   else raise warning '  ❌ 9. o texto vazou entre mensagens'; v_falhas := v_falhas + 1;
   end if;
 
-  -- `e_abordagem` decide se conta o intervalo.
+  -- `e_abordagem` decide se conta o intervalo, e nas mensagens do gestor quem
+  -- decide é ele — a mensagem dele tanto pode abrir uma conversa quanto
+  -- responder uma que já existe.
+  --
+  -- ⚠️ Nas etapas FIXAS, desde `conversa_em_quatro_passos`, abordagem é só a
+  -- `abertura`. A permissão virou o terceiro passo de uma conversa que a pessoa
+  -- já respondeu duas vezes; esperar o intervalo ali faria o atendente sumir no
+  -- meio do próprio diálogo.
   if public.interacao_de_abordagem('livre', v_m1) = false
      and public.interacao_de_abordagem('livre', v_m2) = true
-     and public.interacao_de_abordagem('permissao', null) = true
+     and public.interacao_de_abordagem('abertura', null) = true
+     and public.interacao_de_abordagem('permissao', null) = false
      and public.interacao_de_abordagem('saida', null) = false then
-    raise notice '  ✅ 10. o intervalo pergunta ao modelo, e a etapa fixa continua igual';
+    raise notice '  ✅ 10. o intervalo pergunta ao modelo, e nas fixas só a abertura conta';
   else raise warning '  ❌ 10. abordagem errada'; v_falhas := v_falhas + 1;
   end if;
 

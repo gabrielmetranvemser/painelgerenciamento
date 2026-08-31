@@ -438,7 +438,8 @@ Ao pedir o próximo contato, a função verifica:
 - `now()` dentro de `[hora_inicio, hora_fim]`
 - `today <> config.dia_bloqueado`
 - `chips.enviados_hoje < chips.teto_hoje`
-- último `aberto_wa_em` do chip há mais de `intervalo_seg` segundos
+- último `aberto_wa_em` de uma **abordagem** do chip há mais de `intervalo_seg` segundos
+  (abordagem = etapa `abertura`, e as mensagens do gestor marcadas como tal)
 
 Se qualquer uma falhar, retorna o motivo e o frontend mostra o botão travado com contagem regressiva.
 

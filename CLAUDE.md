@@ -44,6 +44,8 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `pegar_proximo_contato` | dois atendentes pegam o mesmo contato, ou um contato cai para quem não atende aquela lista |
 | `rampa_do_chip` | a rampa só vale enquanto `chips.status = 'aquecendo'`. Aplicá-la sempre faz o teto do gestor virar letra morta (`least(rampa, config)`), e ele mexe no campo achando que não salva |
 | `preparar_mensagem` | a variação congela por contato. Congelar cedo demais faz texto desativado continuar saindo; congelar de menos reescreve o histórico do que já foi enviado |
+| `etapa_de_abordagem` | quem espera o intervalo. Hoje é só `abertura`; incluir os passos seguintes faz o atendente sumir no meio da própria conversa |
+| `importar_contatos` | reimportar MOVE a pessoa e preserva o histórico. Quem pediu saída, quem está na mão de alguém e quem teve o telefone apagado não podem ser tocados |
 
 ### 2. Toda trava é validada no SERVIDOR
 
@@ -73,6 +75,24 @@ aparece quando alguém abre a página.
 Constante, função auxiliar e tabela de dados moram em arquivo neutro (ex.:
 `gestor/contatos/recortes.ts`), que os dois lados importam. Tipo pode ficar em
 qualquer lugar — tipo some na compilação. `npm run fronteira` confere.
+
+### 3.2 A conversa tem quatro passos, e só o primeiro espera
+
+`abertura` → `minha_escolha` → `permissao` → `material`. Quem chega sem aviso é
+a **abertura**, e é a única etapa que respeita o intervalo entre abordagens
+(`etapa_de_abordagem`). O resto é conversa com quem já respondeu.
+
+O teto diário não muda: conta **pessoas distintas por número por dia**, não
+mensagens. Falar com alguém em quatro passos gasta uma conversa, não quatro.
+
+A `permissao` continua sendo onde o consentimento CONGELA — é no envio dela que
+`contato_candidato` grava quais candidatos foram declarados àquela pessoa. Por
+isso ela é a única dos três que exige `{{candidatos}}` e `{{origem}}`.
+
+Qual passo falta para cada contato sai de `contato_json(...)->'passos'`, no
+servidor. A tela nunca adivinha: o mesmo contato volta pela fila, é escolhido a
+dedo ou é reaberto por "Meus contatos" dias depois, e repetir uma mensagem que a
+pessoa já recebeu é o erro mais caro desta tela.
 
 ### 4. Nunca gravar preferência de voto
 

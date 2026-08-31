@@ -3,15 +3,33 @@
   "name": "Painel de Atendimento",
   "short_name": "Painel",
   "version": "1.0.0",
-  "description": "Abre o painel de atendimento na lateral do navegador, ao lado do WhatsApp Web.",
+  "description": "Abre o painel de atendimento na lateral do navegador e reaproveita a aba do WhatsApp Web em vez de abrir uma nova.",
   "default_locale": "pt_BR",
-
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAibrNw1L4NPXErYaQGxRxZzUwpZGAJfGNXAVK1UCav4dtUebugK6lhCFjaBEXBOXGRVzQodfpuALttMeEbE9LwdidGiS91KTtFRh9HQHCZOwQKXO/Ppbm2X93NagLtO5D0zptUd7EQ4VS1iA4WCc6lAscnfIaFpTRksJELf69LE7K2aNDLRdDXgAhJB1zMm/GIrmrEw8Cfr60cpWPGvTc85hNrOh02bzsP7hF0nkbck4FYAwWLBrCgdJaNJHidIKdR09+7LD5UZSkAfdztjqXfI5usUX+veRj/p0fZYdjuqwHlH6OW9X9PQHrPtSmIgz/cF867A9dYQsvHsRH4Q6yPQIDAQAB",
-
-  "permissions": ["sidePanel"],
-
-  "side_panel": { "default_path": "sidepanel.html" },
-  "background": { "service_worker": "background.js" },
-  "action": { "default_title": "Abrir o painel na lateral" },
-  "icons": { "16": "icone16.png", "48": "icone48.png", "128": "icone128.png" }
+  "permissions": [
+    "sidePanel",
+    "tabs"
+  ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Abrir o painel na lateral"
+  },
+  "icons": {
+    "16": "icone16.png",
+    "48": "icone48.png",
+    "128": "icone128.png"
+  },
+  "host_permissions": [
+    "https://web.whatsapp.com/*"
+  ],
+  "externally_connectable": {
+    "matches": [
+      "https://exemplo.invalid/*"
+    ]
+  }
 }

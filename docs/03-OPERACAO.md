@@ -98,6 +98,21 @@ Um celular pode ter **duas contas** (dois chips ou eSIM), então ninguém precis
 
 ## 4. O dia do atendente (passo a passo)
 
+> **A conversa tem quatro passos, e o painel conduz um de cada vez:**
+> **1. Abertura** — só o "oi", e espera responder. É a única mensagem que
+> respeita o intervalo entre abordagens.
+> **2. Minha escolha** — o atendente conta, na primeira pessoa, em quem decidiu
+> votar e por quê. O motivo específico é dele; o roteiro da lateral ensina como
+> escrever.
+> **3. Permissão** — declara a chapa inteira e pede para mandar o material. É
+> aqui que o consentimento fica gravado.
+> **4. Material** — só depois do "pode".
+>
+> Os desfechos ficam disponíveis desde o primeiro passo: quem responde "não
+> quero" logo no "oi" é marcado ali mesmo, sem receber mais duas mensagens.
+> Se a conversa parar no meio, ela continua por **Meus contatos**, que mostra
+> quais passos faltam.
+
 1. Abre o atalho do Chip A. Painel e WhatsApp Web já carregam.
 2. Login. Na primeira vez, lê e aceita o termo (fica gravado com data/hora). Sem aceite, não entra na fila.
 3. Painel: *"Bom dia, Lucas. Hoje você tem 30 conversas. Comece pelos 6 cadastros novos do site."*

@@ -7,7 +7,9 @@ import {
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { Avatar, Cartao, Farol, Metrica, Titulo, Vazio } from '@/components/ui';
 import { rotas } from '@/lib/links-internos';
-import type { Alerta, DesempenhoAtendente, Resumo, SaudeChip } from '@/lib/tipos-banco';
+import type {
+  Alerta, DesempenhoAtendente, DiagnosticoAtendente, ListaSemAtendente, Resumo, SaudeChip,
+} from '@/lib/tipos-banco';
 
 export const metadata: Metadata = { title: 'Visão geral' };
 export const dynamic = 'force-dynamic';
@@ -17,24 +19,32 @@ export default async function PainelGestor({ params }: { params: Promise<{ entra
   const rt = rotas(entrada);
   const supabase = await criarClienteServidor();
 
-  const [{ data: resumo }, { data: chips }, { data: atendentes }, { data: alertas }] =
-    await Promise.all([
+  const [
+    { data: resumo }, { data: chips }, { data: atendentes }, { data: alertas },
+    { data: diagnostico }, { data: orfas },
+  ] = await Promise.all([
       supabase.from('v_resumo').select('*').single(),
       supabase.from('v_saude_chip').select('*').order('rotulo'),
       supabase.from('v_desempenho_atendente').select('*').order('hoje', { ascending: false }),
       supabase.from('alertas').select('*').is('resolvido_em', null)
         .order('criado_em', { ascending: false }).limit(8),
+      supabase.rpc('quem_nao_recebe_contato'),
+      supabase.rpc('listas_sem_atendente'),
     ]);
 
   const r = resumo as Resumo | null;
   const listaChips = (chips ?? []) as SaudeChip[];
   const vermelhos = listaChips.filter((c) => c.farol === 'vermelho');
+  const travados = ((diagnostico ?? []) as DiagnosticoAtendente[]).filter((d) => d.motivo !== 'ok');
+  const listasOrfas = (orfas ?? []) as ListaSemAtendente[];
 
   return (
     <>
       <Titulo sub="Como a operação está agora. Os números atualizam a cada carga da página.">
         Visão geral
       </Titulo>
+
+      <QuemNaoRecebe travados={travados} orfas={listasOrfas} rt={rt} />
 
       {(r?.juridicos_abertos ?? 0) > 0 && (
         <Link href={rt.gestorSuporte} className="mb-6 block">
@@ -218,4 +228,102 @@ function rotuloAlerta(tipo: string) {
     bloqueio_removido_por_optin: 'Bloqueio removido: a pessoa se cadastrou de novo, com aceite',
     saida_corrigida: 'Um "Pediu saída" foi corrigido e o bloqueio removido',
   }[tipo] ?? tipo;
+}
+
+/* ── Quem não vai receber contato hoje ───────────────────────────────────── */
+
+const MOTIVO_TRAVADO: Record<
+  Exclude<DiagnosticoAtendente['motivo'], 'ok'>,
+  { texto: string; comoResolver: string }
+> = {
+  sem_candidato: {
+    texto: 'sem candidato atribuído',
+    comoResolver: 'monte a chapa dele em Atendentes',
+  },
+  sem_numero: {
+    texto: 'sem número disponível',
+    comoResolver: 'o chip está pausado ou morto — veja em Números',
+  },
+  sem_lista: {
+    texto: 'sem lista atribuída',
+    comoResolver: 'marque as listas dele em Listas',
+  },
+  fila_vazia: {
+    texto: 'lista sem ninguém esperando',
+    comoResolver: 'a lista dele acabou, ou os contatos ficaram noutra lista',
+  },
+};
+
+/**
+ * ⚠️ ESTE BLOCO É A LIÇÃO DE 28 A 31/08.
+ *
+ * A operação parou por três dias e o motivo estava espalhado por quatro telas:
+ * uma lista desativada, uma lista ativa sem atendente, um número pausado e uma
+ * chapa faltando. O gestor via "o atendente diz que não vem contato" e não
+ * tinha onde olhar — a Visão geral mostrava 14 mil contatos na base e nenhuma
+ * pista de que metade deles estava numa lista que ninguém atendia.
+ *
+ * Fica no ALTO da tela, antes dos números bonitos, porque não adianta saber a
+ * taxa de clique de uma operação que está parada.
+ */
+function QuemNaoRecebe({
+  travados, orfas, rt,
+}: {
+  travados: DiagnosticoAtendente[];
+  orfas: ListaSemAtendente[];
+  rt: ReturnType<typeof rotas>;
+}) {
+  if (travados.length === 0 && orfas.length === 0) return null;
+
+  return (
+    <Cartao className="mb-6 border-alerta/40 bg-alerta/[0.06] p-5">
+      <div className="flex gap-3">
+        <UserX size={18} className="mt-0.5 shrink-0 text-alerta" />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-alerta">
+            {travados.length > 0
+              ? travados.length === 1
+                ? 'Um atendente não vai receber contato hoje'
+                : `${travados.length} atendentes não vão receber contato hoje`
+              : 'Tem lista com gente esperando e ninguém para atender'}
+          </p>
+
+          {travados.length > 0 && (
+            <ul className="mt-3 space-y-1.5">
+              {travados.map((d) => (
+                <li key={d.atendente_id} className="text-sm leading-relaxed">
+                  <strong>{d.primeiro_nome}</strong>
+                  <span className="text-suave">
+                    {' — '}{MOTIVO_TRAVADO[d.motivo as keyof typeof MOTIVO_TRAVADO].texto}
+                    {'. '}
+                    {MOTIVO_TRAVADO[d.motivo as keyof typeof MOTIVO_TRAVADO].comoResolver}.
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {orfas.length > 0 && (
+            <div className="mt-4 border-t border-alerta/20 pt-3">
+              <p className="text-sm font-medium">
+                Listas ativas que ninguém atende
+              </p>
+              <p className="mb-2 text-xs leading-relaxed text-suave">
+                Os contatos estão na base e não chegam a ninguém. Marque quem atende em{' '}
+                <Link href={rt.gestorListas} className="underline underline-offset-4">Listas</Link>.
+              </p>
+              <ul className="space-y-1">
+                {orfas.map((l) => (
+                  <li key={l.lista_id} className="text-sm">
+                    <strong>{l.rotulo}</strong>
+                    <span className="text-suave"> — {l.contatos.toLocaleString('pt-BR')} esperando</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+    </Cartao>
+  );
 }

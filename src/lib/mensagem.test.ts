@@ -430,3 +430,52 @@ describe('proximaVariacao — o mesmo chip não repete o texto em seguida', () =
     expect(() => proximaVariacao([], null)).toThrow(/sem nenhuma variação/);
   });
 });
+
+/**
+ * As duas etapas que abrem a conversa antes da Permissão.
+ *
+ * ⚠️ A Abertura é a única mensagem que chega sem aviso, para quem não espera —
+ * e é a única que espera o intervalo entre abordagens. As regras dela descrevem
+ * isso: é um "oi", e nada mais.
+ */
+describe('abertura e minha escolha', () => {
+  const codigosDe = (etapa: Parameters<typeof validarModelo>[0], texto: string) =>
+    validarModelo(etapa, texto).map((p) => p.codigo);
+
+  it('abertura limpa não tem problema nenhum', () => {
+    expect(validarModelo('abertura', '{{saudacao}}, {{primeiro_nome}}! Tudo bem?')).toEqual([]);
+  });
+
+  it('abertura com link é apontada', () => {
+    expect(codigosDe('abertura', 'Oi! Olha isso: {{link}}')).toContain('link_na_permissao');
+    expect(codigosDe('abertura', 'Oi! https://x.br')).toContain('link_na_permissao');
+  });
+
+  it('abertura com emoji é apontada', () => {
+    expect(codigosDe('abertura', 'Oi, tudo bem? 😊')).toContain('emoji_na_permissao');
+  });
+
+  it('abertura que já cita candidato é apontada — o assunto é do passo seguinte', () => {
+    expect(codigosDe('abertura', 'Oi! Tô com {{candidatos}}')).toContain('candidato_na_abertura');
+  });
+
+  it('mas nada disso impede salvar: são riscos, e quem decide é o gestor', () => {
+    expect(podeSalvar(validarModelo('abertura', 'Oi 😊 {{candidatos}} https://x.br'))).toBe(true);
+  });
+
+  it('minha escolha sem nome de candidato ganha aviso, não risco', () => {
+    const problemas = validarModelo('minha_escolha', 'Já decidi meu voto e quis te contar.');
+    expect(problemas.map((p) => p.codigo)).toContain('falta_chapa');
+    expect(problemas.find((p) => p.codigo === 'falta_chapa')?.nivel).toBe('aviso');
+  });
+
+  it('minha escolha com link é apontada — o link só depois do "pode"', () => {
+    expect(codigosDe('minha_escolha', 'Escolhi {{candidatos}}: {{link}}'))
+      .toContain('link_na_permissao');
+  });
+
+  it('as duas continuam recusando variável que não existe', () => {
+    expect(podeSalvar(validarModelo('abertura', 'Oi {{primero_nome}}'))).toBe(false);
+    expect(podeSalvar(validarModelo('minha_escolha', 'Oi {{nao_existe}}'))).toBe(false);
+  });
+});

@@ -9,6 +9,10 @@
  */
 
 export type Etapa =
+  /** Só o "oi". Nada de assunto, nada de link, nada de nome de candidato. */
+  | 'abertura'
+  /** O atendente conta em quem votou e por quê. */
+  | 'minha_escolha'
   | 'permissao'
   | 'material'
   | 'saida'
@@ -275,6 +279,7 @@ export type CodigoProblema =
   | 'falta_cnpj'
   | 'link_na_permissao'
   | 'emoji_na_permissao'
+  | 'candidato_na_abertura'
   | 'linhas_demais'
   | 'vazio';
 
@@ -372,6 +377,69 @@ export function validarModelo(etapa: Etapa, texto: string): Problema[] {
         // depois de a mensagem ter sido enviada.
         nivel: 'impede',
         mensagem: `A variável {{${v}}} não existe. Disponíveis: ${VARIAVEIS_CONHECIDAS.map((x) => `{{${x}}}`).join(', ')}.`,
+      });
+    }
+  }
+
+  /**
+   * ── Abertura ──────────────────────────────────────────────────────────────
+   *
+   * É a mensagem que chega sem aviso, para quem não espera. Ela não pede nada,
+   * não anuncia nada e não leva link: é um "oi" e a espera da resposta. As
+   * regras dela são as duas que descrevem justamente isso.
+   *
+   * Não exige {{candidatos}} nem {{origem}}: quem declara a chapa e diz de onde
+   * veio o contato é a Permissão, e é lá que o consentimento é congelado. Pedir
+   * isso já no "oi" devolveria o panfleto que os quatro passos vieram desfazer.
+   */
+  if (etapa === 'abertura') {
+    if (t.includes('{{link}}') || t.includes('{{materiais}}') || t.includes('{{link_grupo}}') || RE_URL.test(t)) {
+      problemas.push({
+        codigo: 'link_na_permissao',
+        nivel: 'risco',
+        mensagem: 'A abertura não pode ter link. Ela é só o "oi" — link só depois do "pode".',
+      });
+    }
+    if (RE_EMOJI.test(t)) {
+      problemas.push({
+        codigo: 'emoji_na_permissao',
+        nivel: 'risco',
+        mensagem: 'Sem emoji na abertura — é o padrão que mais parece disparo na primeira mensagem.',
+      });
+    }
+    if (t.includes('{{candidatos}}') || t.includes('{{candidato}}')) {
+      problemas.push({
+        codigo: 'candidato_na_abertura',
+        nivel: 'risco',
+        mensagem:
+          'A abertura cita candidato. Ela existe para ser só um "oi": emendar o assunto na ' +
+          'primeira mensagem é o que faz a conversa parecer panfleto. Quem conta a escolha é o ' +
+          'passo seguinte.',
+      });
+    }
+  }
+
+  /**
+   * ── Minha escolha ─────────────────────────────────────────────────────────
+   *
+   * O coração do roteiro, e a única parte em que a mensagem é do ATENDENTE, na
+   * primeira pessoa. Só não pode levar link: o link vem depois do "pode".
+   */
+  if (etapa === 'minha_escolha') {
+    if (t.includes('{{link}}') || t.includes('{{materiais}}') || t.includes('{{link_grupo}}') || RE_URL.test(t)) {
+      problemas.push({
+        codigo: 'link_na_permissao',
+        nivel: 'risco',
+        mensagem: 'Ainda não. O link só sai depois de a pessoa autorizar, no passo seguinte.',
+      });
+    }
+    if (!t.includes('{{candidatos}}') && !t.includes('{{candidato}}')) {
+      problemas.push({
+        codigo: 'falta_chapa',
+        nivel: 'aviso',
+        mensagem:
+          'Esta é a mensagem que conta a escolha, e ela não nomeia ninguém. Use {{candidatos}} — ' +
+          'sem isso o passo seguinte pede permissão para algo que a pessoa não sabe o que é.',
       });
     }
   }

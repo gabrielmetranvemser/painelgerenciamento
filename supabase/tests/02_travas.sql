@@ -192,6 +192,13 @@ begin
   end if;
 
   -- ── 5. intervalo mínimo entre conversas ──────────────────────────────────
+  -- ⚠️ Desde `conversa_em_quatro_passos`, quem conta para o intervalo é a
+  -- ABERTURA, e só ela: é a única mensagem que chega sem aviso, para quem não
+  -- espera. A permissão de cima é o terceiro passo de uma conversa que a pessoa
+  -- já respondeu duas vezes, e fazer o atendente esperar dois minutos no meio
+  -- dela é o que faz ELE parecer robô.
+  perform public.preparar_mensagem(v_contato, v_chip, 'abertura');
+  perform public.registrar_abertura(v_contato, v_chip, 'abertura', 'oi');
   v_r := public.fila_status(v_chip);
   if v_r->>'motivo' = 'intervalo' and (v_r->>'segundos_espera')::int > 0 then
     raise notice '  ✅ 5. intervalo travou o botão (% s restantes)', v_r->>'segundos_espera';
@@ -335,10 +342,16 @@ begin
 
   -- Zera o histórico do chip e deixa UMA abordagem, velha o bastante para o
   -- intervalo não interferir na trava de teto.
+  --
+  -- ⚠️ `abertura`, e não `permissao`: desde `conversa_em_quatro_passos` a
+  -- abordagem que conta para o intervalo é só ela. Com `permissao` aqui, o
+  -- teste 17 media o vazio — havia uma interação, mas nenhuma ABORDAGEM, então
+  -- não havia intervalo para recusar e a trava "passava" sem ser exercitada.
+  -- Para o teto (teste 15) tanto faz: ele conta PESSOAS, seja qual for a etapa.
   delete from public.interacoes where chip_id = v_chip;
   insert into public.interacoes (contato_id, atendente_id, chip_id, etapa,
                                  aberto_wa_em, dia_operacional)
-  values (v_quarto, v_uid, v_chip, 'permissao',
+  values (v_quarto, v_uid, v_chip, 'abertura',
           now() - interval '600 seconds', public.hoje_operacional());
 
   -- ── 15. teto do dia recusa a ABERTURA, não só o próximo contato ──────────
@@ -361,8 +374,11 @@ begin
   update public.config set teto_diario = v_cfg_teto where id = 1;
 
   -- ── 17. intervalo recusa a ABERTURA de outra abordagem ───────────────────
+  -- "Abordagem" passou a ser só a etapa `abertura`. Continuar uma conversa em
+  -- andamento não espera — abrir uma conversa NOVA, sim.
   update public.interacoes set aberto_wa_em = now() where chip_id = v_chip;
-  v_r := public.registrar_abertura(v_terceiro, v_chip, 'permissao', 'x');
+  perform public.preparar_mensagem(v_terceiro, v_chip, 'abertura');
+  v_r := public.registrar_abertura(v_terceiro, v_chip, 'abertura', 'x');
   if v_r->>'motivo' = 'intervalo' and (v_r->>'segundos_espera')::int > 0 then
     raise notice '  ✅ 17. intervalo recusa abordagem emendada (% s restantes)',
                  v_r->>'segundos_espera';

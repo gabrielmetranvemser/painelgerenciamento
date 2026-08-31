@@ -9,8 +9,10 @@ import { adicionarVariacao, alternarVariacao, salvarVariacao } from './acoes';
 // `EtapaFixa` e não `EtapaMsg`: as mensagens que o gestor cria têm tela
 // própria, e não entram nesta lista de sete. Ver `EtapaFixa`.
 const TITULO: Record<EtapaFixa, string> = {
-  permissao: 'Permissão — a primeira mensagem',
-  material: 'Material — depois do "pode"',
+  abertura: '1. Abertura — só o oi',
+  minha_escolha: '2. Minha escolha — o coração da conversa',
+  permissao: '3. Permissão — o pedido',
+  material: '4. Material — depois do "pode"',
   saida: 'Saída — quando a pessoa pede para sair',
   quem_passou: 'Quem passou meu número',
   quer_ajudar: 'Quer ajudar',
@@ -27,8 +29,12 @@ const TITULO: Record<EtapaFixa, string> = {
  * recomendação existe.
  */
 const EXPLICACAO: Partial<Record<EtapaFixa, string>> = {
+  abertura:
+    'A única mensagem que chega sem aviso, e a única que espera o intervalo entre abordagens. É só um "oi": sem assunto, sem link, sem nome de candidato. O atendente manda e espera responder — é isso que separa uma conversa de um disparo. Rotaciona entre as variações para o mesmo número não repetir o texto.',
+  minha_escolha:
+    'O coração do roteiro, e a parte que é do ATENDENTE: ele conta, na primeira pessoa, em quem decidiu votar. Vale escrever o motivo aqui de forma genérica — mas o motivo específico quem escreve é cada atendente, na hora, e o roteiro da tela dele ensina como. Sai logo depois de a pessoa responder o oi, sem esperar intervalo.',
   permissao:
-    'O texto recomendado não tem link nem emoji, declara a chapa com {{candidatos}}, usa {{origem}} para dizer como você chegou no contato — a frase muda conforme a pessoa ter vindo da lista ou do site — e oferece parar e apagar. Escreva do seu jeito: o que faltar aparece em vermelho aqui embaixo, com o motivo, e a decisão é sua. Rotaciona entre as variações para o mesmo número não repetir o texto.',
+    'O pedido, e a etapa que congela o consentimento: é aqui que fica gravado quais candidatos a pessoa foi avisada que iria receber. Por isso o texto recomendado declara a chapa com {{candidatos}}, usa {{origem}} para dizer como você chegou no contato — a frase muda conforme a pessoa ter vindo da lista ou do site — e oferece parar e apagar. Escreva do seu jeito: o que faltar aparece em vermelho aqui embaixo, com o motivo, e a decisão é sua.',
   material:
     'O recomendado traz {{link}} — é dele que sai a única métrica confiável do projeto — e diz de quem é a peça, com {{candidato}}, {{cargo}} e {{numero}}.',
 };

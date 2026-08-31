@@ -72,7 +72,13 @@ export type ConferenciaBloco = { jaExistem: number; bloqueados: number };
 
 /**
  * Confere um bloco contra o banco SEM gravar nada — é o que alimenta a tela de
- * "10.000 linhas · 8.740 aproveitáveis · 1.190 repetidas · 70 bloqueadas".
+ * conferência.
+ *
+ * `jaExistem` deixou de significar "vão ser descartadas". Desde
+ * `reimportar_atualiza_sem_perder_historico`, essas pessoas VÊM para a lista
+ * nova, com nome e município atualizados e o histórico intacto. A tela conta
+ * isso em verde, ao lado das novas, porque é trabalho que vai acontecer — e não
+ * perda.
  */
 export async function conferirBloco(chaves: string[]): Promise<ConferenciaBloco> {
   await exigirGestorOuFalhar();
@@ -94,9 +100,29 @@ export async function conferirBloco(chaves: string[]): Promise<ConferenciaBloco>
   return { jaExistem, bloqueados: setBloqueados.size };
 }
 
-export type ResultadoBloco = { importados: number; duplicados: number; bloqueados: number };
+export type ResultadoBloco = {
+  /** Pessoas que não existiam na base. */
+  novos: number;
+  /** Já existiam: mudaram de lista e tiveram nome e município atualizados. */
+  atualizados: number;
+  bloqueados: number;
+  /** Dos atualizados, os que ainda não tinham sido abordados e voltaram à fila. */
+  devolvidos: number;
+};
 
-/** Grava um bloco. Reentrante: repetir o mesmo bloco não duplica nada. */
+/**
+ * Grava um bloco. Reentrante: repetir o mesmo bloco não duplica nada.
+ *
+ * ⚠️ A GRAVAÇÃO INTEIRA MORA NO BANCO, em `importar_contatos`. Não é preferência
+ * de arquitetura: o que fazer com um número que já existe depende de coisas que
+ * só o banco sabe no mesmo instante — se a pessoa já foi abordada, se está na
+ * mão de alguém agora, se pediu saída. Decidir isso aqui exigiria ler, pensar e
+ * escrever em três idas separadas, e entre a leitura e a escrita um atendente
+ * pode ter pegado o contato.
+ *
+ * Antes daqui só fica o que o navegador não pode fazer: o HMAC (a chave secreta
+ * não vai ao cliente) e o casamento do município com a lista fechada.
+ */
 export async function importarBloco(
   listaId: string,
   origem: OrigemContato,
@@ -107,61 +133,31 @@ export async function importarBloco(
 
   const { data: municipios } = await supabase.from('municipios').select('id, nome');
 
-  const comHash = linhas.map((l) => ({ ...l, ...hashTelefone(l.chaveDedup) }));
-  const hashes = comHash.map((l) => l.hash);
-
-  const { data: bloqueios } = await supabase
-    .from('bloqueios')
-    .select('telefone_hmac')
-    .in('telefone_hmac', hashes);
-  const setBloqueados = new Set((bloqueios ?? []).map((b) => b.telefone_hmac));
-
-  const paraInserir = comHash
-    .filter((l) => !setBloqueados.has(l.hash))
-    .map((l) => ({
-      lista_id: listaId,
-      origem,
+  const preparadas = linhas.map((l) => {
+    const { hash, versao } = hashTelefone(l.chaveDedup);
+    return {
       nome: l.nome,
       primeiro_nome: l.primeiroNome,
-      telefone_e164: l.e164,
+      e164: l.e164,
       chave_dedup: l.chaveDedup,
-      telefone_hmac: l.hash,
-      hmac_versao: l.versao,
+      hmac: hash,
+      hmac_versao: versao,
       municipio_id: casarMunicipio(l.municipioNome, municipios ?? []),
-      status: 'na_fila' as const,
-    }));
-
-  if (paraInserir.length === 0) {
-    return { importados: 0, duplicados: 0, bloqueados: setBloqueados.size };
-  }
-
-  // `ignoreDuplicates` sobre o UNIQUE de telefone_hmac: quem já existe é
-  // ignorado em silêncio, e o bloco inteiro não falha por causa de um repetido.
-  const { data, error } = await supabase
-    .from('contatos')
-    .upsert(paraInserir, { onConflict: 'telefone_hmac', ignoreDuplicates: true })
-    .select('id');
-
-  if (error) throw new Error(error.message);
-
-  const importados = data?.length ?? 0;
-  const totais = {
-    importados,
-    duplicados: paraInserir.length - importados,
-    bloqueados: setBloqueados.size,
-  };
-
-  // Soma AQUI, não no fim. Ver a migration 20260823340400: os totais da lista
-  // são a rastreabilidade da base, e uma aba fechada no meio deixava metade dos
-  // contatos na fila com a lista dizendo que importou zero.
-  await supabase.rpc('somar_totais_lista', {
-    p_lista_id: listaId,
-    p_importados: totais.importados,
-    p_duplicados: totais.duplicados,
-    p_bloqueados: totais.bloqueados,
+    };
   });
 
-  return totais;
+  if (preparadas.length === 0) {
+    return { novos: 0, atualizados: 0, bloqueados: 0, devolvidos: 0 };
+  }
+
+  const { data, error } = await supabase.rpc('importar_contatos', {
+    p_lista_id: listaId,
+    p_origem: origem,
+    p_linhas: preparadas,
+  });
+
+  if (error) throw new Error(error.message);
+  return data as ResultadoBloco;
 }
 
 /**
