@@ -46,6 +46,8 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `preparar_mensagem` | a variação congela por contato. Congelar cedo demais faz texto desativado continuar saindo; congelar de menos reescreve o histórico do que já foi enviado |
 | `etapa_de_abordagem` | quem espera o intervalo. Hoje é só `abertura`; incluir os passos seguintes faz o atendente sumir no meio da própria conversa |
 | `importar_contatos` | reimportar MOVE a pessoa e preserva o histórico. Quem pediu saída, quem está na mão de alguém e quem teve o telefone apagado não podem ser tocados |
+| `pular_intervalo` | um pulo libera UMA abordagem, consumida em `registrar_abertura`. Se liberar mais de uma, "pular o intervalo" vira "desligar o intervalo" |
+| `apagar_lista` | apagar a linha da lista sozinha joga os contatos dela na fila de TODO mundo (`lista_id is null` = "cadastrou-se sozinho"). Lista com gente já abordada não se apaga: ali há histórico e procedência |
 
 ### 2. Toda trava é validada no SERVIDOR
 
@@ -67,6 +69,7 @@ só reflete o que o servidor respondeu. Frontend se burla abrindo o DevTools.
 | Avisa e deixa passar | Por quê |
 |---|---|
 | `teto_atingido` | risco de OPERAÇÃO, não de lei: no pior caso o número cai e a campanha troca pelo reserva. Quem corre o risco decide — `config.teto_bloqueia` devolve a trava se o gestor quiser |
+| `intervalo` | continua recusando por padrão, mas o atendente pode PULAR — um pulo por vez, dois cliques, com aviso que endurece a cada repetição e alerta ao gestor do terceiro em diante. Ver `pular_intervalo` |
 
 A regra geral: **risco jurídico recusa, risco operacional avisa.** É a mesma
 divisão que `validarModelo` já usava para os textos.

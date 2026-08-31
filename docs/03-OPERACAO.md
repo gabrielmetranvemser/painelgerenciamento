@@ -135,11 +135,24 @@ Cada resultado carrega a mensagem seguinte:
 - Número inválido → próximo contato
 
 ### O que o painel não deixa
-- passar do teto do dia
 - trabalhar fora do horário
-- disparar sem respeitar o intervalo (botão travado com contagem)
 - falar com quem pediu saída
 - falar com quem outro atendente já atende
+- falar com alguém no dia da eleição
+
+### O que o painel avisa, e deixa você decidir
+- **passar do teto do dia** — aviso vermelho permanente, e segue funcionando
+  (o gestor pode voltar a travar em Configuração)
+- **pular o intervalo** — botão na tela de espera, **dois cliques**, com aviso
+  que fica mais duro a cada vez que aquele número pula no mesmo dia. Do terceiro
+  em diante o gestor recebe alerta. Um clique libera UMA conversa, não o resto
+  do dia.
+
+### Todo desfecho pede dois cliques
+"Autorizou", "Pediu saída", "Número inválido" — todos. O primeiro clique arma o
+botão e ele muda de cara; o segundo grava. Clicar noutro desfecho desarma o
+primeiro. É um clique a mais por conversa contra um desfecho errado que tira a
+pessoa da fila sem ninguém perceber.
 
 ### Cabeçalho fixo da tela (sugestão de texto)
 > Você fala com essas pessoas pelo seu WhatsApp, uma de cada vez. Escreva como você fala (se não usa "tô", troque por "estou"). Cinco regras: (1) primeiro só o pedido de permissão; (2) material só depois do "pode"; (3) uma tentativa por pessoa, nunca insista; (4) "não" é não: marque Pediu saída e agradeça; (5) hoje você tem até [30] conversas, das 9h às 20h. Não prometa nada a ninguém e não discuta política com quem responde mal.

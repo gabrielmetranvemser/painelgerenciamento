@@ -898,6 +898,15 @@ export type FilaStatus = {
   teto_bloqueia: boolean;
   /** Já passou do teto de hoje. Com `teto_bloqueia = false`, segue trabalhando. */
   teto_estourado: boolean;
+  /**
+   * Quantas vezes ESTE número já pulou o intervalo hoje.
+   *
+   * É com isto que a tela endurece o aviso a cada repetição — e é do NÚMERO, não
+   * do atendente: quem cai é o chip.
+   */
+  intervalos_pulados_hoje: number;
+  /** Há um pulo comprado e ainda não usado. Vale por UMA abordagem. */
+  pulo_guardado: boolean;
   enviados_hoje: number;
   restante_hoje: number;
   intervalo_seg: number;

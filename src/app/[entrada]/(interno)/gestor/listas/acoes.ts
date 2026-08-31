@@ -1,6 +1,7 @@
 'use server';
 
 import { criarClienteAdmin } from '@/lib/supabase/admin';
+import { criarClienteServidor } from '@/lib/supabase/server';
 import { exigirGestorOuFalhar } from '@/lib/gestor';
 
 /**
@@ -135,7 +136,21 @@ export type ResultadoApagar =
 
 export async function apagarLista(listaId: string, confirmar = false): Promise<ResultadoApagar> {
   await exigirGestorOuFalhar();
-  const supabase = criarClienteAdmin();
+
+  /**
+   * ⚠️ CLIENTE DO USUÁRIO, e não o `criarClienteAdmin()` do resto deste arquivo.
+   *
+   * `apagar_lista` confere `is_gestor()` DENTRO do banco. Com a chave de
+   * serviço não existe usuário logado — `auth.uid()` volta nulo, `is_gestor()`
+   * dá falso, e a função recusa com "somente_gestor" na cara do gestor. Foi
+   * exatamente o que aconteceu na primeira versão.
+   *
+   * A escolha certa é esta, e não tirar a conferência de lá: as duas camadas
+   * valem. A ação confirma o papel antes de chamar, e o banco confirma de novo
+   * — é o banco que apaga, e é lá que a trava precisa estar de pé mesmo que
+   * alguém chame a RPC por outro caminho.
+   */
+  const supabase = await criarClienteServidor();
 
   const { data, error } = await supabase.rpc('apagar_lista', {
     p_lista_id: listaId,

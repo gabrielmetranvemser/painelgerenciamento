@@ -600,3 +600,27 @@ export async function pegarEscolhido(
   if (error) throw new Error(error.message);
   return data as RespostaEscolhido;
 }
+
+/**
+ * Pular o intervalo entre abordagens — uma vez.
+ *
+ * ⚠️ O painel APONTA e quem está com o número na mão DECIDE, como no teto. A
+ * diferença é o tamanho do risco: o intervalo é o espaçamento que o antispam do
+ * WhatsApp mais olha, e é a trava que existe para o número não cair. Por isso
+ * não virou um interruptor de configuração — é um ato, um de cada vez, com dois
+ * cliques e um aviso que fica mais duro a cada repetição.
+ *
+ * O pulo vale por UMA abordagem e é consumido por ela no servidor. Querer pular
+ * de novo é clicar de novo, e ler o aviso de novo.
+ */
+export async function pularIntervalo(
+  chipId: string,
+): Promise<{ ok: true; pulosHoje: number } | { ok: false; motivo: string }> {
+  const supabase = await criarClienteServidor();
+  const { data, error } = await supabase.rpc('pular_intervalo', { p_chip_id: chipId });
+  if (error) return { ok: false, motivo: error.message };
+  const r = data as { ok: boolean; motivo?: string; pulos_hoje?: number };
+  return r.ok
+    ? { ok: true, pulosHoje: Number(r.pulos_hoje ?? 0) }
+    : { ok: false, motivo: String(r.motivo) };
+}
