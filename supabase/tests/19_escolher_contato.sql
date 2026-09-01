@@ -125,6 +125,17 @@ begin
   else raise warning '  ❌ 4. sem telefone: %', v_linhas->0; v_falhas := v_falhas + 1;
   end if;
 
+  -- ⚠️ NOME COMPLETO, e não o primeiro. Esta folha existe para ESCOLHER quem
+  -- atender, e com `coalesce(primeiro_nome, nome)` a busca por "Espetinho"
+  -- devolvia cinco linhas escritas "Espetinho" — o Delegado, o Esmerindo, o
+  -- Mariano e mais dois, todos iguais na tela. O primeiro nome serve para a
+  -- MENSAGEM; aqui ele apaga justamente o que distingue uma pessoa da outra.
+  if v_linhas->0->>'nome' = 'Esc Antonio' then
+    raise notice '  ✅ 4b. com o NOME COMPLETO, que é o que distingue uma pessoa da outra';
+  else raise warning '  ❌ 4b. veio "%" em vez do nome completo', v_linhas->0->>'nome';
+       v_falhas := v_falhas + 1;
+  end if;
+
   -- ⚠️ O contato da lista que ninguém atende NÃO pode aparecer. A listagem tem
   -- de usar o mesmo critério de quem entrega — senão ela oferece gente que a
   -- fila depois recusa.
@@ -190,7 +201,7 @@ begin
   else raise warning '  ❌ 11. largou o contato aberto: %', v_r; v_falhas := v_falhas + 1;
   end if;
 
-  if v_falhas = 0 then raise notice 'ESCOLHER CONTATO: ✅ as 11 passaram';
+  if v_falhas = 0 then raise notice 'ESCOLHER CONTATO: ✅ as 12 passaram';
   else raise exception 'ESCOLHER CONTATO: ❌ % falha(s)', v_falhas;
   end if;
 end $$;

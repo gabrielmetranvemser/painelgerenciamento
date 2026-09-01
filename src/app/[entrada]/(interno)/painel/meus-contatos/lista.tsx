@@ -169,8 +169,11 @@ function Linha({ contato: c, href }: { contato: MeuContato; href: string }) {
           className="flex flex-wrap items-center gap-4 px-5 py-4 transition-colors hover:bg-superficie-alta">
       <Avatar nome={c.nome ?? c.primeiro_nome} tamanho="m" />
       <div className="mr-auto min-w-0">
+        {/* Nome completo: esta é uma lista para ACHAR alguém, e cinco linhas
+            escritas "Espetinho" não ajudam ninguém a achar nada. O primeiro
+            nome fica para a mensagem. */}
         <p className="truncate font-semibold">
-          {c.primeiro_nome ?? c.nome ?? <span className="text-tenue">(dados apagados)</span>}
+          {c.nome?.trim() || c.primeiro_nome || <span className="text-tenue">(dados apagados)</span>}
         </p>
         <p className="truncate text-xs text-suave">
           {c.telefone_e164 ? formatarExibicao(c.telefone_e164) : '—'}

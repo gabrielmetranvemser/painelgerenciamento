@@ -1288,7 +1288,15 @@ function CartaoAtendimento({
   aoPular: () => void; aoPrepararMaterial: (candidatoId: string) => void;
   aoEscolherPasso: (passo: PassoDaConversa) => void;
 }) {
-  const nome = contato.primeiro_nome ?? contato.nome ?? 'Sem nome';
+  /**
+   * ⚠️ Nome COMPLETO no cartão, e não o primeiro.
+   *
+   * Quem lê aqui está prestes a falar com esta pessoa e precisa saber com QUEM
+   * — "Espetinho" não distingue o Delegado do Esmerindo, e a lista importada
+   * tem cinco deles. O primeiro nome continua indo para a MENSAGEM, por
+   * `{{primeiro_nome}}`, que é onde ele serve.
+   */
+  const nome = contato.nome?.trim() || contato.primeiro_nome || 'Sem nome';
   const titulo = mensagem?.candidato
     ? `Material de ${mensagem.candidato.nome}`
     : (mensagem ? TITULO_ETAPA[mensagem.etapa] ?? 'Mensagem' : '');
