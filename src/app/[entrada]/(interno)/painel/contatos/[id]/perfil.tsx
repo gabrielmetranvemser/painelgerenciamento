@@ -300,26 +300,15 @@ export function Perfil({
         </Aviso>
       ) : (
         <>
+          {/* ⚠️ A ORDEM É A DA CONVERSA, e mudou a pedido de quem opera:
+              primeiro o que se MANDA, depois como ela TERMINOU, e o material só
+              quando houver o quê mandar. Antes o cartão de resultado vinha em
+              cima, o que fazia a ficha começar perguntando o fim. */}
           <Cartao className="p-6">
-            <h2 className="mb-1 flex items-center gap-2 font-semibold"><Check size={16} className="text-suave" /> Mudar o resultado</h2>
+            <h2 className="mb-1 flex items-center gap-2 font-semibold"><MessageSquarePlus size={16} className="text-suave" /> Mensagens</h2>
             <p className="mb-3 text-xs text-suave">
-              Serve para quando a pessoa responde dias depois, ou quando você clicou no botão errado.
-            </p>
-            <MudarResultado
-              atual={status} ocupado={ocupado} texto={observacao}
-              aoMarcar={marcar} aoMudarTexto={setObservacao}
-            />
-          </Cartao>
-
-          <PorCandidato
-            entregas={entregas} ocupado={ocupado} mensagem={mensagem}
-            aoPreparar={preparar} aoAbrir={abrir} aoCopiar={copiar}
-          />
-
-          <Cartao className="p-6">
-            <h2 className="mb-1 flex items-center gap-2 font-semibold"><MessageSquarePlus size={16} className="text-suave" /> Mandar outra mensagem</h2>
-            <p className="mb-3 text-xs text-suave">
-              Valem para a conversa inteira, sem candidato. O texto sai pronto.
+              É daqui que sai a primeira mensagem e todas as outras. Valem para a conversa
+              inteira, sem candidato — o texto sai pronto.
             </p>
             {passosQueFaltam.length > 0 && (
               <div className="mb-4 rounded-2xl border border-acento/30 bg-acento/5 p-3.5">
@@ -396,6 +385,31 @@ export function Perfil({
               </div>
             )}
           </Cartao>
+
+          <Cartao className="p-6">
+            <h2 className="mb-1 flex items-center gap-2 font-semibold"><Check size={16} className="text-suave" /> Resultado do contato</h2>
+            <p className="mb-3 text-xs text-suave">
+              Como esta conversa terminou. Serve para marcar pela primeira vez — número inválido
+              logo na abertura, autorizou depois da permissão — e para corrigir quando a pessoa
+              responde dias depois ou quando você clicou no botão errado.
+            </p>
+            <MudarResultado
+              atual={status} ocupado={ocupado} texto={observacao}
+              aoMarcar={marcar} aoMudarTexto={setObservacao}
+            />
+          </Cartao>
+
+          {/* ⚠️ SÓ DEPOIS DO "AUTORIZOU". Antes ele aparecia sempre, e numa
+              ficha de quem disse "não quero" o painel oferecia mandar material
+              — é o convite para o erro mais caro que existe aqui. O servidor já
+              recusaria, mas oferecer o que vai ser recusado é a tela ensinando
+              errado. */}
+          {status === 'autorizou' && (
+            <PorCandidato
+              entregas={entregas} ocupado={ocupado} mensagem={mensagem}
+              aoPreparar={preparar} aoAbrir={abrir} aoCopiar={copiar}
+            />
+          )}
 
           {historico?.ok && (
             <PedidoKit
