@@ -113,6 +113,11 @@ Um celular pode ter **duas contas** (dois chips ou eSIM), então ninguém precis
 > Se a conversa parar no meio, ela continua por **Meus contatos**, que mostra
 > quais passos faltam.
 >
+> **Marcar "Autorizou" já libera o material**, mesmo que a Permissão nunca tenha
+> saído pelo painel — é o caso de quem já conhece a pessoa e pulou etapa. O
+> sistema grava quais candidatos foram declarados no momento em que você marcou,
+> e registra que a declaração veio do seu clique e não de uma mensagem escrita.
+>
 > **A sequência é o caminho comum, não uma obrigação.** Ao lado do título da
 > mensagem tem um "› pular etapa": abre os três passos e você vai direto ao que
 > faz sentido. Quem já conhece a pessoa não precisa mandar "oi" antes de contar

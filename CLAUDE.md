@@ -49,6 +49,7 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `pular_intervalo` | um pulo libera UMA abordagem, consumida em `registrar_abertura`. Se liberar mais de uma, "pular o intervalo" vira "desligar o intervalo" |
 | `apagar_lista` | apagar a linha da lista sozinha joga os contatos dela na fila de TODO mundo (`lista_id is null` = "cadastrou-se sozinho"). Lista com gente já abordada não se apaga: ali há histórico e procedência |
 | `alternar_grupo` | o grupo ESCREVE em `listas.ativa`, e `pausada_pelo_grupo` é o que impede religar de ressuscitar lista que o gestor pausou à mão |
+| `registrar_resultado` | "Autorizou" congela o consentimento. Gravar sem `declarado_em_reparo` faz uma declaração verbal parecer escrita |
 
 ### 2. Toda trava é validada no SERVIDOR
 
@@ -107,9 +108,19 @@ a **abertura**, e é a única etapa que respeita o intervalo entre abordagens
 O teto diário não muda: conta **pessoas distintas por número por dia**, não
 mensagens. Falar com alguém em quatro passos gasta uma conversa, não quatro.
 
-A `permissao` continua sendo onde o consentimento CONGELA — é no envio dela que
-`contato_candidato` grava quais candidatos foram declarados àquela pessoa. Por
-isso ela é a única dos três que exige `{{candidatos}}` e `{{origem}}`.
+O consentimento CONGELA em `contato_candidato` — quais candidatos foram
+declarados àquela pessoa. Duas portas, e `declarado_em_reparo` as separa:
+
+| Porta | Marca | O que significa |
+|---|---|---|
+| envio da `permissao` | `false` | a chapa foi declarada POR ESCRITO, na mensagem |
+| marcar "Autorizou" | `true` | foi declarada por um ATO — o atendente, ou o gestor reparando depois |
+
+A primeira é a prova forte, e por isso a `permissao` é a única etapa que exige
+`{{candidatos}}` e `{{origem}}`. A segunda existe porque, com "pular etapa", é
+normal a permissão nunca sair — e sem ela o material ficava travado para quem
+já tinha dito "pode". Nunca apague a marca: é o que responde, numa denúncia, de
+onde veio a autorização daquela pessoa.
 
 Qual passo falta para cada contato sai de `contato_json(...)->'passos'`, no
 servidor. A tela nunca adivinha: o mesmo contato volta pela fila, é escolhido a

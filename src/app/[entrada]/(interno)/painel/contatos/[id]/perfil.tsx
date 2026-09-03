@@ -807,8 +807,11 @@ function PorCandidato({
 
       {entregas.length === 0 ? (
         <p className="text-sm text-suave">
-          Nenhum candidato liberado para esta pessoa ainda. Libera quando a primeira mensagem
-          — o pedido de permissão — é registrada.
+          {/* ⚠️ Este texto dizia "libera quando o pedido de permissão é
+              registrado". Deixou de ser a única porta: marcar "Autorizou"
+              declara a chapa e libera também. Sobrou uma causa só. */}
+          Você ainda não tem candidato atribuído, então não há material para mandar. Fale com o
+          gestor — leva um minuto para ele montar a sua chapa.
         </p>
       ) : (
         <div className="space-y-2">

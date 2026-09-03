@@ -1845,9 +1845,10 @@ function Entrega({
     return (
       <div className="px-6 py-5">
         <Aviso tom="alerta" icone={<AlertTriangle size={16} />}>
-          Não há candidato liberado para esta pessoa. Isso acontece quando a primeira mensagem
-          não chegou a ser registrada, ou quando você ainda não tem candidato atribuído.
-          Fale com o gestor.
+          {/* Desde `autorizou_libera_o_material`, marcar o desfecho já declara
+              a chapa. Sobrou uma causa só para esta tela ficar vazia. */}
+          Você ainda não tem candidato atribuído, então não há material para mandar.
+          Fale com o gestor — leva um minuto para ele montar a sua chapa.
         </Aviso>
       </div>
     );
