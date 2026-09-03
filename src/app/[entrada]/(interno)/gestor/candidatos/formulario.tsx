@@ -2,10 +2,11 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
-import { AlertTriangle, Link2 } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, Globe, Link2, Loader2 } from 'lucide-react';
 import { Aviso, Botao, Campo, Cartao, AreaTexto, Selecao, cx } from '@/components/ui';
 import { DIGITOS_DO_CARGO, ROTULO_CARGO, type Candidato, type CargoEleitoral } from '@/lib/tipos-banco';
-import { criarCandidato, salvarCandidato, type Resultado } from './acoes';
+import { normalizarDominio, problemaNoDominio, TEXTO_PROBLEMA_DOMINIO } from '@/lib/dominio';
+import { conferirDominio, criarCandidato, salvarCandidato, type Resultado, type ResultadoDominio } from './acoes';
 import { EnvioImagem } from './[id]/envio-imagem';
 
 const CARGOS = Object.keys(ROTULO_CARGO) as CargoEleitoral[];
@@ -156,6 +157,144 @@ function paraSlug(nome: string) {
     .replace(/-+$/, '');
 }
 
+/**
+ * Domínio próprio do candidato.
+ *
+ * ⚠️ O botão "Conferir" não é conforto: é a trava. Enquanto ele não passar, o
+ * domínio fica cadastrado mas os links continuam saindo no endereço padrão.
+ *
+ * A razão é que três dos quatro passos não são deste painel — o CNAME mora no
+ * DNS da campanha, o domínio precisa entrar no projeto da Vercel e o
+ * certificado leva minutos para sair. Se o painel confiasse no que foi digitado,
+ * as mensagens dessa janela sairiam com um link que ainda não abre, o envio
+ * seria registrado do mesmo jeito e ninguém descobriria: o que some é o clique,
+ * que é justamente a prova de que a pessoa abriu o material.
+ */
+function DominioProprio({
+  candidatoId, salvo, verificadoEm, valor, aoMudar,
+}: {
+  candidatoId: string | null;
+  /** O que está NO BANCO. Conferir só faz sentido sobre o que já foi salvo. */
+  salvo: string | null;
+  verificadoEm: string | null;
+  valor: string;
+  aoMudar: (v: string) => void;
+}) {
+  const [resultado, setResultado] = useState<ResultadoDominio | null>(null);
+  const [conferindo, iniciar] = useTransition();
+  const router = useRouter();
+
+  const host = normalizarDominio(valor);
+  const problema = host ? problemaNoDominio(host) : null;
+  const naoSalvo = host !== salvo;
+  const verificado = Boolean(verificadoEm) && !naoSalvo;
+
+  function conferir() {
+    if (!candidatoId) return;
+    iniciar(async () => {
+      const r = await conferirDominio(candidatoId);
+      setResultado(r);
+      if (r.ok) router.refresh();
+    });
+  }
+
+  return (
+    <Cartao className="p-6">
+      <h2 className="mb-1 flex items-center gap-2 font-semibold">
+        <Globe size={16} className="text-suave" /> Domínio próprio
+      </h2>
+      <p className="mb-4 text-xs leading-relaxed text-suave">
+        Opcional. Faz a página acima atender também num endereço da campanha, e é
+        esse endereço que passa a aparecer nos links enviados daqui para a frente.
+        O que já foi enviado continua abrindo no endereço antigo.
+      </p>
+
+      <Campo
+        rotulo="Endereço"
+        name="dominio"
+        value={valor}
+        onChange={(e) => aoMudar(e.target.value)}
+        onBlur={() => aoMudar(host ?? '')}
+        placeholder="material.exemplo.com.br"
+        className={cx(problema && 'border-perigo')}
+        dica={problema ? TEXTO_PROBLEMA_DOMINIO[problema] : undefined}
+      />
+
+      {host && !problema && (
+        <>
+          <p className="mt-3 flex items-center gap-2 text-xs">
+            {verificado ? (
+              <>
+                <BadgeCheck size={14} className="shrink-0 text-ok" />
+                <span className="text-ok">
+                  No ar. Os links deste candidato saem em {host}.
+                </span>
+              </>
+            ) : (
+              <span className="text-alerta">
+                {naoSalvo
+                  ? 'Salve o candidato e depois confira este endereço.'
+                  : 'Cadastrado, mas ainda não conferido — os links continuam saindo no endereço padrão.'}
+              </span>
+            )}
+          </p>
+
+          {!verificado && (
+            <div className="mt-4 rounded-2xl border border-borda bg-superficie-alta p-4">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-suave">
+                Para o endereço existir
+              </p>
+              <ol className="list-inside list-decimal space-y-1.5 text-xs leading-relaxed text-suave">
+                <li>
+                  No DNS de <span className="font-mono">{dominioRaiz(host)}</span>, crie um CNAME de{' '}
+                  <span className="font-mono text-texto">{host.split('.')[0]}</span> para{' '}
+                  <span className="font-mono text-texto">cname.vercel-dns.com</span>.
+                  No Cloudflare, deixe cinza (DNS only) — no laranja o certificado não sai.
+                </li>
+                <li>Acrescente <span className="font-mono text-texto">{host}</span> ao projeto na Vercel.</li>
+                <li>Volte aqui e clique em Conferir.</li>
+              </ol>
+            </div>
+          )}
+
+          {candidatoId && (
+            <div className="mt-4 flex items-center gap-3">
+              <Botao
+                type="button"
+                variante="neutro"
+                tamanho="p"
+                onClick={conferir}
+                disabled={conferindo || naoSalvo}
+              >
+                {conferindo && <Loader2 size={14} className="animate-spin" />}
+                {verificado ? 'Conferir de novo' : 'Conferir'}
+              </Botao>
+              {verificadoEm && !naoSalvo && (
+                <span className="text-xs text-tenue">
+                  Conferido em {new Date(verificadoEm).toLocaleString('pt-BR')}
+                </span>
+              )}
+            </div>
+          )}
+
+          {resultado && (
+            <Aviso tom={resultado.ok ? 'ok' : 'alerta'} className="mt-4">
+              {resultado.ok ? `${host} está no ar e responde por esta página.` : resultado.erro}
+            </Aviso>
+          )}
+        </>
+      )}
+    </Cartao>
+  );
+}
+
+/** "material.sofiaandrade.com.br" → "sofiaandrade.com.br", para a instrução de DNS. */
+function dominioRaiz(host: string): string {
+  const p = host.split('.');
+  const composto = /\.(com|net|org|gov|edu|adv|art|eco|ind|inf|rec|srv|tur|vet)\.[a-z]{2}$/.test(host);
+  return p.slice(-(composto ? 3 : 2)).join('.');
+}
+
 export function FormularioCandidato({
   candidato, origem,
 }: {
@@ -177,6 +316,7 @@ export function FormularioCandidato({
   const [fundoImagem, setFundoImagem] = useState<string | null>(candidato?.fundo_url ?? null);
   const [superficiePropria, setSuperficiePropria] = useState(Boolean(candidato?.cor_superficie));
   const [corSuperficie, setCorSuperficie] = useState(candidato?.cor_superficie ?? '#151a20');
+  const [dominio, setDominio] = useState(candidato?.dominio ?? '');
   const [estado, setEstado] = useState<Resultado | null>(null);
   const [ocupado, iniciar] = useTransition();
   const router = useRouter();
@@ -191,7 +331,7 @@ export function FormularioCandidato({
       const r = editando ? await salvarCandidato(candidato!.id, form) : await criarCandidato(null, form);
       setEstado(r);
       if (r.ok) {
-        if (!editando) { setNome(''); setSlug(''); setSlugTocado(false); setNumero(''); }
+        if (!editando) { setNome(''); setSlug(''); setSlugTocado(false); setNumero(''); setDominio(''); }
         router.refresh();
       }
     });
@@ -247,6 +387,14 @@ export function FormularioCandidato({
           {origem}/{slugFinal || '…'}
         </p>
       </Cartao>
+
+      <DominioProprio
+        candidatoId={candidato?.id ?? null}
+        salvo={candidato?.dominio ?? null}
+        verificadoEm={candidato?.dominio_verificado_em ?? null}
+        valor={dominio}
+        aoMudar={setDominio}
+      />
 
       <Cartao className="p-6">
         <h2 className="mb-1 font-semibold">Identificação do material</h2>

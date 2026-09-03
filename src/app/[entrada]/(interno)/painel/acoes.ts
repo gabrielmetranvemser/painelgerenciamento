@@ -3,6 +3,7 @@
 import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { enderecoBase } from '@/lib/endereco';
+import { enderecoDoCandidato } from '@/lib/dominios-candidatos';
 import { hashTelefone } from '@/lib/hmac';
 import { montarTexto, primeiroNomeDe } from '@/lib/mensagem-etapas';
 import { normalizarTelefone, urlWhatsApp, type MotivoInvalido } from '@/lib/telefone';
@@ -135,7 +136,16 @@ export async function prepararMensagem(
   // Sem endereço não dá para montar link, e link relativo numa mensagem de
   // WhatsApp é texto morto. Falha aqui, com motivo, em vez de o atendente
   // mandar algo que a pessoa não consegue abrir.
-  const base = enderecoBase();
+  //
+  // ⚠️ Quando a etapa é de um candidato COM domínio próprio verificado, o link
+  // sai no domínio dele. É o único lugar do sistema onde essa troca acontece, e
+  // é de propósito: o que a pessoa vê na pré-visualização do WhatsApp é o
+  // endereço da campanha, e não um endereço de sistema.
+  //
+  // A troca vale só para as mensagens DAQUI PARA A FRENTE. O que já foi enviado
+  // aponta para o endereço antigo e continua abrindo — as duas portas ficam de
+  // pé, e nenhuma conversa antiga quebra.
+  const base = (r.candidato ? await enderecoDoCandidato(r.candidato.id) : null) ?? enderecoBase();
   if (base === null && r.pagina_token) return { ok: false, motivo: 'sem_endereco' };
 
   const texto = montarTexto(r.modelo, {

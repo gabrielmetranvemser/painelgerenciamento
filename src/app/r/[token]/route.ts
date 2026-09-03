@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { ehAcessoAutomatico } from '@/lib/bots';
+import { hostEhDeCandidato } from '@/lib/dominios-candidatos';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,7 @@ export const dynamic = 'force-dynamic';
  */
 async function tratar(request: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
-  const base = process.env.LINK_BASE_URL || request.nextUrl.origin;
+  const base = await baseDoRedirecionamento(request);
 
   const supabase = criarClienteAdmin();
 
@@ -64,6 +65,32 @@ async function tratar(request: NextRequest, ctx: { params: Promise<{ token: stri
     destino.startsWith('/') ? new URL(destino, base) : new URL(destino),
     302,
   );
+}
+
+/**
+ * Para onde mandar quem clicou, quando o destino é uma página nossa.
+ *
+ * Quem abriu `material.sofiaandrade.com.br/r/abc` tem de continuar em
+ * `material.sofiaandrade.com.br/m/abc`. Usar `LINK_BASE_URL` aqui devolveria a
+ * pessoa ao endereço da Vercel no meio do caminho — o domínio da campanha
+ * apareceria por um instante e sumiria, que é justamente o contrário do que ele
+ * existe para fazer.
+ *
+ * Fora de domínio de candidato nada muda: `LINK_BASE_URL` continua tendo a
+ * palavra final, porque atrás do proxy a origem da requisição nem sempre é o
+ * endereço público.
+ */
+async function baseDoRedirecionamento(request: NextRequest): Promise<string> {
+  const bruto = request.headers.get('x-forwarded-host') ?? request.headers.get('host');
+  const host = bruto?.trim().toLowerCase().split(':')[0] ?? null;
+
+  try {
+    if (host && (await hostEhDeCandidato(host))) return `https://${host}`;
+  } catch {
+    // Cai no padrão: um link no endereço da Vercel abre; um link quebrado não.
+  }
+
+  return process.env.LINK_BASE_URL || request.nextUrl.origin;
 }
 
 /** Primeiro IP da cadeia de proxies. Null quando não dá para determinar. */

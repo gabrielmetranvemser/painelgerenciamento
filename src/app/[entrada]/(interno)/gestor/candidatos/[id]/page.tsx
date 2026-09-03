@@ -86,9 +86,12 @@ export default async function PaginaCandidato({
           </p>
         </div>
         {!c.ativo && <Pilula cor="neutro">inativo</Pilula>}
-        <a href={`${origem}/${c.slug}`} target="_blank" rel="noopener"
+        {/* Com domínio próprio já conferido, o atalho abre o endereço que o
+            eleitor recebe — é o que o gestor precisa olhar. Sem ele, ou antes
+            de conferir, abre o de sempre, que sabidamente funciona. */}
+        <a href={enderecoPublico(c, origem)} target="_blank" rel="noopener"
            className="rounded-full border border-borda px-3.5 py-2 font-mono text-xs text-suave transition-colors hover:border-borda-forte hover:text-texto">
-          /{c.slug} ↗
+          {c.dominio && c.dominio_verificado_em ? c.dominio : `/${c.slug}`} ↗
         </a>
       </header>
 
@@ -109,4 +112,10 @@ export default async function PaginaCandidato({
       </div>
     </>
   );
+}
+
+/** O endereço que a página do candidato tem hoje, do ponto de vista de fora. */
+function enderecoPublico(c: Candidato, origem: string): string {
+  if (c.dominio && c.dominio_verificado_em) return `https://${c.dominio}`;
+  return `${origem}/${c.slug}`;
 }
