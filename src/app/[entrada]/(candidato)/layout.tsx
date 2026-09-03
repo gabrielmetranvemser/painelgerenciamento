@@ -16,16 +16,14 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = { title: { template: '%s', default: 'Material da campanha' } };
 
 /**
- * O tema não pode ser decidido aqui.
+ * O invólucro visual e o tema NÃO ficam aqui.
  *
- * Este layout não recebe os dados do candidato — quem os busca é a página. Por
- * isso a classe `tema-claro`/`tema-escuro` é aplicada lá, no <main>, e este
- * invólucro só garante o fundo cobrindo a tela.
+ * A mesma página responde também na raiz do domínio próprio do candidato, que
+ * não passa por este layout. Se o fundo cobrindo a tela morasse aqui, a versão
+ * no domínio próprio sairia sem ele — e ninguém veria, porque é a versão que só
+ * o eleitor abre. Por isso o invólucro está dentro de `pagina.tsx`, junto do
+ * conteúdo que ele embrulha.
  */
 export default function LayoutCandidato({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="surgir flex min-h-screen flex-col">
-      {children}
-    </div>
-  );
+  return children;
 }

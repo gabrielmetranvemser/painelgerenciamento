@@ -41,6 +41,8 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `src/lib/bots.ts` | o pré-carregamento de link do WhatsApp vira "clique" → métrica inútil |
 | `src/lib/mensagem.ts` | o editor deixa de APONTAR o que falta no texto → o gestor escolhe sem saber o que está abrindo mão (as regras avisam, não travam: só texto quebrado impede salvar) |
 | `src/lib/importacao.ts` | dedup e casamento de município da planilha |
+| `src/lib/dominios-candidatos.ts` | domínio não conferido virando link de mensagem → link morto no WhatsApp, e o clique (a prova de que a pessoa abriu) some sem sintoma |
+| `src/lib/host-do-painel.ts` | o painel respondendo no domínio do candidato → o segmento secreto ganha uma segunda porta, num host divulgado em post |
 | `pegar_proximo_contato` | dois atendentes pegam o mesmo contato, ou um contato cai para quem não atende aquela lista |
 | `rampa_do_chip` | a rampa só vale enquanto `chips.status = 'aquecendo'`. Aplicá-la sempre faz o teto do gestor virar letra morta (`least(rampa, config)`), e ele mexe no campo achando que não salva |
 | `preparar_mensagem` | a variação congela por contato. Congelar cedo demais faz texto desativado continuar saindo; congelar de menos reescreve o histórico do que já foi enviado |
@@ -50,6 +52,7 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `apagar_lista` | apagar a linha da lista sozinha joga os contatos dela na fila de TODO mundo (`lista_id is null` = "cadastrou-se sozinho"). Lista com gente já abordada não se apaga: ali há histórico e procedência |
 | `alternar_grupo` | o grupo ESCREVE em `listas.ativa`, e `pausada_pelo_grupo` é o que impede religar de ressuscitar lista que o gestor pausou à mão |
 | `registrar_resultado` | "Autorizou" congela o consentimento. Gravar sem `declarado_em_reparo` faz uma declaração verbal parecer escrita |
+| `dominio_trocado_perde_a_verificacao` | trocar o domínio ZERA o carimbo. Sem isso o endereço novo herda a verificação do antigo, e o painel jura ter testado um host que nunca abriu |
 
 ### 2. Toda trava é validada no SERVIDOR
 
@@ -171,6 +174,41 @@ Regras que caem disso:
 - **A raiz `/` devolve 404.** Só respondem os endereços de candidato e o painel.
 - O zip da extensão tem o nome derivado da chave, porque carrega o endereço do
   painel dentro dele.
+- **O painel só responde no endereço DELE** (`src/lib/host-do-painel.ts`). Um
+  candidato pode ter domínio próprio apontando para cá, e naquele host todo
+  caminho interno é 404 seco. Antes disso o caminho certo devolvia 307 para
+  `/entrar` e o errado devolvia 404 — e essa diferença era a única coisa que o
+  segmento precisava esconder, justamente no host mais divulgado do sistema.
+- **O arquivo do proxy mora em `src/proxy.ts`.** Os dois detalhes importam: o
+  nome (no Next 16 middleware virou proxy) e o lugar (mesmo nível de `app`, que
+  aqui é `src/`). Enquanto era `middleware.ts` na raiz, o build de produção
+  ainda o achava e o `next dev` o ignorava **em silêncio** — sem erro e sem
+  aviso. Em desenvolvimento a sessão não era renovada e qualquer trava escrita
+  ali parecia quebrada quando só não estava rodando.
+
+### 7.1 Domínio próprio de candidato
+
+A página pública de um candidato pode atender também num endereço da campanha
+(`material.sofiaandrade.com.br`), cadastrado pelo gestor em Candidatos. O painel
+continua só no endereço da Vercel.
+
+- **Os dois endereços respondem, para sempre.** `/{slug}` na Vercel nunca sai do
+  ar: todo link já enviado aponta para lá e está no WhatsApp de outra pessoa.
+  Desligar quebraria conversas antigas e a contagem de cliques delas.
+- **Só entra em link depois de conferido.** `dominio` é o que o gestor digitou;
+  `dominio_verificado_em` é o painel tendo aberto o endereço e perguntado de quem
+  ele é (`/api/dominio`). Entre digitar e o DNS propagar passam horas, e nessa
+  janela o link não abre — mas o envio é registrado igual. O que some é o
+  clique, que é a prova de consentimento. Na dúvida, usa o endereço que
+  sabidamente funciona.
+- **Só subdomínio.** O domínio raiz costuma ser o portal do candidato; apontá-lo
+  para cá substituiria o site dele por uma página de captação. `problemaNoDominio`
+  recusa a raiz.
+- **A troca vale daqui para a frente.** `prepararMensagem` é o único lugar que
+  escolhe entre o domínio do candidato e o padrão.
+- Três passos ficam FORA deste painel: o CNAME no DNS da campanha, o domínio
+  acrescentado ao projeto na Vercel e o certificado. O botão Conferir existe
+  para provar os três de uma vez.
 
 ### 8. Nada de dado pessoal em URL
 

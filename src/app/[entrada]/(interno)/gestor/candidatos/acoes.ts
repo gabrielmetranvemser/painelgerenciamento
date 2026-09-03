@@ -6,6 +6,7 @@ import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { exigirGestorOuFalhar } from '@/lib/gestor';
 import { ETIQUETA_CANDIDATOS } from '@/lib/cache';
 import { TEXTO_PROBLEMA_SLUG, validarSlug } from '@/lib/slug';
+import { normalizarDominio, problemaNoDominio, TEXTO_PROBLEMA_DOMINIO } from '@/lib/dominio';
 import { DIGITOS_DO_CARGO, type CargoEleitoral } from '@/lib/tipos-banco';
 
 /**
@@ -57,6 +58,7 @@ const Candidato = z.object({
   slogan: z.string().trim().max(120).optional().or(z.literal('')),
   chamada: z.string().trim().max(300).optional().or(z.literal('')),
   propostas: z.string().trim().max(4000).optional().or(z.literal('')),
+  dominio: z.string().trim().max(300).optional().or(z.literal('')),
   ativo: z.boolean(),
 });
 
@@ -85,6 +87,7 @@ function ler(form: FormData) {
     slogan: form.get('slogan') ?? '',
     chamada: form.get('chamada') ?? '',
     propostas: form.get('propostas') ?? '',
+    dominio: form.get('dominio') ?? '',
     ativo: form.get('ativo') === 'on',
   };
 }
@@ -106,6 +109,12 @@ function conferir(d: z.infer<typeof Candidato>): string | null {
   }
   if (d.cargo !== 'senador' && d.vaga !== 1) {
     return 'Só senador tem 2ª vaga.';
+  }
+
+  const host = normalizarDominio(d.dominio);
+  if (host) {
+    const problema = problemaNoDominio(host);
+    if (problema) return TEXTO_PROBLEMA_DOMINIO[problema];
   }
   return null;
 }
@@ -131,6 +140,10 @@ function paraBanco(d: z.infer<typeof Candidato>) {
     slogan: limpar(d.slogan),
     chamada: limpar(d.chamada),
     propostas: limpar(d.propostas),
+    // Guardado já normalizado: é comparado byte a byte com o cabeçalho `Host`.
+    // Quem zera o carimbo de verificação quando isto muda é o gatilho do banco,
+    // não esta função — assim ninguém consegue esquecer de zerar.
+    dominio: normalizarDominio(d.dominio),
     ativo: d.ativo,
   };
 }
@@ -140,6 +153,8 @@ function traduzir(mensagem: string): string {
   if (mensagem.includes('numero_bate_com_o_cargo')) return 'O número não bate com a quantidade de dígitos do cargo.';
   if (mensagem.includes('so_senador_tem_segunda_vaga')) return 'Só senador tem 2ª vaga.';
   if (mensagem.includes('candidatos_slug_check')) return TEXTO_PROBLEMA_SLUG.formato;
+  if (mensagem.includes('candidatos_dominio_uk')) return 'Esse domínio já está em outro candidato.';
+  if (mensagem.includes('dominio_e_um_host')) return TEXTO_PROBLEMA_DOMINIO.formato;
   return mensagem;
 }
 
@@ -177,6 +192,124 @@ export async function salvarCandidato(id: string, form: FormData): Promise<Resul
 
   publicarMudanca();
   return { ok: true };
+}
+
+// ── Domínio próprio ─────────────────────────────────────────────────────────
+
+export type ResultadoDominio =
+  | { ok: true; verificadoEm: string }
+  | { ok: false; erro: string };
+
+/** Quanto esperar o domínio de terceiro responder antes de desistir. */
+const ESPERA_MS = 8000;
+
+/**
+ * Confere, de fora, que o domínio cadastrado responde por ESTE candidato.
+ *
+ * ⚠️ Esta função é a razão de o domínio não valer assim que é digitado.
+ *
+ * Entre o gestor digitar `material.sofiaandrade.com.br` e aquele endereço
+ * existir de verdade há três passos que NÃO são deste painel: o CNAME no DNS da
+ * campanha, o domínio adicionado ao projeto na Vercel e o certificado emitido.
+ * Qualquer um deles pendente e o link não abre. Como o painel registra o envio
+ * do mesmo jeito e o clique é a única métrica que ele controla, o prejuízo
+ * seria invisível — mensagens saindo o dia inteiro com um link morto.
+ *
+ * Então o painel não acredita: ele abre o endereço e pergunta de quem é. Uma
+ * resposta certa prova os três passos de uma vez.
+ *
+ * O carimbo é apagado sozinho pelo gatilho do banco quando o domínio muda, para
+ * que o "verificado" nunca seja herdado por um endereço que ninguém testou.
+ */
+export async function conferirDominio(id: string): Promise<ResultadoDominio> {
+  await exigirGestorOuFalhar();
+
+  const supabase = criarClienteAdmin();
+  const { data: candidato } = await supabase
+    .from('candidatos').select('slug, dominio').eq('id', id).maybeSingle();
+
+  if (!candidato) return { ok: false, erro: 'Candidato não encontrado.' };
+  if (!candidato.dominio) {
+    return { ok: false, erro: 'Escreva o domínio e salve o candidato antes de conferir.' };
+  }
+
+  const endereco = `https://${candidato.dominio}/api/dominio`;
+
+  let resposta: Response;
+  try {
+    resposta = await fetch(endereco, {
+      cache: 'no-store',
+      redirect: 'manual',
+      signal: AbortSignal.timeout(ESPERA_MS),
+    });
+  } catch (e) {
+    return { ok: false, erro: porQueNaoRespondeu(e, candidato.dominio) };
+  }
+
+  if (resposta.status === 404) {
+    return {
+      ok: false,
+      erro: `${candidato.dominio} respondeu, mas ainda não é este painel. `
+        + 'Falta acrescentar o domínio ao projeto na Vercel — ou o DNS ainda está '
+        + 'apontando para onde apontava antes.',
+    };
+  }
+
+  if (!resposta.ok) {
+    return { ok: false, erro: `${candidato.dominio} respondeu com erro ${resposta.status}.` };
+  }
+
+  let dono: { slug?: string };
+  try {
+    dono = (await resposta.json()) as { slug?: string };
+  } catch {
+    return {
+      ok: false,
+      erro: `${candidato.dominio} respondeu outra coisa. Confira se o DNS aponta para cá.`,
+    };
+  }
+
+  if (dono.slug !== candidato.slug) {
+    return {
+      ok: false,
+      erro: `${candidato.dominio} está apontando para a página de "${dono.slug}", não para esta.`,
+    };
+  }
+
+  const verificadoEm = new Date().toISOString();
+  const { error } = await supabase
+    .from('candidatos').update({ dominio_verificado_em: verificadoEm }).eq('id', id);
+  if (error) return { ok: false, erro: error.message };
+
+  publicarMudanca();
+  return { ok: true, verificadoEm };
+}
+
+/**
+ * Traduz a falha de rede para o passo que está faltando.
+ *
+ * Um "fetch failed" seco manda o gestor abrir um chamado. As três causas abaixo
+ * são as que acontecem de verdade, e cada uma tem uma ação diferente — dizer
+ * qual delas é poupa a tarde de alguém.
+ */
+function porQueNaoRespondeu(e: unknown, dominio: string): string {
+  const causa = String(
+    (e as { cause?: { code?: string } })?.cause?.code ?? (e as Error)?.name ?? e,
+  );
+
+  if (causa.includes('ENOTFOUND') || causa.includes('EAI_AGAIN')) {
+    return `${dominio} ainda não existe no DNS. Crie o CNAME apontando para `
+      + 'cname.vercel-dns.com e tente de novo em alguns minutos.';
+  }
+  if (causa.includes('CERT') || causa.includes('ALTNAME') || causa.includes('SSL')) {
+    return `${dominio} responde, mas o certificado ainda não vale para ele. `
+      + 'Acrescente o domínio ao projeto na Vercel e espere a emissão — costuma levar minutos.';
+  }
+  if (causa.includes('TimeoutError') || causa.includes('AbortError')) {
+    return `${dominio} não respondeu em ${ESPERA_MS / 1000} segundos. `
+      + 'Se estiver atrás do Cloudflare, deixe o registro cinza (DNS only), não laranja.';
+  }
+  return `Não consegui abrir ${dominio}: ${causa}`;
 }
 
 // ── Materiais ───────────────────────────────────────────────────────────────

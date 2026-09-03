@@ -95,6 +95,9 @@ echo
 "${PSQL[@]}" -f supabase/tests/25_autorizou_libera_material.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
 
 echo
+"${PSQL[@]}" -f supabase/tests/26_dominio_por_candidato.sql 2>&1 | sed 's/^psql.*NOTICE:  //;s/^psql.*WARNING:  //' || falhou=1
+
+echo
 echo "── Concorrência da fila ─────────────────────────────────────────────────"
 
 # ⚠️ Este é o único bloco que precisa de dados COMMITADOS — são várias conexões

@@ -489,6 +489,17 @@ export type Candidato = {
   slogan: string | null;
   chamada: string | null;
   propostas: string | null;
+  /**
+   * Domínio próprio da página pública deste candidato, sem esquema e sem barra:
+   * "material.sofiaandrade.com.br". Nulo = só o endereço padrão.
+   */
+  dominio: string | null;
+  /**
+   * Quando o painel confirmou que aquele domínio responde por ESTE candidato.
+   * Enquanto for nulo, os links continuam saindo no endereço padrão — domínio
+   * digitado não é domínio no ar, e a diferença são horas de DNS.
+   */
+  dominio_verificado_em: string | null;
   ativo: boolean;
   criado_em: string;
 };
