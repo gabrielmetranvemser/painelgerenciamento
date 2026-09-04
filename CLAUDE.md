@@ -53,6 +53,7 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `alternar_grupo` | o grupo ESCREVE em `listas.ativa`, e `pausada_pelo_grupo` é o que impede religar de ressuscitar lista que o gestor pausou à mão |
 | `registrar_resultado` | "Autorizou" congela o consentimento. Gravar sem `declarado_em_reparo` faz uma declaração verbal parecer escrita |
 | `dominio_trocado_perde_a_verificacao` | trocar o domínio ZERA o carimbo. Sem isso o endereço novo herda a verificação do antigo, e o painel jura ter testado um host que nunca abriu |
+| `recebe_captacao_de` | quem recebe o cadastro do formulário. Marcar ninguém tem de devolver o lead à chapa inteira: se prender, quem PEDIU material espera sem ninguém saber |
 
 ### 2. Toda trava é validada no SERVIDOR
 
@@ -129,6 +130,31 @@ Qual passo falta para cada contato sai de `contato_json(...)->'passos'`, no
 servidor. A tela nunca adivinha: o mesmo contato volta pela fila, é escolhido a
 dedo ou é reaberto por "Meus contatos" dias depois, e repetir uma mensagem que a
 pessoa já recebeu é o erro mais caro desta tela.
+
+### 3.3 Quem chega pelo formulário não é abordagem
+
+Quem preenche a página de um candidato entra com `origem` `site` ou `kit`,
+`lista_id` nulo e `candidato_origem_id` preenchido. As três marcas importam:
+
+- **O consentimento já está congelado.** `registrarCaptacao` grava a chapa em
+  `contato_candidato` no ato — a pessoa pediu por escrito, com data, hora e IP.
+  Isso é mais forte que o "posso?" da conversa, então a `permissao` não tem o
+  que acrescentar e o material já nasce liberado.
+- **A fila só oferece a quem atende aquele candidato**, e, dentro deles, a quem
+  o gestor escolheu (`recebe_captacao`). A regra mora em `recebe_captacao_de`
+  porque CINCO funções da fila fazem a mesma pergunta — escrever a condição nas
+  cinco é garantir que um dia divirjam, e a que ficar para trás entrega o lead a
+  quem foi tirado da lista, sem sintoma.
+- **Ninguém marcado = a chapa inteira recebe.** É o OPOSTO de
+  `atendente_listas`, onde ausência quer dizer "não recebe nada". Lá a ausência
+  protege; aqui ela seria o estrago — esquecer de marcar deixaria quem pediu
+  material parado na fila.
+
+Na tela, esse contato mostra a faixa `PediuMaterial`, com o atalho para o
+material. Antes dela a tela mentia por omissão: o cadastro aparecia com a mesma
+pílula âmbar de qualquer contato quente e o botão dizia "Abertura", então o
+atendente abordava do zero quem tinha preenchido o formulário quinze minutos
+antes.
 
 ### 4. Nunca gravar preferência de voto
 

@@ -127,3 +127,33 @@ export async function definirPrincipal(atendenteId: string, candidatoId: string)
   if (error) return { ok: false, erro: error.message };
   return { ok: true };
 }
+
+/**
+ * Quem recebe os cadastros que chegam pelo formulário deste candidato.
+ *
+ * ⚠️ A regra de quem recebe está no BANCO (`recebe_captacao_de`), não aqui:
+ * cinco funções da fila fazem essa pergunta, e a resposta precisa ser a mesma
+ * nas cinco. Esta ação só liga e desliga a marca.
+ *
+ * E vale lembrar o que a ausência de marca significa, porque é o contrário de
+ * `atendente_listas`: com NINGUÉM marcado, o cadastro vai para a chapa inteira.
+ * Não é esquecimento — é o que impede alguém que pediu material de ficar
+ * parado na fila porque o gestor não marcou ninguém.
+ */
+export async function definirRecebeCaptacao(
+  atendenteId: string,
+  candidatoId: string,
+  recebe: boolean,
+): Promise<Resultado> {
+  await exigirGestorOuFalhar();
+  const supabase = criarClienteAdmin();
+
+  const { error } = await supabase
+    .from('atendente_candidatos')
+    .update({ recebe_captacao: recebe })
+    .eq('atendente_id', atendenteId)
+    .eq('candidato_id', candidatoId);
+
+  if (error) return { ok: false, erro: error.message };
+  return { ok: true };
+}

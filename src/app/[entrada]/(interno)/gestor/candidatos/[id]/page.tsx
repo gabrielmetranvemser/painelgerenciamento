@@ -34,7 +34,7 @@ export default async function PaginaCandidato({
       supabase.from('candidatos').select('*').eq('id', id).maybeSingle(),
       supabase.from('materiais').select('*').eq('candidato_id', id).order('ordem'),
       supabase.from('atendente_candidatos')
-        .select('atendente_id, principal').eq('candidato_id', id),
+        .select('atendente_id, principal, recebe_captacao').eq('candidato_id', id),
       // Gestor entra na lista também: nesta operação ele atende — tem chip e
       // atalho para a tela de atendimento. Filtrar por papel deixaria a
       // candidatura sem ninguém justamente na campanha pequena, que é o caso.
@@ -53,15 +53,20 @@ export default async function PaginaCandidato({
   ]);
 
   const porAtendente = new Map(
-    ((vinculos ?? []) as { atendente_id: string; principal: boolean }[])
-      .map((v) => [v.atendente_id, v.principal]),
+    ((vinculos ?? []) as
+      { atendente_id: string; principal: boolean; recebe_captacao: boolean }[])
+      .map((v) => [v.atendente_id, v]),
   );
   const equipe = (usuarios ?? []) as
     { id: string; primeiro_nome: string; ativo: boolean; papel: PapelUsuario }[];
 
   const atendentes: AtendenteDoCandidato[] = equipe
     .filter((u) => porAtendente.has(u.id))
-    .map((u) => ({ ...u, principal: porAtendente.get(u.id) ?? false }));
+    .map((u) => ({
+      ...u,
+      principal: porAtendente.get(u.id)?.principal ?? false,
+      recebe_captacao: porAtendente.get(u.id)?.recebe_captacao ?? false,
+    }));
 
   // Conta inativa não entra na lista de quem dá para acrescentar: atribuir
   // candidato a quem não trabalha só faz o gestor achar que tem cobertura.
