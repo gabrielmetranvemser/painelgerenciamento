@@ -1,8 +1,8 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { Aviso, Botao, Campo, Selecao, cx } from '@/components/ui';
+import { Aviso, Botao, BotaoLink, Campo, Selecao, cx } from '@/components/ui';
 import { CamposEndereco } from '@/components/campos-endereco';
 import { ComiteMaisPerto } from '@/components/comite-perto';
 import type { Comite } from '@/lib/comites';
@@ -10,6 +10,80 @@ import { ENDERECO_VAZIO, TAMANHOS_CAMISETA, type EnderecoEstruturado } from '@/l
 import { pedeTamanho, type ItemKit } from '@/lib/itens-kit';
 import type { Municipio } from '@/lib/tipos-banco';
 import { cadastrar } from './acoes';
+
+/** Segundos até levar a pessoa ao WhatsApp. Curto o bastante para ela não sair
+ *  da página, longo o bastante para ela ler que deu certo. */
+const SEGUNDOS_ATE_O_WHATSAPP = 4;
+
+/**
+ * O fim do cadastro.
+ *
+ * ⚠️ Quando há número de recepção, a pessoa é levada ao WhatsApp com o texto já
+ * escrito — e é ELA quem aperta enviar. O sistema não manda nada: a mensagem
+ * sai do aparelho dela para a campanha. É entrada, não saída, e é o que mantém
+ * esta operação longe da definição de disparo automático.
+ *
+ * A contagem é visível e cancelável de propósito. Redirecionamento automático
+ * sem aviso é comportamento de página duvidosa, e aqui a pessoa acabou de
+ * entregar telefone e endereço: ver o que vai acontecer, e poder não ir, é o
+ * mínimo. Quem cancela não perde nada — o cadastro já está gravado e alguém da
+ * equipe fala com ela do mesmo jeito.
+ */
+function Obrigado({ nome, whatsapp }: { nome: string; whatsapp: string | null }) {
+  const [faltam, setFaltam] = useState(SEGUNDOS_ATE_O_WHATSAPP);
+  const [cancelado, setCancelado] = useState(false);
+
+  useEffect(() => {
+    if (!whatsapp || cancelado) return;
+    if (faltam <= 0) {
+      window.location.assign(whatsapp);
+      return;
+    }
+    const t = setTimeout(() => setFaltam((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [whatsapp, cancelado, faltam]);
+
+  if (!whatsapp || cancelado) {
+    return (
+      <Aviso tom="ok" className="text-base">
+        <p className="font-medium">Obrigado, {nome}!</p>
+        <p className="mt-1">
+          Em breve alguém da equipe fala com você pelo WhatsApp e manda o material.
+          Se mudar de ideia, é só pedir para sair na própria conversa.
+        </p>
+      </Aviso>
+    );
+  }
+
+  return (
+    <Aviso tom="ok" className="text-base">
+      <p className="font-medium">Obrigado, {nome}!</p>
+      <p className="mt-1">
+        Vamos abrir uma conversa no WhatsApp com a equipe. A mensagem já vai escrita —
+        é só você enviar.
+      </p>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        {/* Link de verdade, e não um botão com onClick: assim a pessoa vê o
+            destino antes de tocar, consegue abrir noutra aba e o endereço
+            existe no HTML — que é o que permite conferir o que foi montado sem
+            precisar seguir o redirecionamento. */}
+        <BotaoLink href={whatsapp}>Abrir o WhatsApp</BotaoLink>
+        <span aria-live="polite" className="text-sm opacity-80">
+          abrindo em {faltam}s
+        </span>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setCancelado(true)}
+        className="mt-3 text-sm underline underline-offset-4 opacity-70 hover:opacity-100"
+      >
+        Prefiro não abrir agora
+      </button>
+    </Aviso>
+  );
+}
 
 function BotaoEnviar() {
   const { pending } = useFormStatus();
@@ -46,15 +120,7 @@ export function FormularioCandidato({
   const cidade = municipios.find((m) => m.id === cidadeId) ?? null;
 
   if (estado?.ok) {
-    return (
-      <Aviso tom="ok" className="text-base">
-        <p className="font-medium">Obrigado, {estado.nome}!</p>
-        <p className="mt-1">
-          Em breve alguém da equipe fala com você pelo WhatsApp e manda o material.
-          Se mudar de ideia, é só pedir para sair na própria conversa.
-        </p>
-      </Aviso>
-    );
+    return <Obrigado nome={estado.nome} whatsapp={estado.whatsapp} />;
   }
 
   return (

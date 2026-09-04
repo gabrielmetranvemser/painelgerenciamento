@@ -139,6 +139,18 @@ function CamposRitmo({ config }: { config: Config }) {
                dica="Depois disso, volta para a fila se ninguém falou com a pessoa." />
       </div>
 
+      {/* ⚠️ Fica aqui, e não na tela do candidato, porque o prazo é um só para
+          a operação inteira — e porque o campo de cima é o parente dele: os
+          dois respondem "por quanto tempo esta pessoa é de alguém?". */}
+      <div className="mt-4">
+        <Campo rotulo="Horas que o dono do número da recepção segura o contato"
+               name="reserva_recepcao_horas" type="number" min={0} max={72}
+               defaultValue={config.reserva_recepcao_horas}
+               dica={'Quem preenche o formulário é levado ao WhatsApp de um número da campanha. '
+                 + 'Como a conversa já está no aparelho de quem recebeu, o contato fica com essa '
+                 + 'pessoa por este tempo — depois abre para o resto da chapa. Zero desliga.'} />
+      </div>
+
       {/* ⚠️ O TETO AVISA POR PADRÃO, e este interruptor é o que devolve a
           escolha a quem responde pela campanha. Ele fica AQUI, colado no campo
           "Conversas por dia", porque a pergunta que ele responde é justamente

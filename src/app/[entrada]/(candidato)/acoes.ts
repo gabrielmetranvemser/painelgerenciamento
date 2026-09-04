@@ -42,7 +42,18 @@ const Entrada = z.object({
   apelido: z.string().max(200).optional(),
 });
 
-export type ResultadoCadastro = { ok: true; nome: string } | { ok: false; erro: string };
+export type ResultadoCadastro =
+  | {
+      ok: true;
+      nome: string;
+      /**
+       * Para onde levar a pessoa depois do "obrigado", com a mensagem já
+       * escrita — ela é quem aperta enviar. `null` quando o candidato não tem
+       * número de recepção: aí a tela só agradece, como sempre fez.
+       */
+      whatsapp: string | null;
+    }
+  | { ok: false; erro: string };
 
 /**
  * Cadastro na página de um candidato.
@@ -82,7 +93,10 @@ export async function cadastrar(
   // Caiu na armadilha: devolve a MESMA tela de sucesso e não grava nada. Dizer
   // "recusado" ensinaria o robô a contornar no próximo cadastro.
   if (d.apelido && d.apelido.trim()) {
-    return { ok: true, nome: primeiroNomeDe(d.nome) ?? d.nome };
+    // ⚠️ Sem `whatsapp`: quem caiu na armadilha não recebe número da campanha.
+    // A tela é a mesma, mas entregar o número ao robô transformaria este
+    // formulário numa lista de telefones da equipe servida de graça.
+    return { ok: true, nome: primeiroNomeDe(d.nome) ?? d.nome, whatsapp: null };
   }
 
   const supabase = criarClienteAdmin();
@@ -124,6 +138,10 @@ export async function cadastrar(
     tamanhoCamiseta: pedeTamanho(itens, validos) ? d.tamanhoCamiseta ?? null : null,
     itens: querKit ? itens : null,
     candidatoId: candidato.id,
+    candidatoNome: candidato.nome_urna,
+    // Os rótulos, não as chaves: quem lê a mensagem é o atendente, e
+    // "camiseta_branca" não é palavra que gente escreve.
+    itensRotulos: itens.map((c) => validos.find((i) => i.chave === c)?.rotulo ?? c),
     textoAceite: textoDoAceite({
       nome_urna: candidato.nome_urna,
       cargo: candidato.cargo as CargoEleitoral,
@@ -133,5 +151,7 @@ export async function cadastrar(
     userAgent: cabecalhos.get('user-agent'),
   });
 
-  return r.ok ? { ok: true, nome: r.primeiroNome } : { ok: false, erro: r.erro };
+  return r.ok
+    ? { ok: true, nome: r.primeiroNome, whatsapp: r.whatsapp }
+    : { ok: false, erro: r.erro };
 }

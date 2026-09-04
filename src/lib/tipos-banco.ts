@@ -213,6 +213,11 @@ export type Config = {
   /** Quem responde pelos dados (LGPD). É da operação, não de um candidato. */
   responsavel_dados: string;
   atualizado_em: string;
+  /**
+   * Horas que o dono do número da recepção segura o contato antes de ele abrir
+   * para o resto da chapa. Zero desliga a reserva.
+   */
+  reserva_recepcao_horas: number;
 };
 
 /**
@@ -340,6 +345,14 @@ export type Contato = {
   encaminhamento_tratado_por: string | null;
   anonimizado_em: string | null;
   criado_em: string;
+  /**
+   * Dono do número para o qual esta pessoa foi levada depois do formulário: a
+   * conversa já está no WhatsApp dele. Enquanto `reservado_ate` não vence, a
+   * fila não oferece este contato a mais ninguém — dois atendentes na mesma
+   * pessoa é o que mais parece spam.
+   */
+  reservado_para: string | null;
+  reservado_ate: string | null;
 };
 
 export type Interacao = {
@@ -493,6 +506,15 @@ export type Candidato = {
    * Domínio próprio da página pública deste candidato, sem esquema e sem barra:
    * "material.sofiaandrade.com.br". Nulo = só o endereço padrão.
    */
+  /**
+   * O texto que a pessoa envia ao ser levada ao WhatsApp depois do formulário.
+   *
+   * ⚠️ É mensagem DELA PARA A CAMPANHA, não o contrário. Por isso não passa por
+   * `validarModelo`: identificação da propaganda, pedido de saída e chapa
+   * declarada são exigências de quem aborda, e aqui quem escreve é o eleitor.
+   * Nulo = o padrão de `src/lib/recepcao.ts`.
+   */
+  mensagem_recepcao: string | null;
   dominio: string | null;
   /**
    * Quando o painel confirmou que aquele domínio responde por ESTE candidato.
