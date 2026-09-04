@@ -13,6 +13,7 @@ import {
 import { FormularioCandidato } from '../formulario';
 import { Materiais } from './materiais';
 import { AtendentesDoCandidato, type AtendenteDoCandidato } from './atendentes';
+import { RecepcaoNoWhatsapp, type NumeroDaRecepcao } from './recepcao';
 import { ComitesDoCandidato } from './comites';
 import { carregarComites } from '@/lib/acoes-comites';
 
@@ -47,9 +48,13 @@ export default async function PaginaCandidato({
 
   // Onde a pessoa pode buscar material. Depende do candidato existir, então vem
   // depois do `notFound`.
-  const [comites, { data: municipios }] = await Promise.all([
+  const [comites, { data: municipios }, { data: numeros }, { data: config }] = await Promise.all([
     carregarComites(id),
     supabase.from('municipios').select('*').order('nome'),
+    supabase.from('numeros_recepcao')
+      .select('id, rotulo, numero_e164, atendente_id, peso, ativo, sorteios')
+      .eq('candidato_id', id).order('criado_em'),
+    supabase.from('config').select('reserva_recepcao_horas').eq('id', 1).maybeSingle(),
   ]);
 
   const porAtendente = new Map(
@@ -106,6 +111,13 @@ export default async function PaginaCandidato({
           <AtendentesDoCandidato
             candidatoId={c.id} nomeUrna={c.nome_urna} atendentes={atendentes}
             disponiveis={disponiveis} entrada={entrada}
+          />
+          <RecepcaoNoWhatsapp
+            candidatoId={c.id} nomeUrna={c.nome_urna}
+            numeros={(numeros ?? []) as NumeroDaRecepcao[]}
+            equipe={equipe.filter((u) => u.ativo).map((u) => ({ id: u.id, primeiro_nome: u.primeiro_nome }))}
+            mensagem={c.mensagem_recepcao}
+            reservaHoras={config?.reserva_recepcao_horas ?? 0}
           />
           <Materiais candidatoId={c.id} materiais={(materiais ?? []) as Material[]}
                      previaHref={rotas(entrada).gestorCandidatoPrevia(c.id)} />

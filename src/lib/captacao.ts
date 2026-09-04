@@ -4,6 +4,7 @@ import { hashTelefone } from '@/lib/hmac';
 import { montarLinhaEndereco, normalizarCep, type EnderecoEstruturado } from '@/lib/cep';
 import { normalizarTelefone, type MotivoInvalido } from '@/lib/telefone';
 import { primeiroNomeDe } from '@/lib/mensagem';
+import { linkDaRecepcao, montarMensagemRecepcao } from '@/lib/recepcao';
 
 /**
  * Registro de quem se cadastrou por vontade própria — pelo site ou pedindo o
@@ -49,6 +50,10 @@ export type DadosCaptacao = {
   itens?: string[] | null;
   /** De qual candidatura veio o cadastro. É o dono do lead. */
   candidatoId: string | null;
+  /** Nome de urna, para o texto que a pessoa vai mandar no WhatsApp. */
+  candidatoNome?: string | null;
+  /** Os itens pedidos, já como a pessoa os leu na tela ("camiseta"). */
+  itensRotulos?: string[] | null;
   /** A frase que a pessoa marcou, copiada no ato. É a prova do que foi aceito. */
   textoAceite: string;
   ip: string | null;
@@ -56,7 +61,18 @@ export type DadosCaptacao = {
 };
 
 export type ResultadoCaptacao =
-  | { ok: true; primeiroNome: string }
+  | {
+      ok: true;
+      primeiroNome: string;
+      /**
+       * Para onde levar a pessoa depois do "obrigado", com o texto já escrito.
+       *
+       * `null` quando o candidato não tem número de recepção cadastrado — e aí
+       * a tela simplesmente não redireciona. O cadastro já está gravado de
+       * qualquer jeito: a recepção é um a mais, nunca um pré-requisito.
+       */
+      whatsapp: string | null;
+    }
   | { ok: false; erro: string };
 
 const EXPLICACAO_TELEFONE: Record<MotivoInvalido, string> = {
@@ -77,7 +93,12 @@ export async function registrarCaptacao(dados: DadosCaptacao): Promise<Resultado
   const supabase = criarClienteAdmin();
   const { hash, versao } = hashTelefone(telefone.chaveDedup);
   const primeiroNome = primeiroNomeDe(dados.nome);
-  const obrigado: ResultadoCaptacao = { ok: true, primeiroNome: primeiroNome ?? dados.nome };
+  // O "obrigado" seco: usado nas saídas em que NÃO existe contato para levar a
+  // lugar nenhum (limite de IP, clique duplo, número bloqueado). A resposta é a
+  // mesma em todas de propósito — ver o item 2.
+  const obrigado: ResultadoCaptacao = {
+    ok: true, primeiroNome: primeiroNome ?? dados.nome, whatsapp: null,
+  };
 
   // 0. Limite por IP. Vem antes de qualquer escrita: o ponto é não deixar uma
   //    enchente virar linha no banco nem contato na fila.
@@ -236,6 +257,7 @@ export async function registrarCaptacao(dados: DadosCaptacao): Promise<Resultado
       .eq('id', captacao.id);
   }
 
+
   // 4. O candidato pedido já entra na lista de quem pode alcançar esta pessoa.
   //
   //    Normalmente essa lista nasce quando o atendente manda a permissão. Aqui
@@ -252,7 +274,62 @@ export async function registrarCaptacao(dados: DadosCaptacao): Promise<Resultado
       );
   }
 
-  return obrigado;
+  // 5. Para qual número da campanha levar esta pessoa.
+  //
+  // ⚠️ Por último, e nunca antes: o rodízio RESERVA o contato para o dono do
+  // número, e reservar algo que ainda não foi gravado não reserva nada — a
+  // pessoa cairia para outro atendente e receberia conversa de dois lugares.
+  //
+  // Falha aqui não derruba o cadastro. O que importa já está gravado; a
+  // recepção é um a mais, nunca um pré-requisito. Sem número cadastrado, a tela
+  // simplesmente não redireciona.
+  return { ...obrigado, whatsapp: await recepcao(supabase, dados, contatoId, primeiroNome) };
+}
+
+/**
+ * Sorteia o número da recepção e monta o link, ou `null`.
+ *
+ * ⚠️ Engole o próprio erro de propósito. Esta função roda depois de o cadastro
+ * estar gravado; se ela estourasse, a pessoa veria "não consegui cadastrar"
+ * para um cadastro que ESTÁ no banco, e preencheria de novo. Um redirecionamento
+ * que não acontece custa um número não aquecido; um cadastro que parece ter
+ * falhado custa o lead.
+ */
+async function recepcao(
+  supabase: ReturnType<typeof criarClienteAdmin>,
+  dados: DadosCaptacao,
+  contatoId: string | null,
+  primeiroNome: string | null,
+): Promise<string | null> {
+  if (!dados.candidatoId || !dados.candidatoNome) return null;
+
+  try {
+    const { data } = await supabase.rpc('sortear_numero_recepcao', {
+      p_candidato_id: dados.candidatoId,
+      p_contato_id: contatoId,
+    });
+
+    const sorteio = data as { ok: boolean; numero?: string } | null;
+    if (!sorteio?.ok || !sorteio.numero) return null;
+
+    const [{ data: municipio }, { data: candidato }] = await Promise.all([
+      supabase.from('municipios').select('nome').eq('id', dados.municipioId).maybeSingle(),
+      supabase.from('candidatos').select('mensagem_recepcao').eq('id', dados.candidatoId).maybeSingle(),
+    ]);
+
+    return linkDaRecepcao(
+      sorteio.numero,
+      montarMensagemRecepcao(candidato?.mensagem_recepcao ?? null, {
+        nome: dados.nome,
+        primeiroNome,
+        cidade: municipio?.nome ?? null,
+        candidato: dados.candidatoNome,
+        itens: dados.itensRotulos ?? [],
+      }),
+    );
+  } catch {
+    return null;
+  }
 }
 
 /** Primeiro IP da cadeia de proxies. */

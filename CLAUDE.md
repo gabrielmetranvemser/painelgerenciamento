@@ -43,6 +43,7 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `src/lib/importacao.ts` | dedup e casamento de município da planilha |
 | `src/lib/dominios-candidatos.ts` | domínio não conferido virando link de mensagem → link morto no WhatsApp, e o clique (a prova de que a pessoa abriu) some sem sintoma |
 | `src/lib/host-do-painel.ts` | o painel respondendo no domínio do candidato → o segmento secreto ganha uma segunda porta, num host divulgado em post |
+| `src/lib/recepcao.ts` | o texto que o ELEITOR envia à campanha. Não passa por `validarModelo`: aquelas regras são de quem aborda |
 | `pegar_proximo_contato` | dois atendentes pegam o mesmo contato, ou um contato cai para quem não atende aquela lista |
 | `rampa_do_chip` | a rampa só vale enquanto `chips.status = 'aquecendo'`. Aplicá-la sempre faz o teto do gestor virar letra morta (`least(rampa, config)`), e ele mexe no campo achando que não salva |
 | `preparar_mensagem` | a variação congela por contato. Congelar cedo demais faz texto desativado continuar saindo; congelar de menos reescreve o histórico do que já foi enviado |
@@ -54,6 +55,8 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `registrar_resultado` | "Autorizou" congela o consentimento. Gravar sem `declarado_em_reparo` faz uma declaração verbal parecer escrita |
 | `dominio_trocado_perde_a_verificacao` | trocar o domínio ZERA o carimbo. Sem isso o endereço novo herda a verificação do antigo, e o painel jura ter testado um host que nunca abriu |
 | `recebe_captacao_de` | quem recebe o cadastro do formulário. Marcar ninguém tem de devolver o lead à chapa inteira: se prender, quem PEDIU material espera sem ninguém saber |
+| `sortear_numero_recepcao` | RODÍZIO, não sorteio: sai quem está mais atrás em `sorteios/peso`. Aleatório de verdade não entrega o 50/50 pedido, e a reserva do contato sai daqui |
+| `criar_numero_recepcao` | número novo entra EMPATADO com quem mais recebeu. Zerado, ele levaria sozinho os próximos cadastros até alcançar |
 
 ### 2. Toda trava é validada no SERVIDOR
 
@@ -155,6 +158,28 @@ material. Antes dela a tela mentia por omissão: o cadastro aparecia com a mesma
 pílula âmbar de qualquer contato quente e o botão dizia "Abertura", então o
 atendente abordava do zero quem tinha preenchido o formulário quinze minutos
 antes.
+
+### 3.4 A recepção no WhatsApp NÃO é envio automático
+
+Depois do formulário, a pessoa é levada ao WhatsApp de um número da campanha
+com o texto já escrito, e **ela** aperta enviar. A mensagem sai do aparelho
+dela para a campanha: é ENTRADA, não saída. Se um dia alguém propuser
+"automatizar esse envio", é aqui que a linha do primeiro princípio é cruzada.
+
+- **Rodízio, não sorteio.** O pedido foi "2 números 50/50". Aleatório não
+  entrega isso — com 10 cadastros, 7/3 é comum. Sai quem está mais atrás em
+  `sorteios / peso`; `peso` permite fugir da divisão igual de propósito.
+- **Número novo entra empatado** com quem mais recebeu. Zerado, levaria sozinho
+  os próximos cadastros — o oposto do que o gestor pediu.
+- **Quem escreveu para o número do Vitor fica com o Vitor** por
+  `config.reserva_recepcao_horas`. A conversa já está no WhatsApp dele; um
+  segundo atendente abrindo outra conversa com a mesma pessoa é o que mais
+  parece spam. Mas a reserva EXPIRA: sem prazo, o lead mais quente do sistema
+  ficaria parado porque o dono do número folgou.
+- **Falhar aqui não derruba o cadastro.** A recepção é um a mais, nunca um
+  pré-requisito: sem número cadastrado, a tela só agradece como sempre fez.
+- **A armadilha de robô não recebe número.** Entregá-lo transformaria o
+  formulário numa lista de telefones da equipe servida de graça.
 
 ### 4. Nunca gravar preferência de voto
 
