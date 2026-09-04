@@ -529,6 +529,14 @@ export type AtendenteCandidato = {
   vaga: number;
   /** O citado na primeira mensagem. No máximo um por atendente. */
   principal: boolean;
+  /**
+   * Recebe os cadastros que chegam pelo formulário deste candidato.
+   *
+   * ⚠️ Com NINGUÉM do candidato marcado, todos que o atendem recebem — o
+   * contrário de `atendente_listas`, onde ausência quer dizer "não recebe".
+   * Ver a migration `quem_recebe_o_cadastro_do_site`.
+   */
+  recebe_captacao: boolean;
   criado_em: string;
 };
 

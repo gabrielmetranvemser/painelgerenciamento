@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle, Check, ChevronDown, CircleSlash, Clock, Copy, Flame, Layers, List, Loader2,
-  MessageSquare, PackageOpen, Search, Send, Siren, Snowflake, SkipForward, Star, X,
+  Handshake, MessageSquare, PackageOpen, Search, Send, Siren, Snowflake, SkipForward, Star, X,
 } from 'lucide-react';
 import {
   Aviso, Avatar, Botao, Cartao, EtiquetaLista, EtiquetaOrigem, Pilula, PontoLista, Selecao,
@@ -20,7 +20,8 @@ import {
   DICA_RESULTADO, PASSOS_DA_CONVERSA, RESULTADOS_COM_TEXTO, RESULTADOS_OUTROS,
   RESULTADOS_RAPIDOS, ROTULO_CARGO, ROTULO_RESULTADO, TEXTO_MOTIVO,
   type Chip, type ContatoDaFila, type EntregaDoContato, type EtapaMsg, type FilaStatus,
-  type ListaDoAtendente, type Municipio, type PassoDaConversa, type Resultado,
+  type ListaDoAtendente, type Municipio, type OrigemContato, type PassoDaConversa,
+  type Resultado,
 } from '@/lib/tipos-banco';
 import {
   carregarEntregas, carregarFilaDoAtendente, carregarMinhasListas, consultarFila,
@@ -35,6 +36,17 @@ import {
  * é qual texto está no cartão e qual botão vem depois. Ver `PASSOS_DA_CONVERSA`.
  */
 type Fase = 'ocioso' | 'abordagem' | 'aberta' | 'entrega' | 'seguimento';
+
+/**
+ * Quem chegou PEDINDO, e não quem foi abordado.
+ *
+ * Estas duas origens só existem por uma via: a pessoa abriu a página do
+ * candidato, preencheu o formulário e marcou o aceite. Isso muda tudo na
+ * conversa — ela está esperando, sabe de quem é o material e já autorizou por
+ * escrito, com data, hora e IP. Tratar como abordagem fria é começar com "posso
+ * te mandar?" para quem acabou de pedir.
+ */
+const PEDIU_MATERIAL: readonly OrigemContato[] = ['site', 'kit'];
 
 /**
  * A mensagem que cada resultado carrega (docs/03-OPERACAO.md §4).
@@ -217,6 +229,27 @@ export function Atendimento({
    * Não fura nada: `registrar_abertura` continua sendo quem decide, e reenviar
    * um passo já enviado é idempotente (não conta duas vezes no teto).
    */
+  /**
+   * Vai direto ao material, sem passar pela abordagem.
+   *
+   * ⚠️ Só faz sentido para quem chegou PEDINDO. O consentimento dessa pessoa já
+   * está congelado em `contato_candidato` desde o cadastro — o formulário
+   * gravou o aceite com data, hora e IP —, então a Permissão não tem o que
+   * acrescentar. O servidor continua sendo quem decide: `preparar_mensagem`
+   * recusa material de candidato que não foi declarado para aquele contato.
+   * Este atalho não abre porta nenhuma; ele só evita que o atendente peça de
+   * novo o que a pessoa já deu.
+   */
+  function irParaOMaterial() {
+    if (!contato) return;
+    iniciar(async () => {
+      setMensagem(null);
+      setEntregas(await carregarEntregas(contato.id));
+      setFase('entrega');
+      setErro(null);
+    });
+  }
+
   function escolherPasso(passo: PassoDaConversa) {
     if (!contato) return;
     iniciar(async () => {
@@ -755,6 +788,7 @@ export function Atendimento({
           <CartaoAtendimento
             contato={contato} mensagem={mensagem} fase={fase} ocupado={ocupado}
             entregas={entregas} refBotao={botaoAbrir} espera={espera}
+            aoIrParaOMaterial={irParaOMaterial}
             puloGuardado={fila?.pulo_guardado ?? false}
             confirmando={confirmando}
             municipios={municipios} municipioId={municipioId}
@@ -1269,7 +1303,7 @@ function EscolherPasso({
 function CartaoAtendimento({
   contato, mensagem, fase, ocupado, entregas, refBotao, municipios, municipioId, encaminhamento,
   espera, puloGuardado, confirmando, aoMudarMunicipio, aoMudarEncaminhamento, aoAbrir, aoCopiar,
-  aoMarcar, aoProximo, aoPular, aoPrepararMaterial, aoEscolherPasso,
+  aoMarcar, aoProximo, aoPular, aoPrepararMaterial, aoEscolherPasso, aoIrParaOMaterial,
 }: {
   contato: ContatoDaFila; mensagem: MensagemPronta | null; fase: Fase; ocupado: boolean;
   entregas: EntregaDoContato[];
@@ -1286,6 +1320,8 @@ function CartaoAtendimento({
   aoAbrir: () => void; aoCopiar: () => void;
   aoMarcar: (r: Resultado) => void; aoProximo: () => void;
   aoPular: () => void; aoPrepararMaterial: (candidatoId: string) => void;
+  /** Atalho de quem chegou pedindo: pula a abordagem e vai ao material. */
+  aoIrParaOMaterial: () => void;
   aoEscolherPasso: (passo: PassoDaConversa) => void;
 }) {
   /**
@@ -1335,6 +1371,10 @@ function CartaoAtendimento({
           )}
         </div>
       </header>
+
+      {PEDIU_MATERIAL.includes(contato.origem) && fase !== 'entrega' && (
+        <PediuMaterial origem={contato.origem} ocupado={ocupado} aoIr={aoIrParaOMaterial} />
+      )}
 
       {fase === 'entrega' && (
         <Entrega entregas={entregas} ocupado={ocupado}
@@ -1835,6 +1875,55 @@ function BotaoDesfecho({
  *
  * O conselho de mandar um de cada vez continua, como conselho. É o que ele é.
  */
+/**
+ * A faixa de quem chegou PEDINDO.
+ *
+ * ⚠️ Existe porque a tela mentia por omissão. Um cadastro do formulário
+ * aparecia com uma pílula âmbar de dois centímetros, igual a qualquer contato
+ * quente, e o botão do meio da tela dizia "Abertura" — o mesmo "oi, tudo bem?"
+ * de quem nunca ouviu falar da campanha. O atendente, com trinta conversas no
+ * dia, abordava do zero alguém que tinha preenchido o formulário quinze minutos
+ * antes e estava esperando o material.
+ *
+ * O que a faixa resolve não é decoração: é dizer as DUAS coisas que mudam a
+ * conversa — a pessoa pediu, e ela já autorizou. Sem a segunda, o atendente
+ * ainda manda a Permissão por precaução, que é pedir de novo o que ela já deu
+ * por escrito.
+ *
+ * O botão não pula trava nenhuma: quem decide se aquele material pode sair
+ * continua sendo o servidor, pela chapa declarada daquele contato.
+ */
+function PediuMaterial({
+  origem, ocupado, aoIr,
+}: {
+  origem: OrigemContato; ocupado: boolean; aoIr: () => void;
+}) {
+  const kit = origem === 'kit';
+  return (
+    <div className="border-b border-acento/25 bg-acento/10 px-6 py-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+        <Handshake size={18} className="shrink-0 text-acento" />
+        <div className="mr-auto min-w-0">
+          <p className="text-sm font-semibold text-texto">
+            {kit
+              ? 'Pediu o material impresso pela página'
+              : 'Pediu o material pela página'}
+          </p>
+          <p className="mt-0.5 text-xs leading-relaxed text-suave">
+            Ela preencheu o formulário e marcou o aceite — a autorização já está
+            registrada, com data e hora. <strong className="text-texto">Não precisa
+            mandar a Permissão.</strong>
+            {kit && ' O que ela pediu e o endereço estão na ficha do contato.'}
+          </p>
+        </div>
+        <Botao tamanho="p" onClick={aoIr} disabled={ocupado}>
+          <PackageOpen size={14} /> Ir para o material
+        </Botao>
+      </div>
+    </div>
+  );
+}
+
 function Entrega({
   entregas, ocupado, escolhido, aoPreparar,
 }: {
