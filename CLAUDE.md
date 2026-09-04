@@ -243,9 +243,19 @@ A página pública de um candidato pode atender também num endereço da campanh
 (`material.sofiaandrade.com.br`), cadastrado pelo gestor em Candidatos. O painel
 continua só no endereço da Vercel.
 
-- **Os dois endereços respondem, para sempre.** `/{slug}` na Vercel nunca sai do
-  ar: todo link já enviado aponta para lá e está no WhatsApp de outra pessoa.
-  Desligar quebraria conversas antigas e a contagem de cliques delas.
+- **O endereço da Vercel nunca sai do ar — ele DESVIA.** Com domínio conferido,
+  `/{slug}`, `/r/{token}` e `/m/{token}` mandam quem chegou pelo endereço antigo
+  para o domínio da campanha (`desvioParaODominio`). O resultado é o que o
+  gestor quer — só o endereço da campanha aparece — sem matar link nenhum.
+- **Nunca desligar o endereço antigo.** Todo link já enviado está no WhatsApp de
+  outra pessoa. Quando o desvio foi feito, 1.041 links já estavam em conversas
+  de 210 pessoas: desligar apagaria todos e, com eles, o clique — que é a única
+  prova de que aquela pessoa abriu o material. O clique é gravado em `/r/` ANTES
+  do desvio, então a métrica atravessa a mudança inteira.
+- **O desvio é temporário (307/302), nunca permanente.** Redirecionamento
+  permanente fica gravado no navegador de cada pessoa e não sai de lá; se o
+  domínio da campanha cair, quem já abriu uma vez continuaria indo para um
+  endereço morto. Temporário, tirar o domínio do painel desfaz tudo na hora.
 - **Só entra em link depois de conferido.** `dominio` é o que o gestor digitou;
   `dominio_verificado_em` é o painel tendo aberto o endereço e perguntado de quem
   ele é (`/api/dominio`). Entre digitar e o DNS propagar passam horas, e nessa
