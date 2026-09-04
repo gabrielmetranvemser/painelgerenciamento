@@ -15,7 +15,10 @@ vi.mock('next/cache', () => ({
   unstable_cache: (fn: unknown) => fn,
 }));
 vi.mock('server-only', () => ({}));
-vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
+let hostDaRequisicao = '';
+vi.mock('next/headers', () => ({
+  headers: async () => new Headers(hostDaRequisicao ? { host: hostDaRequisicao } : {}),
+}));
 
 const linhas = vi.fn();
 vi.mock('@/lib/supabase/admin', () => ({
@@ -35,12 +38,13 @@ const SEM_CONFERIR = {
   dominio_verificado_em: null,
 };
 
-const { candidatoPorDominio, enderecoDoCandidato, hostEhDeCandidato } =
-  await import('./dominios-candidatos');
+const { candidatoPorDominio, desvioParaODominio, dominioConferido,
+        enderecoDoCandidato, hostEhDeCandidato } = await import('./dominios-candidatos');
 
 beforeEach(() => {
   linhas.mockReset();
   linhas.mockReturnValue([VERIFICADO, SEM_CONFERIR]);
+  hostDaRequisicao = 'painelgerenciamento.vercel.app';
 });
 
 describe('enderecoDoCandidato', () => {
@@ -84,5 +88,41 @@ describe('candidatoPorDominio', () => {
   it('7. sem nenhum domínio cadastrado, nada casa', async () => {
     linhas.mockReturnValue(null);
     expect(await candidatoPorDominio('material.sofiaandrade.com.br')).toBeNull();
+  });
+});
+
+/**
+ * O desvio de quem chegou pelo endereço antigo.
+ *
+ * ⚠️ Existe para NÃO precisar matar link nenhum. Quando este trabalho foi
+ * pedido, mil e quarenta e um links já estavam em conversas de duzentas e dez
+ * pessoas — desligar o endereço da Vercel apagaria todos eles e, com eles, o
+ * clique, que é a única prova de que aquela pessoa abriu o material. O desvio
+ * entrega o mesmo resultado ("só o endereço da campanha aparece") sem esse
+ * preço.
+ */
+describe('desvioParaODominio', () => {
+  it('8. quem chega pelo endereço antigo é mandado para o domínio da campanha', async () => {
+    expect(await desvioParaODominio({ slug: 'sofia-andrade' }, '/m/abc'))
+      .toBe('https://material.sofiaandrade.com.br/m/abc');
+    expect(await desvioParaODominio({ id: 'id-sofia' }, '/'))
+      .toBe('https://material.sofiaandrade.com.br/');
+  });
+
+  // ⚠️ Sem esta, o desvio se chama de novo no destino e a página nunca abre.
+  it('9. quem JÁ está no domínio certo não é desviado', async () => {
+    hostDaRequisicao = 'material.sofiaandrade.com.br';
+    expect(await desvioParaODominio({ slug: 'sofia-andrade' }, '/')).toBeNull();
+  });
+
+  it('10. domínio por conferir não desvia ninguém', async () => {
+    // Mandar quem abriu um link antigo para um endereço que ainda não responde
+    // transformaria um link que funcionava num link morto.
+    expect(await desvioParaODominio({ slug: 'joao' }, '/')).toBeNull();
+    expect(await dominioConferido({ slug: 'joao' })).toBeNull();
+  });
+
+  it('11. candidato sem domínio continua no endereço de sempre', async () => {
+    expect(await desvioParaODominio({ slug: 'quem-nao-tem' }, '/')).toBeNull();
   });
 });

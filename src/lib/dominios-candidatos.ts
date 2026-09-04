@@ -87,3 +87,42 @@ export async function enderecoDoCandidato(candidatoId: string): Promise<string |
   );
   return achado ? `https://${achado.dominio}` : null;
 }
+
+/**
+ * O domínio próprio JÁ CONFERIDO deste candidato, por id ou por apelido.
+ *
+ * ⚠️ É a mesma trava de `enderecoDoCandidato`: domínio digitado e não conferido
+ * não vale. Aqui a consequência de ignorar isso seria pior — mandar quem abriu
+ * um link antigo para um endereço que ainda não responde transformaria um link
+ * que funcionava num link morto.
+ */
+export async function dominioConferido(
+  chave: { id?: string; slug?: string },
+): Promise<string | null> {
+  const achado = (await carregar()).find(
+    (c) => c.dominio_verificado_em !== null
+      && ((chave.id && c.id === chave.id) || (chave.slug && c.slug === chave.slug)),
+  );
+  return achado?.dominio ?? null;
+}
+
+/**
+ * Para onde mandar quem chegou pelo endereço ANTIGO, ou `null` se já está no
+ * lugar certo.
+ *
+ * ⚠️ O desvio é temporário (307/302), nunca permanente. Redirecionamento
+ * permanente fica gravado no navegador de cada pessoa e não sai de lá: se o
+ * domínio da campanha um dia cair ou for removido do painel, quem já abriu uma
+ * vez continuaria sendo mandado para um endereço morto, sem nada que o painel
+ * pudesse fazer. Com desvio temporário, tirar o domínio devolve tudo ao normal
+ * na hora.
+ */
+export async function desvioParaODominio(
+  chave: { id?: string; slug?: string },
+  caminho: string,
+): Promise<string | null> {
+  const dominio = await dominioConferido(chave);
+  if (!dominio) return null;
+  if ((await hostDaVisita()) === dominio) return null;
+  return `https://${dominio}${caminho}`;
+}

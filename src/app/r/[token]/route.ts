@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { ehAcessoAutomatico } from '@/lib/bots';
-import { hostEhDeCandidato } from '@/lib/dominios-candidatos';
+import { dominioConferido, hostEhDeCandidato } from '@/lib/dominios-candidatos';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,13 +20,12 @@ export const dynamic = 'force-dynamic';
  */
 async function tratar(request: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
-  const base = await baseDoRedirecionamento(request);
 
   const supabase = criarClienteAdmin();
 
   const { data } = await supabase
     .from('links')
-    .select('token, candidato_id, materiais(url, ativo)')
+    .select('token, candidato_id, materiais(url, ativo, candidato_id)')
     .eq('token', token)
     .maybeSingle();
 
@@ -48,8 +47,18 @@ async function tratar(request: NextRequest, ctx: { params: Promise<{ token: stri
   }
 
   // O PostgREST devolve o relacionamento como lista mesmo sendo 1:1.
-  const rel = (data as { materiais: { url: string; ativo: boolean }[] | { url: string; ativo: boolean } | null } | null)?.materiais;
+  type Peca = { url: string; ativo: boolean; candidato_id: string | null };
+  const rel = (data as { materiais: Peca[] | Peca | null } | null)?.materiais;
   const peca = Array.isArray(rel) ? rel[0] : rel;
+
+  // ⚠️ A base é resolvida DEPOIS de saber de quem é o token, e só é usada em
+  // destino interno. A peça de material aponta para uma URL de fora (santinho,
+  // vídeo, canal) — reescrever aquilo com o domínio da campanha produziria um
+  // endereço que não existe.
+  const base = await baseDoRedirecionamento(
+    request,
+    (data as { candidato_id: string | null } | null)?.candidato_id ?? peca?.candidato_id ?? null,
+  );
 
   // Peça desativada pelo gestor não redireciona para lugar nenhum: a página do
   // candidato mostra o que está no ar hoje.
@@ -76,15 +85,26 @@ async function tratar(request: NextRequest, ctx: { params: Promise<{ token: stri
  * apareceria por um instante e sumiria, que é justamente o contrário do que ele
  * existe para fazer.
  *
- * Fora de domínio de candidato nada muda: `LINK_BASE_URL` continua tendo a
- * palavra final, porque atrás do proxy a origem da requisição nem sempre é o
- * endereço público.
+ * ⚠️ E quem chegou pelo endereço ANTIGO é levado ao domínio da campanha, se o
+ * candidato dono do token tiver um conferido. É o que faz o link de mil
+ * conversas já enviadas terminar no endereço novo sem nenhum deles morrer — o
+ * clique é gravado logo acima, antes do desvio, então a métrica não perde nada.
+ *
+ * Fora disso nada muda: `LINK_BASE_URL` continua tendo a palavra final, porque
+ * atrás do proxy a origem da requisição nem sempre é o endereço público.
  */
-async function baseDoRedirecionamento(request: NextRequest): Promise<string> {
+async function baseDoRedirecionamento(
+  request: NextRequest,
+  candidatoId: string | null,
+): Promise<string> {
   const bruto = request.headers.get('x-forwarded-host') ?? request.headers.get('host');
   const host = bruto?.trim().toLowerCase().split(':')[0] ?? null;
 
   try {
+    if (candidatoId) {
+      const proprio = await dominioConferido({ id: candidatoId });
+      if (proprio) return `https://${proprio}`;
+    }
     if (host && (await hostEhDeCandidato(host))) return `https://${host}`;
   } catch {
     // Cai no padrão: um link no endereço da Vercel abre; um link quebrado não.

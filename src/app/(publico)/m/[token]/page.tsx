@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
+import { desvioParaODominio } from '@/lib/dominios-candidatos';
 import { Aviso } from '@/components/ui';
 import { PaginaDoMaterial } from '@/components/pagina-do-material';
 import type { CargoEleitoral, TipoMaterial } from '@/lib/tipos-banco';
@@ -19,6 +20,7 @@ type Pagina = {
   contato_id: string;
   descadastrado: boolean;
   candidato: {
+    id: string;
     nome_urna: string; cargo: CargoEleitoral; numero: string;
     partido_sigla: string | null; coligacao: string | null;
     cnpj_campanha: string | null; responsavel_material: string | null;
@@ -54,6 +56,12 @@ export default async function PaginaMaterial({
   const { data } = await supabase.rpc('pagina_material', { p_token: token });
   const p = data as Pagina | null;
   if (!p?.ok) notFound();
+
+  // Chegou pelo endereço antigo? Vai para o domínio da campanha, com o mesmo
+  // token — o link continua sendo o dessa pessoa e o botão de sair continua
+  // valendo. Só o endereço muda.
+  const desvio = await desvioParaODominio({ id: p.candidato.id }, `/m/${token}`);
+  if (desvio) redirect(desvio);
 
   const c = p.candidato;
 
