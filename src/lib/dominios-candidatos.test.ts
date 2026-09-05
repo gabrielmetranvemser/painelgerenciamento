@@ -38,7 +38,7 @@ const SEM_CONFERIR = {
   dominio_verificado_em: null,
 };
 
-const { candidatoPorDominio, desvioParaODominio, dominioConferido,
+const { candidatoPorDominio, chegouPeloEnderecoAntigo, dominioConferido,
         enderecoDoCandidato, hostEhDeCandidato } = await import('./dominios-candidatos');
 
 beforeEach(() => {
@@ -92,37 +92,37 @@ describe('candidatoPorDominio', () => {
 });
 
 /**
- * O desvio de quem chegou pelo endereço antigo.
+ * O bloqueio do endereço antigo.
  *
- * ⚠️ Existe para NÃO precisar matar link nenhum. Quando este trabalho foi
- * pedido, mil e quarenta e um links já estavam em conversas de duzentas e dez
- * pessoas — desligar o endereço da Vercel apagaria todos eles e, com eles, o
- * clique, que é a única prova de que aquela pessoa abriu o material. O desvio
- * entrega o mesmo resultado ("só o endereço da campanha aparece") sem esse
- * preço.
+ * ⚠️ O corte é pelo HOST, nunca pelo token — e é a única forma que funciona. O
+ * token de um material é o MESMO para sempre: o link que a pessoa recebeu há
+ * três dias no endereço da Vercel e o que ela recebe hoje no domínio da
+ * campanha carregam o mesmo `/r/abc123`. Desligar "os links antigos" pelo token
+ * desligaria os novos junto, para a mesma pessoa.
  */
-describe('desvioParaODominio', () => {
-  it('8. quem chega pelo endereço antigo é mandado para o domínio da campanha', async () => {
-    expect(await desvioParaODominio({ slug: 'sofia-andrade' }, '/m/abc'))
-      .toBe('https://material.sofiaandrade.com.br/m/abc');
-    expect(await desvioParaODominio({ id: 'id-sofia' }, '/'))
-      .toBe('https://material.sofiaandrade.com.br/');
+describe('chegouPeloEnderecoAntigo', () => {
+  it('8. o endereço antigo morre para quem já tem domínio próprio', async () => {
+    expect(await chegouPeloEnderecoAntigo({ slug: 'sofia-andrade' })).toBe(true);
+    expect(await chegouPeloEnderecoAntigo({ id: 'id-sofia' })).toBe(true);
   });
 
-  // ⚠️ Sem esta, o desvio se chama de novo no destino e a página nunca abre.
-  it('9. quem JÁ está no domínio certo não é desviado', async () => {
+  // ⚠️ Sem esta, o domínio novo bloqueia a si mesmo e não sobra endereço nenhum.
+  it('9. o domínio novo NÃO se bloqueia', async () => {
     hostDaRequisicao = 'material.sofiaandrade.com.br';
-    expect(await desvioParaODominio({ slug: 'sofia-andrade' }, '/')).toBeNull();
+    expect(await chegouPeloEnderecoAntigo({ slug: 'sofia-andrade' })).toBe(false);
   });
 
-  it('10. domínio por conferir não desvia ninguém', async () => {
-    // Mandar quem abriu um link antigo para um endereço que ainda não responde
-    // transformaria um link que funcionava num link morto.
-    expect(await desvioParaODominio({ slug: 'joao' }, '/')).toBeNull();
+  /**
+   * A saída de emergência. Enquanto o domínio não foi conferido — ou depois de
+   * o gestor apagar o campo, se o domínio da campanha cair — o endereço da
+   * Vercel volta a ser o único que existe, na hora e sem deploy.
+   */
+  it('10. domínio por conferir não bloqueia nada', async () => {
+    expect(await chegouPeloEnderecoAntigo({ slug: 'joao' })).toBe(false);
     expect(await dominioConferido({ slug: 'joao' })).toBeNull();
   });
 
   it('11. candidato sem domínio continua no endereço de sempre', async () => {
-    expect(await desvioParaODominio({ slug: 'quem-nao-tem' }, '/')).toBeNull();
+    expect(await chegouPeloEnderecoAntigo({ slug: 'quem-nao-tem' })).toBe(false);
   });
 });

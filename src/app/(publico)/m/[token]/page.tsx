@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
-import { desvioParaODominio } from '@/lib/dominios-candidatos';
+import { chegouPeloEnderecoAntigo } from '@/lib/dominios-candidatos';
 import { Aviso } from '@/components/ui';
 import { PaginaDoMaterial } from '@/components/pagina-do-material';
 import type { CargoEleitoral, TipoMaterial } from '@/lib/tipos-banco';
@@ -57,11 +57,9 @@ export default async function PaginaMaterial({
   const p = data as Pagina | null;
   if (!p?.ok) notFound();
 
-  // Chegou pelo endereço antigo? Vai para o domínio da campanha, com o mesmo
-  // token — o link continua sendo o dessa pessoa e o botão de sair continua
-  // valendo. Só o endereço muda.
-  const desvio = await desvioParaODominio({ id: p.candidato.id }, `/m/${token}`);
-  if (desvio) redirect(desvio);
+  // Chegou pelo endereço antigo de quem já tem domínio próprio: aqui não existe
+  // mais nada deste candidato.
+  if (await chegouPeloEnderecoAntigo({ id: p.candidato.id })) notFound();
 
   const c = p.candidato;
 

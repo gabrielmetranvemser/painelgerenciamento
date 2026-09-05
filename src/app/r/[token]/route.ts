@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { ehAcessoAutomatico } from '@/lib/bots';
-import { dominioConferido, hostEhDeCandidato } from '@/lib/dominios-candidatos';
+import { chegouPeloEnderecoAntigo, dominioConferido, hostEhDeCandidato } from '@/lib/dominios-candidatos';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +29,25 @@ async function tratar(request: NextRequest, ctx: { params: Promise<{ token: stri
     .eq('token', token)
     .maybeSingle();
 
+  // O PostgREST devolve o relacionamento como lista mesmo sendo 1:1.
+  type Peca = { url: string; ativo: boolean; candidato_id: string | null };
+  const rel = (data as { materiais: Peca[] | Peca | null } | null)?.materiais;
+  const peca = Array.isArray(rel) ? rel[0] : rel;
+
+  const candidatoId =
+    (data as { candidato_id: string | null } | null)?.candidato_id ?? peca?.candidato_id ?? null;
+
+  // ⚠️ ESTA CHECAGEM VEM ANTES DE GRAVAR O CLIQUE, e a ordem é o ponto.
+  //
+  // Este link chegou pelo endereço antigo de um candidato que já tem domínio
+  // próprio: ele morreu, e a pessoa vê 404. Gravar o clique seria pior que não
+  // gravar — `cliques` é a prova de que alguém ABRIU o material, e quem bateu
+  // numa página que não existe não abriu nada. Uma linha aqui inflaria
+  // justamente o número que precisa ser defensável numa denúncia.
+  if (candidatoId && (await chegouPeloEnderecoAntigo({ id: candidatoId }))) {
+    return new NextResponse(null, { status: 404 });
+  }
+
   const isBot = ehAcessoAutomatico({
     userAgent: request.headers.get('user-agent'),
     metodo: request.method,
@@ -46,19 +65,11 @@ async function tratar(request: NextRequest, ctx: { params: Promise<{ token: stri
     });
   }
 
-  // O PostgREST devolve o relacionamento como lista mesmo sendo 1:1.
-  type Peca = { url: string; ativo: boolean; candidato_id: string | null };
-  const rel = (data as { materiais: Peca[] | Peca | null } | null)?.materiais;
-  const peca = Array.isArray(rel) ? rel[0] : rel;
-
-  // ⚠️ A base é resolvida DEPOIS de saber de quem é o token, e só é usada em
+  // A base é resolvida DEPOIS de saber de quem é o token, e só é usada em
   // destino interno. A peça de material aponta para uma URL de fora (santinho,
   // vídeo, canal) — reescrever aquilo com o domínio da campanha produziria um
   // endereço que não existe.
-  const base = await baseDoRedirecionamento(
-    request,
-    (data as { candidato_id: string | null } | null)?.candidato_id ?? peca?.candidato_id ?? null,
-  );
+  const base = await baseDoRedirecionamento(request, candidatoId);
 
   // Peça desativada pelo gestor não redireciona para lugar nenhum: a página do
   // candidato mostra o que está no ar hoje.
