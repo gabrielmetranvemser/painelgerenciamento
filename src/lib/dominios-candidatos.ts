@@ -107,22 +107,32 @@ export async function dominioConferido(
 }
 
 /**
- * Para onde mandar quem chegou pelo endereço ANTIGO, ou `null` se já está no
- * lugar certo.
+ * Esta visita chegou pelo endereço ANTIGO de um candidato que já tem domínio
+ * próprio?
  *
- * ⚠️ O desvio é temporário (307/302), nunca permanente. Redirecionamento
- * permanente fica gravado no navegador de cada pessoa e não sai de lá: se o
- * domínio da campanha um dia cair ou for removido do painel, quem já abriu uma
- * vez continuaria sendo mandado para um endereço morto, sem nada que o painel
- * pudesse fazer. Com desvio temporário, tirar o domínio devolve tudo ao normal
- * na hora.
+ * ⚠️ O corte é pelo HOST, e não pelo token, e isso não é detalhe de
+ * implementação — é a única forma que funciona.
+ *
+ * O token de um material é o MESMO para sempre (`garantir_link_material`
+ * reaproveita por contato e peça). O link que a pessoa recebeu há três dias no
+ * endereço da Vercel e o que ela recebe hoje no domínio da campanha carregam o
+ * mesmo `/r/abc123`. Desligar "os links antigos" pelo token desligaria os novos
+ * junto, para a mesma pessoa. O que morre é o ENDEREÇO velho, não o token.
+ *
+ * Consequência boa: reenviar o material pela ficha do contato já devolve um
+ * link que funciona, sem nada de especial — o texto é montado de novo, agora
+ * com o domínio da campanha.
+ *
+ * ⚠️ E a saída de emergência: isto só vale enquanto existe domínio CONFERIDO.
+ * Se o domínio da campanha cair, apagar o campo em Candidatos devolve tudo ao
+ * endereço da Vercel na hora — sem deploy, sem migration. É o botão de pânico
+ * desta decisão, e é de propósito que ele seja um campo de texto que o gestor
+ * alcança sozinho.
  */
-export async function desvioParaODominio(
+export async function chegouPeloEnderecoAntigo(
   chave: { id?: string; slug?: string },
-  caminho: string,
-): Promise<string | null> {
+): Promise<boolean> {
   const dominio = await dominioConferido(chave);
-  if (!dominio) return null;
-  if ((await hostDaVisita()) === dominio) return null;
-  return `https://${dominio}${caminho}`;
+  if (!dominio) return false;
+  return (await hostDaVisita()) !== dominio;
 }

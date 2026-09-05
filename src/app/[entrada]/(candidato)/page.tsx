@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
-import { desvioParaODominio } from '@/lib/dominios-candidatos';
+import { notFound } from 'next/navigation';
+import { chegouPeloEnderecoAntigo } from '@/lib/dominios-candidatos';
 import { metadadosDoCandidato, PaginaPublicaDoCandidato } from './pagina';
 
 export const dynamic = 'force-dynamic';
@@ -8,14 +8,18 @@ export const dynamic = 'force-dynamic';
 /**
  * A página do candidato no endereço padrão: `/{slug}`.
  *
- * ⚠️ Este endereço NUNCA sai do ar, mesmo depois de o candidato ganhar domínio
- * próprio. Todo link já enviado por WhatsApp aponta para cá e está no aparelho
- * de outra pessoa — desligar isto quebraria conversas antigas e, com elas, a
- * contagem de cliques que é a prova de que aquela pessoa abriu o material.
+ * ⚠️ Depois que o candidato ganha domínio próprio conferido, este endereço
+ * MORRE para ele: 404, igual a qualquer endereço inexistente.
  *
- * O que ele faz, quando existe domínio conferido, é DESVIAR para lá. O
- * resultado é o que o gestor pediu — só o endereço da campanha aparece — sem o
- * preço de matar mil links que já estão em conversas abertas.
+ * A versão anterior desviava para o domínio novo, o que preservava os links já
+ * enviados. O gestor foi avisado do preço — mil e quarenta e um links em
+ * conversas de duzentas e dez pessoas — e decidiu assim mesmo: nada da campanha
+ * pode responder num endereço que não seja o dela. Quem clicar num link antigo
+ * pede outro, e o atendente reenvia pela ficha do contato.
+ *
+ * Continua valendo para candidato SEM domínio: ali este é o único endereço que
+ * existe. E apagar o domínio em Candidatos devolve tudo a funcionar aqui na
+ * hora — é a saída se o domínio da campanha cair.
  *
  * O conteúdo vive em `pagina.tsx`, compartilhado com a raiz do domínio próprio.
  */
@@ -35,8 +39,7 @@ export default async function PaginaDoCandidato({
 }) {
   const { entrada } = await params;
 
-  const desvio = await desvioParaODominio({ slug: entrada }, '/');
-  if (desvio) redirect(desvio);
+  if (await chegouPeloEnderecoAntigo({ slug: entrada })) notFound();
 
   return <PaginaPublicaDoCandidato slug={entrada} />;
 }

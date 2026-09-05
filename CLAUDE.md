@@ -243,19 +243,23 @@ A página pública de um candidato pode atender também num endereço da campanh
 (`material.sofiaandrade.com.br`), cadastrado pelo gestor em Candidatos. O painel
 continua só no endereço da Vercel.
 
-- **O endereço da Vercel nunca sai do ar — ele DESVIA.** Com domínio conferido,
-  `/{slug}`, `/r/{token}` e `/m/{token}` mandam quem chegou pelo endereço antigo
-  para o domínio da campanha (`desvioParaODominio`). O resultado é o que o
-  gestor quer — só o endereço da campanha aparece — sem matar link nenhum.
-- **Nunca desligar o endereço antigo.** Todo link já enviado está no WhatsApp de
-  outra pessoa. Quando o desvio foi feito, 1.041 links já estavam em conversas
-  de 210 pessoas: desligar apagaria todos e, com eles, o clique — que é a única
-  prova de que aquela pessoa abriu o material. O clique é gravado em `/r/` ANTES
-  do desvio, então a métrica atravessa a mudança inteira.
-- **O desvio é temporário (307/302), nunca permanente.** Redirecionamento
-  permanente fica gravado no navegador de cada pessoa e não sai de lá; se o
-  domínio da campanha cair, quem já abriu uma vez continuaria indo para um
-  endereço morto. Temporário, tirar o domínio do painel desfaz tudo na hora.
+- **Com domínio conferido, o endereço da Vercel MORRE para aquele candidato.**
+  `/{slug}`, `/r/{token}` e `/m/{token}` devolvem 404 ali
+  (`chegouPeloEnderecoAntigo`). Decisão do gestor, tomada com o preço na mesa:
+  1.041 links já enviados a 210 pessoas pararam de abrir. Quem clicar num link
+  antigo pede outro, e o atendente reenvia por "Mandar material" na ficha.
+- **O corte é pelo HOST, nunca pelo token.** O token de um material é o mesmo
+  para sempre (`garantir_link_material` reaproveita por contato e peça): o link
+  de três dias atrás e o de hoje carregam o mesmo `/r/abc123`. Desligar por
+  token mataria os novos junto. Consequência boa: reenviar já devolve um link
+  que funciona, sem nada de especial.
+- **O 404 vem ANTES de gravar o clique.** `cliques` é a prova de que alguém
+  ABRIU o material; quem bateu numa página que não existe não abriu nada, e uma
+  linha ali inflaria justamente o número que precisa ser defensável.
+- **A saída de emergência é apagar o domínio em Candidatos.** Isso devolve tudo
+  ao endereço da Vercel na hora, sem deploy e sem migration — é o botão de
+  pânico se o domínio da campanha cair, e é de propósito que ele seja um campo
+  que o gestor alcança sozinho.
 - **Só entra em link depois de conferido.** `dominio` é o que o gestor digitou;
   `dominio_verificado_em` é o painel tendo aberto o endereço e perguntado de quem
   ele é (`/api/dominio`). Entre digitar e o DNS propagar passam horas, e nessa
