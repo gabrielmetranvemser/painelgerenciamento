@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { ehChaveDoPainel } from '@/lib/rotas';
 import { hostDaVisita, hostEhDeCandidato } from '@/lib/dominios-candidatos';
+import { aparelhoFoiRevogado } from '@/lib/aparelho-servidor';
 
 /**
  * Porta de entrada do painel.
@@ -44,6 +45,15 @@ export default async function PortaInterna({
   } catch {
     // segue
   }
+
+  // ⚠️ A REVOGAÇÃO mora aqui, e não no proxy.
+  //
+  // O proxy confere só a assinatura do cookie, sem banco, porque roda em toda
+  // requisição. Mas assinatura válida não quer dizer aparelho ainda autorizado:
+  // o gestor pode ter revogado depois — atendente que saiu da campanha, notebook
+  // perdido. Este layout já consulta o banco, então a checagem cabe aqui sem
+  // custo novo, e vale no clique seguinte.
+  if (await aparelhoFoiRevogado()) notFound();
 
   return children;
 }

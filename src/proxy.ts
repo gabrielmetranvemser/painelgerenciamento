@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { ajustarCookie } from '@/lib/supabase/cookies';
 import { hostEhDoPainel } from '@/lib/host-do-painel';
+import { COOKIE_APARELHO, lerAparelho } from '@/lib/aparelho';
 
 /**
  * Renova a sessão e barra as áreas internas de quem não está logado.
@@ -50,6 +51,21 @@ export async function proxy(request: NextRequest) {
   // redirecionamento, não a página.
   if (interna && !hostEhDoPainel(request.headers.get('x-forwarded-host') ?? request.headers.get('host'))) {
     return new NextResponse(null, { status: 404 });
+  }
+
+  // ⚠️ Sem a marca do aparelho, o painel não existe.
+  //
+  // É a camada pedida para o endereço vazado não revelar nada: quem receber a
+  // URL por acaso vê 404, não a tela de entrar. Só a assinatura é conferida
+  // aqui — criptografia pura, sem ida ao banco —, porque isto roda em toda
+  // requisição interna. Quem confere a REVOGAÇÃO é o layout interno, que já
+  // consulta o banco de qualquer jeito.
+  //
+  // A rota de liberação (`/a/{codigo}`) não é interna, então não passa por
+  // aqui: fosse, ninguém conseguiria liberar o primeiro aparelho.
+  if (interna && (await exigirAparelho())) {
+    const marca = await lerAparelho(request.cookies.get(COOKIE_APARELHO)?.value);
+    if (!marca) return new NextResponse(null, { status: 404 });
   }
 
   // Endereço público — a página de um candidato, por exemplo. Não há sessão
@@ -109,3 +125,39 @@ export const config = {
     '/((?!_next/static|_next/image|favicon\\.ico|robots\\.txt|r/|m/|privacidade|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
+
+/**
+ * A trava dos aparelhos está ligada?
+ *
+ * ⚠️ Cacheado em memória por 30 segundos e FALHA PARA O LADO DE DEIXAR PASSAR.
+ *
+ * Isto roda em toda requisição interna. Uma consulta por clique seria custo
+ * permanente, e — pior — uma instabilidade do banco viraria "o painel sumiu
+ * para os quinze atendentes ao mesmo tempo", no meio do expediente. Esta camada
+ * é obscuridade, não a tranca: a tranca continua sendo a autenticação e o RLS
+ * (CLAUDE.md §7). Trocar trinta segundos de endereço exposto por um dia de
+ * operação parada seria péssimo negócio.
+ */
+let travaLigada = { valor: false, ate: 0 };
+
+async function exigirAparelho(): Promise<boolean> {
+  if (Date.now() < travaLigada.ate) return travaLigada.valor;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const chave = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !chave) return false;
+
+  try {
+    const r = await fetch(`${url}/rest/v1/rpc/exigir_aparelho`, {
+      method: 'POST',
+      headers: { apikey: chave, Authorization: `Bearer ${chave}`, 'Content-Type': 'application/json' },
+      body: '{}',
+      cache: 'no-store',
+    });
+    if (!r.ok) return travaLigada.valor;
+    travaLigada = { valor: (await r.json()) === true, ate: Date.now() + 30_000 };
+    return travaLigada.valor;
+  } catch {
+    return travaLigada.valor;
+  }
+}

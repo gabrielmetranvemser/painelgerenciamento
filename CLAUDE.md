@@ -43,6 +43,7 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `src/lib/importacao.ts` | dedup e casamento de município da planilha |
 | `src/lib/dominios-candidatos.ts` | domínio não conferido virando link de mensagem → link morto no WhatsApp, e o clique (a prova de que a pessoa abriu) some sem sintoma |
 | `src/lib/host-do-painel.ts` | o painel respondendo no domínio do candidato → o segmento secreto ganha uma segunda porta, num host divulgado em post |
+| `src/lib/aparelho.ts` | a marca do aparelho. Roda no proxy (Edge): Web Crypto, sem `node:crypto` e sem ida ao banco. Falhar para o lado de trancar derruba os 15 atendentes de uma vez |
 | `src/lib/recepcao.ts` | o texto que o ELEITOR envia à campanha. Não passa por `validarModelo`: aquelas regras são de quem aborda |
 | `pegar_proximo_contato` | dois atendentes pegam o mesmo contato, ou um contato cai para quem não atende aquela lista |
 | `rampa_do_chip` | a rampa só vale enquanto `chips.status = 'aquecendo'`. Aplicá-la sempre faz o teto do gestor virar letra morta (`least(rampa, config)`), e ele mexe no campo achando que não salva |
@@ -236,6 +237,34 @@ Regras que caem disso:
   ainda o achava e o `next dev` o ignorava **em silêncio** — sem erro e sem
   aviso. Em desenvolvimento a sessão não era renovada e qualquer trava escrita
   ali parecia quebrada quando só não estava rodando.
+
+### 7.0 Aparelhos liberados
+
+Camada opcional (`config.exigir_aparelho`, **nasce desligada**): sem a marca do
+aparelho, todo caminho interno devolve 404 — inclusive a tela de entrar. Quem
+recebe o endereço por acaso não descobre que existe painel.
+
+- **É aparelho, não IP.** O pedido veio como "liberar o IP dela". IP de casa
+  troca quase todo dia e no 4G troca a cada hora: o gestor passaria o dia
+  reaprovando, e o atendente ficaria trancado no meio do expediente.
+- **A aprovação é na GERAÇÃO.** O gestor escolhe a pessoa e recebe um link de
+  uso único, válido 48h; mandar o link é aprovar. A alternativa ("a pessoa pede,
+  o gestor aprova") anula o objetivo: a tela de "pedido enviado" já conta a
+  quem abriu que existe um painel aqui.
+- **O link é `/a/{codigo}`, neutro.** Se carregasse a chave, espalharia o
+  segredo por toda conversa de WhatsApp — o oposto do que ele existe para fazer.
+  Fica fora do portão do proxy, senão ninguém liberaria o primeiro aparelho.
+- **O código nunca é gravado em claro**, só o hash. O link aparece uma vez, na
+  tela de quem gerou, e não pode ser recuperado nem por quem tem o banco.
+- **O proxy confere só a assinatura**, sem banco: roda em toda requisição
+  interna. Quem confere a REVOGAÇÃO é o layout interno, que já consulta o banco.
+  Prazo real: até um minuto **mais uma navegação** (`unstable_cache` serve o
+  valor vencido uma vez e atualiza por trás).
+- **Falha para o lado de DEIXAR PASSAR**, sempre. Esta camada é obscuridade, não
+  a tranca (§7); trocar 30 segundos de endereço exposto por um dia de operação
+  parada seria péssimo negócio.
+- **Se você se trancar para fora:**
+  `update public.config set exigir_aparelho = false;` no SQL do Supabase.
 
 ### 7.1 Domínio próprio de candidato
 
