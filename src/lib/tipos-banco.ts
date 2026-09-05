@@ -218,6 +218,13 @@ export type Config = {
    * para o resto da chapa. Zero desliga a reserva.
    */
   reserva_recepcao_horas: number;
+  /**
+   * Sem aparelho liberado, todo caminho interno devolve 404.
+   *
+   * ⚠️ Se você se trancar para fora, o campo é alcançável pelo SQL do Supabase:
+   * `update public.config set exigir_aparelho = false;`
+   */
+  exigir_aparelho: boolean;
 };
 
 /**
@@ -523,6 +530,26 @@ export type Candidato = {
    */
   dominio_verificado_em: string | null;
   ativo: boolean;
+  criado_em: string;
+};
+
+/**
+ * Um navegador autorizado a enxergar o painel.
+ *
+ * Enquanto `codigo_hash` existe, é um convite ainda não usado. Depois de usado,
+ * o código é queimado e o que sobra é o aparelho — com `liberado_em` marcado.
+ */
+export type Aparelho = {
+  id: string;
+  usuario_id: string;
+  rotulo: string;
+  /** Hash do convite. Nulo depois de usado: o convite é de uso único. */
+  codigo_hash: string | null;
+  expira_em: string | null;
+  liberado_em: string | null;
+  ultimo_uso_em: string | null;
+  revogado_em: string | null;
+  user_agent: string | null;
   criado_em: string;
 };
 
