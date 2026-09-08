@@ -522,6 +522,39 @@ Não é escolha de escrita: é texto quebrado. `npm run textos` segue o mesmo co
 
 **Privacidade:** nunca colocar dado pessoal na URL. O token não contém o telefone; é aleatório e aponta para o contato no banco.
 
+### 9.1 A prévia do WhatsApp (ícone e cartão)
+
+O link da página do candidato é colado em conversa de WhatsApp o dia inteiro, e
+o aplicativo desenha um cartão a partir do `og:image` da página. Enquanto ele
+não existia, o WhatsApp caía no favicon padrão do Next — o triângulo preto do
+framework — e o material da campanha chegava ao eleitor com a marca de uma
+empresa de hospedagem americana.
+
+As duas imagens são **geradas**, não enviadas: `/api/marca/{slug}/cartao`
+(1200×630) e `/api/marca/{slug}/icone` (256×256), desenhadas com `next/og` a
+partir da logo, das cores, do nome, do cargo e do número que o gestor já edita
+em Candidatos. Não existe um terceiro lugar para manter atualizado.
+
+Quatro detalhes que não são óbvios:
+
+- **A logo é convertida para PNG antes de entrar na imagem** (`sharp`). O painel
+  guarda toda imagem em WebP, e o desenhista do `next/og` não lê WebP: ele falha
+  no meio da renderização, sem mensagem que ajude. Falha ali devolve `null` e a
+  imagem sai com o nome no lugar da logo — cartão sem logo é melhor que link sem
+  prévia.
+- **A URL carrega `?v=`**, um carimbo do conteúdo (`versaoDaMarca`). O WhatsApp
+  guarda a prévia por URL e não pergunta de novo: sem o carimbo, trocar a logo
+  não mudaria nada em aparelho nenhum.
+- **As imagens seguem o mesmo corte da página**: candidato com domínio conferido
+  não tem mais nada respondendo no endereço da Vercel, nem imagem. Por isso a
+  prévia em Gestor → Candidatos aponta para o domínio da campanha — e uma prévia
+  quebrada ali é o primeiro sinal de que o domínio parou de responder.
+- **`src/app/favicon.ico` não existe mais.** Ícone declarado por ARQUIVO tem
+  prioridade sobre ícone declarado em `metadata`: enquanto aquele arquivo estava
+  lá, o triângulo do Next ganhava do ícone do candidato em toda página. O painel
+  tem o ícone dele declarado em `data:` no layout interno; o resto do sistema
+  não tem ícone nenhum, que é o mais neutro possível.
+
 ---
 
 ## 10. A extensão do Chrome (fase 2 — não é para o dia 1)

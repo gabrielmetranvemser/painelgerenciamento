@@ -3,10 +3,13 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { unstable_cache } from 'next/cache';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
-import { ETIQUETA_CANDIDATOS } from '@/lib/cache';
+import { buscarCandidatoPublico, type CandidatoPublico } from '@/lib/candidato-publico';
+import { enderecoDaVisita } from '@/lib/dominios-candidatos';
+import { LADO_ICONE, TAMANHO_CARTAO, versaoDaMarca } from '@/lib/marca';
 import { Cartao, cx } from '@/components/ui';
 import { textoDoAceite } from '@/lib/consentimento';
 import { ROTULO_CARGO, type CargoEleitoral, type Municipio } from '@/lib/tipos-banco';
+import { comAlfa, contrasta, degrau, mistura } from '@/lib/cores';
 import { carregarItensKit } from '@/lib/acoes-itens-kit';
 import { comitesDoCandidato } from '@/lib/acoes-comites';
 import { FormularioCandidato } from './formulario';
@@ -25,49 +28,6 @@ import { FormularioCandidato } from './formulario';
  * trás é justamente a que o eleitor abre.
  */
 
-type CandidatoPublico = {
-  id: string; slug: string; nome_urna: string; cargo: CargoEleitoral; numero: string;
-  partido_sigla: string | null; coligacao: string | null; cnpj_campanha: string | null;
-  responsavel_material: string | null; slogan: string | null; chamada: string | null;
-  cor_tema: string | null; cor_fundo: string | null; cor_superficie: string | null;
-  foto_url: string | null; fundo_url: string | null;
-  tema: 'auto' | 'claro' | 'escuro';
-  ativo: boolean;
-};
-
-/**
- * ⚠️ Esta é a página mais aberta do sistema: qualquer pessoa da internet a
- * abre, ela não tem login e é o destino do botão no site de cada candidato.
- *
- * Antes, cada visita disparava DUAS consultas com a chave de serviço — a do
- * candidato e a lista inteira dos 52 municípios, que não muda nunca. Numa
- * enxurrada de acessos (ou num ataque barato de recarregar a página), isso
- * esgota a conexão do banco e derruba junto o painel de quem está trabalhando.
- *
- * O cache é de DADOS, não de página: a página continua dinâmica, o que deixa de
- * ir ao banco é a consulta. Um minuto é o bastante para segurar rajada e curto
- * o bastante para o gestor ver a edição dele quase na hora — e as ações de
- * Candidatos invalidam a etiqueta na hora em que salvam, então nem esse minuto
- * costuma existir.
- */
-export const buscarCandidatoPublico = unstable_cache(
-  async (slug: string) => {
-    const supabase = criarClienteAdmin();
-    const { data } = await supabase
-      .from('candidatos')
-      .select(
-        'id, slug, nome_urna, cargo, numero, partido_sigla, coligacao, cnpj_campanha, ' +
-        'responsavel_material, slogan, chamada, cor_tema, cor_fundo, cor_superficie, ' +
-        'foto_url, fundo_url, tema, ativo',
-      )
-      .eq('slug', slug)
-      .maybeSingle();
-    return (data as CandidatoPublico | null) ?? null;
-  },
-  ['candidato-publico'],
-  { revalidate: 60, tags: [ETIQUETA_CANDIDATOS] },
-);
-
 /** Os 52 municípios de Rondônia. Lista fechada: só muda por migration. */
 const municipiosDeRondonia = unstable_cache(
   async () => {
@@ -80,20 +40,58 @@ const municipiosDeRondonia = unstable_cache(
 );
 
 /**
- * O título e a descrição saem do próprio candidato.
+ * O título, a descrição, o ícone da aba e a imagem que o WhatsApp mostra.
  *
  * Nada aqui pode citar painel, atendimento, lead ou campanha interna: quem abre
  * o código-fonte tem de ver uma página de pedir material e mais nada. É por
  * isso que o layout raiz tem metadado neutro — quando esta página esquecer de
  * sobrescrever alguma coisa, o que herda não denuncia nada.
+ *
+ * ⚠️ O ícone e o cartão saem no endereço DESTA visita, não num endereço fixo.
+ * A mesma página responde no endereço da Vercel e no domínio próprio da
+ * campanha, e as duas imagens seguem o mesmo corte do resto: quem tem domínio
+ * conferido não tem mais nada respondendo no endereço antigo. Apontar para um
+ * host fixo faria o WhatsApp buscar a imagem justamente onde ela é 404.
+ *
+ * ⚠️ E `?v=` não é enfeite: o WhatsApp guarda a prévia por URL e não pergunta
+ * de novo. Sem o carimbo, trocar a logo em Candidatos não mudaria nada em
+ * aparelho nenhum, e o gestor mexeria no campo achando que não salva.
  */
 export async function metadadosDoCandidato(slug: string): Promise<Metadata> {
   const c = await buscarCandidatoPublico(slug);
   if (!c?.ativo) return { title: 'Material da campanha' };
+
+  const base = await enderecoDaVisita();
+  const marca = (peca: 'cartao' | 'icone') =>
+    `${base ?? ''}/api/marca/${c.slug}/${peca}?v=${versaoDaMarca(c)}`;
+
+  const titulo = `Material de ${c.nome_urna}`;
+  const descricao = `Peça o material da campanha de ${c.nome_urna} pelo WhatsApp.`;
+
   return {
-    title: `Material de ${c.nome_urna}`,
-    description: `Peça o material da campanha de ${c.nome_urna} pelo WhatsApp.`,
+    title: titulo,
+    description: descricao,
     robots: { index: false, follow: false },
+    icons: {
+      icon: [{ url: marca('icone'), type: 'image/png', sizes: `${LADO_ICONE}x${LADO_ICONE}` }],
+      shortcut: [{ url: marca('icone'), type: 'image/png' }],
+      apple: [{ url: marca('icone'), type: 'image/png', sizes: '180x180' }],
+    },
+    openGraph: {
+      type: 'website',
+      locale: 'pt_BR',
+      siteName: c.nome_urna,
+      title: titulo,
+      description: descricao,
+      ...(base ? { url: base } : {}),
+      images: [{ ...TAMANHO_CARTAO, url: marca('cartao'), alt: titulo, type: 'image/png' }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: titulo,
+      description: descricao,
+      images: [marca('cartao')],
+    },
   };
 }
 
@@ -250,45 +248,4 @@ function estiloDoCandidato(c: CandidatoPublico): React.CSSProperties {
   }
 
   return estilo as React.CSSProperties;
-}
-
-/**
- * Preto ou branco por cima de uma cor, pelo brilho percebido.
- *
- * Luminância relativa, não média dos canais: o olho enxerga o verde muito mais
- * que o azul, e a média escolheria branco sobre amarelo — botão ilegível.
- */
-function contrasta(hex: string): string {
-  return luminancia(hex) > 0.42 ? '#111111' : '#ffffff';
-}
-
-function luminancia(hex: string): number {
-  const c = canais(hex).map((v) => {
-    const n = v / 255;
-    return n <= 0.03928 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-}
-
-function canais(hex: string): number[] {
-  const n = parseInt(hex.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-/** Mistura duas cores. `p` é quanto de `a` entra. */
-function mistura(a: string, b: string, p: number): string {
-  const [x, y] = [canais(a), canais(b)];
-  const n = x.map((v, i) => Math.round(v * p + y[i] * (1 - p)));
-  return `#${n.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('')}`;
-}
-
-/** A mesma cor, com transparência. */
-function comAlfa(hex: string, alfa: number): string {
-  const [r, g, b] = canais(hex);
-  return `rgba(${r}, ${g}, ${b}, ${alfa})`;
-}
-
-/** Um passo de contraste: clareia cor escura, escurece cor clara. */
-function degrau(hex: string): string {
-  return mistura(luminancia(hex) > 0.42 ? '#000000' : '#ffffff', hex, 0.06);
 }

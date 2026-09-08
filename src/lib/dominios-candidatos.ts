@@ -52,6 +52,29 @@ export async function hostDaVisita(): Promise<string | null> {
 }
 
 /**
+ * O endereço completo por onde esta visita chegou: `https://material.sofia…`.
+ *
+ * Existe para o que precisa de URL ABSOLUTA — `og:image` é lido por um robô do
+ * WhatsApp, que não tem página nenhuma aberta para resolver caminho relativo.
+ *
+ * O esquema vem do cabeçalho porque em produção quem termina o TLS é a borda da
+ * Vercel: fixar `https` funcionaria lá e quebraria em desenvolvimento, onde o
+ * endereço é `http://localhost:3000` e a prévia é justamente o que se quer ver.
+ *
+ * ⚠️ Aqui a PORTA fica, ao contrário de `hostDaVisita()`. Lá ela é ruído (a
+ * coluna `dominio` nunca tem porta); aqui ela é metade do endereço em
+ * desenvolvimento — sem ela o robô buscaria a imagem na porta 80.
+ */
+export async function enderecoDaVisita(): Promise<string | null> {
+  const h = await headers();
+  const host = (h.get('x-forwarded-host') ?? h.get('host'))?.trim().toLowerCase();
+  if (!host) return null;
+  const local = host.startsWith('localhost') || host.startsWith('127.');
+  const esquema = h.get('x-forwarded-proto')?.split(',')[0].trim() ?? (local ? 'http' : 'https');
+  return `${esquema}://${host}`;
+}
+
+/**
  * O candidato dono deste host, ou `null`.
  *
  * ⚠️ Responde mesmo com o domínio AINDA NÃO VERIFICADO, de propósito: a
