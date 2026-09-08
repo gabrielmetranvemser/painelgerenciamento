@@ -69,6 +69,11 @@ const nextConfig: NextConfig = {
   // a função e o download quebra em produção — exatamente onde não dá para ver.
   outputFileTracingIncludes: {
     '/[entrada]/extensao': ['./extensao/**/*'],
+    // Pelo mesmo motivo: as rotas da marca leem as duas fontes por caminho, e
+    // sem elas o desenhista cai numa fonte genérica — quando cai. A prévia do
+    // WhatsApp é justamente onde ninguém repara que quebrou.
+    '/api/marca/[slug]/cartao': ['./src/assets/fontes/**/*'],
+    '/api/marca/[slug]/icone': ['./src/assets/fontes/**/*'],
   },
 
   async headers() {

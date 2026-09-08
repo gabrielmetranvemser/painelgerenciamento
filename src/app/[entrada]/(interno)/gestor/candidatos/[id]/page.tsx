@@ -15,6 +15,7 @@ import { Materiais } from './materiais';
 import { AtendentesDoCandidato, type AtendenteDoCandidato } from './atendentes';
 import { RecepcaoNoWhatsapp, type NumeroDaRecepcao } from './recepcao';
 import { ComitesDoCandidato } from './comites';
+import { ComoOLinkAparece } from './compartilhamento';
 import { carregarComites } from '@/lib/acoes-comites';
 
 export const metadata: Metadata = { title: 'Candidato' };
@@ -121,6 +122,7 @@ export default async function PaginaCandidato({
           />
           <Materiais candidatoId={c.id} materiais={(materiais ?? []) as Material[]}
                      previaHref={rotas(entrada).gestorCandidatoPrevia(c.id)} />
+          <ComoOLinkAparece candidato={c} />
           <ComitesDoCandidato
             candidatoId={c.id} comites={comites}
             municipios={(municipios ?? []) as Municipio[]}

@@ -42,6 +42,7 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `src/lib/mensagem.ts` | o editor deixa de APONTAR o que falta no texto → o gestor escolhe sem saber o que está abrindo mão (as regras avisam, não travam: só texto quebrado impede salvar) |
 | `src/lib/importacao.ts` | dedup e casamento de município da planilha |
 | `src/lib/dominios-candidatos.ts` | domínio não conferido virando link de mensagem → link morto no WhatsApp, e o clique (a prova de que a pessoa abriu) some sem sintoma |
+| `src/lib/marca.ts` | o carimbo `?v=` das imagens do link. Parou de mudar, o WhatsApp serve para sempre a prévia que baixou — e o gestor troca a logo achando que não salva |
 | `src/lib/host-do-painel.ts` | o painel respondendo no domínio do candidato → o segmento secreto ganha uma segunda porta, num host divulgado em post |
 | `src/lib/aparelho.ts` | a marca do aparelho. Roda no proxy (Edge): Web Crypto, sem `node:crypto` e sem ida ao banco. Falhar para o lado de trancar derruba os 15 atendentes de uma vez |
 | `src/lib/recepcao.ts` | o texto que o ELEITOR envia à campanha. Não passa por `validarModelo`: aquelas regras são de quem aborda |
@@ -221,6 +222,10 @@ Regras que caem disso:
   padrão é genérico; quem põe "· Painel" é o layout interno. Assim, uma página
   pública que esqueça de sobrescrever não vaza nada — foi exatamente o defeito
   que /privacidade teve.
+- **Nenhum ícone padrão no sistema.** `src/app/favicon.ico` não existe: ícone
+  declarado por ARQUIVO vence ícone declarado em `metadata`, e enquanto ele
+  estava lá o triângulo do Next ganhava do ícone do candidato em toda página.
+  O painel declara o dele em `data:` no layout interno; fora dali, ícone nenhum.
 - **`robots.txt` bloqueia tudo e não lista caminho.** Dizer "não indexe /xyz" é
   anunciar que /xyz existe. Sem sitemap.
 - **A raiz `/` devolve 404.** Só respondem os endereços de candidato e o painel.
