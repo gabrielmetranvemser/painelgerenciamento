@@ -46,6 +46,7 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `src/lib/host-do-painel.ts` | o painel respondendo no domínio do candidato → o segmento secreto ganha uma segunda porta, num host divulgado em post |
 | `src/lib/aparelho.ts` | a marca do aparelho. Roda no proxy (Edge): Web Crypto, sem `node:crypto` e sem ida ao banco. Falhar para o lado de trancar derruba os 15 atendentes de uma vez |
 | `src/lib/recepcao.ts` | o texto que o ELEITOR envia à campanha. Não passa por `validarModelo`: aquelas regras são de quem aborda |
+| `src/lib/desempenho.ts` | os quatro grupos de desfecho da tela de Desempenho. A RPC define "ainda aberto" pelo NEGATIVO dos outros três, então status sem grupo aqui vira barra que não fecha com o número escrito em cima dela |
 | `pegar_proximo_contato` | dois atendentes pegam o mesmo contato, ou um contato cai para quem não atende aquela lista |
 | `rampa_do_chip` | a rampa só vale enquanto `chips.status = 'aquecendo'`. Aplicá-la sempre faz o teto do gestor virar letra morta (`least(rampa, config)`), e ele mexe no campo achando que não salva |
 | `preparar_mensagem` | a variação congela por contato. Congelar cedo demais faz texto desativado continuar saindo; congelar de menos reescreve o histórico do que já foi enviado |
@@ -59,6 +60,7 @@ RLS + pg_cron) · Vercel. **Sem servidor de WhatsApp. Sem VPS. Sem Docker.**
 | `recebe_captacao_de` | quem recebe o cadastro do formulário. Marcar ninguém tem de devolver o lead à chapa inteira: se prender, quem PEDIU material espera sem ninguém saber |
 | `sortear_numero_recepcao` | RODÍZIO, não sorteio: sai quem está mais atrás em `sorteios/peso`. Aleatório de verdade não entrega o 50/50 pedido, e a reserva do contato sai daqui |
 | `criar_numero_recepcao` | número novo entra EMPATADO com quem mais recebeu. Zerado, ele levaria sozinho os próximos cadastros até alcançar |
+| `relatorio_de_atendimento` | é a folha de avaliação da equipe. O período recorta QUEM (as pessoas abordadas naqueles dias), e o desfecho é a situação delas HOJE — recortar os dois faz a taxa passar de 100%. E o desfecho sai de `contatos.status`, nunca de `interacoes.resultado`: o carimbo do resultado só alcança as etapas que já existiam, então a mesma pessoa aparecia em dois grupos e a soma passava do total |
 
 ### 2. Toda trava é validada no SERVIDOR
 
