@@ -31,6 +31,7 @@ export function rotas(entrada: string) {
     gestorChips: `${raiz}/gestor/chips`,
     gestorMensagens: `${raiz}/gestor/mensagens`,
     gestorRelatorios: `${raiz}/gestor/relatorios`,
+    gestorDesempenho: `${raiz}/gestor/relatorios/atendentes`,
     gestorConfiguracao: `${raiz}/gestor/configuracao`,
     exportar: (relatorio: string) => `${raiz}/api/export/${relatorio}`,
   };

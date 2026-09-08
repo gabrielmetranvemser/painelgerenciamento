@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import {
-  Contact, FileBarChart, Gauge, Headphones, Layers, LifeBuoy, LogOut, MessageSquareText,
-  PackageOpen, Settings, Smartphone, Upload, Users, Vote,
+  ChartNoAxesColumn, Contact, FileBarChart, Gauge, Headphones, Layers, LifeBuoy, LogOut,
+  MessageSquareText, PackageOpen, Settings, Smartphone, Upload, Users, Vote,
 } from 'lucide-react';
 import { criarClienteServidor } from '@/lib/supabase/server';
 import { exigirGestor } from '@/lib/sessao';
@@ -76,6 +76,7 @@ export default async function LayoutGestor({
           urgente: juridicos > 0,
         },
         { href: r.gestorRelatorios, rotulo: 'Relatórios', icone: <FileBarChart size={15} /> },
+        { href: r.gestorDesempenho, rotulo: 'Desempenho', icone: <ChartNoAxesColumn size={15} /> },
       ],
     },
     {

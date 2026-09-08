@@ -90,56 +90,56 @@ export default async function PaginaRelatorios({ params }: { params: Promise<{ e
         </section>
       )}
 
+      {/* ── Por atendente ───────────────────────────────────────────────────
+          A tabela inteira mora em Desempenho, com o recorte por período e a
+          tela de cada pessoa. Aqui fica só o topo do ranking: repetir a tabela
+          nas duas telas é combinar que um dia elas discordem, e quem estiver
+          olhando a errada não tem como saber. */}
       <section className="mb-8">
-        <h2 className="mb-2 text-sm font-medium text-suave">Por atendente</h2>
-        <p className="mb-2 text-xs text-suave">
-          As três primeiras colunas são o que está EM ABERTO na mão de cada um — é onde a
-          operação trava. As outras são o que já terminou.
-        </p>
+        <div className="mb-2 flex flex-wrap items-baseline gap-3">
+          <h2 className="mr-auto text-sm font-medium text-suave">Por atendente</h2>
+          <Link href={rt.gestorDesempenho}
+                className="text-xs text-suave underline-offset-4 hover:text-texto hover:underline">
+            Abrir o painel de desempenho
+          </Link>
+        </div>
         {(atendentes ?? []).length === 0 ? (
           <Vazio>Nenhum atendente cadastrado.</Vazio>
         ) : (
-          <Cartao className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-sm">
-              <thead>
-                <tr className="border-b border-borda text-left">
-                  {['Atendente', 'Na mão agora', 'Aguardando resposta', 'Abertos sem falar',
-                    'Hoje', 'Total', 'Autorizaram', 'Saíram', 'Cliques', ''].map((c, i) => (
-                    <th key={c || i}
-                        className={`px-4 py-2.5 text-xs font-medium text-suave ${i > 0 && i < 9 ? 'text-right' : ''}`}>
-                      {c}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-borda">
-                {((atendentes ?? []) as DesempenhoAtendente[]).map((a) => {
-                  const ab = emAberto.get(a.atendente_id);
-                  return (
-                    <tr key={a.atendente_id}>
-                      <td className="px-4 py-2.5 font-medium">
-                        {a.atendente}
-                        {!a.ativo && <span className="ml-2 text-xs font-normal text-suave">inativo</span>}
-                      </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{ab?.na_mao_agora ?? 0}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{ab?.aguardando_resposta ?? 0}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{ab?.abertos_sem_falar ?? 0}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{a.hoje}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{a.total_abordados}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{a.autorizou}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{a.pediu_saida}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{a.cliques_reais}</td>
-                      <td className="px-4 py-2.5 text-right">
-                        <Link href={`${rt.gestorContatos}?atendente=${a.atendente_id}`}
-                              className="text-xs text-suave underline-offset-4 hover:text-texto hover:underline">
-                          ver contatos
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <Cartao className="p-5">
+            <p className="mb-4 text-xs leading-relaxed text-suave">
+              Quem falou com mais gente, desde o começo. Para o histórico por período, as horas
+              de cada dia e a tela de cada pessoa, abra o{' '}
+              <Link href={rt.gestorDesempenho} className="underline underline-offset-4">
+                painel de desempenho
+              </Link>.
+            </p>
+            <ul className="space-y-2.5">
+              {((atendentes ?? []) as DesempenhoAtendente[])
+                .filter((a) => a.total_abordados > 0)
+                .slice(0, 5)
+                .map((a, i, lista) => (
+                  <li key={a.atendente_id}>
+                    <div className="mb-1 flex items-baseline gap-2">
+                      <span className="truncate text-[13px] font-medium">{a.atendente}</span>
+                      <span className="truncate text-xs text-suave">
+                        {a.autorizou.toLocaleString('pt-BR')} autorizaram
+                        {(emAberto.get(a.atendente_id)?.abertos_sem_falar ?? 0) > 0
+                          && ` · ${emAberto.get(a.atendente_id)!.abertos_sem_falar} pegou e não falou`}
+                      </span>
+                      <span className="ml-auto font-display text-sm font-semibold tabular">
+                        {a.total_abordados.toLocaleString('pt-BR')}
+                      </span>
+                    </div>
+                    <div className="h-2.5 w-full overflow-hidden rounded-full bg-vidro">
+                      <div className="h-full rounded-full bg-acento"
+                           style={{
+                             width: `${Math.max(2, (a.total_abordados / Math.max(lista[0].total_abordados, 1)) * 100)}%`,
+                           }} />
+                    </div>
+                  </li>
+                ))}
+            </ul>
           </Cartao>
         )}
       </section>
