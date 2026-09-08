@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
-import { MessageCircle, Plus, Power, X } from 'lucide-react';
+import { Check, MessageCircle, Pencil, Plus, Power, X } from 'lucide-react';
 import { Aviso, Botao, Campo, Cartao, AreaTexto, Pilula, Selecao, cx } from '@/components/ui';
 import { formatarExibicao } from '@/lib/telefone';
 import {
@@ -10,7 +10,7 @@ import {
   problemaNaMensagemRecepcao, TEXTO_PROBLEMA_RECEPCAO, VARIAVEIS_RECEPCAO,
 } from '@/lib/recepcao';
 import {
-  acrescentarNumeroRecepcao, alternarNumeroRecepcao,
+  acrescentarNumeroRecepcao, alterarNumeroRecepcao, alternarNumeroRecepcao,
   removerNumeroRecepcao, salvarMensagemRecepcao,
 } from './acoes-recepcao';
 
@@ -23,6 +23,8 @@ export type NumeroDaRecepcao = {
   ativo: boolean;
   sorteios: number;
 };
+
+type Membro = { id: string; primeiro_nome: string };
 
 /**
  * Para onde vai a pessoa depois de preencher o formulário.
@@ -39,7 +41,7 @@ export function RecepcaoNoWhatsapp({
   candidatoId: string;
   nomeUrna: string;
   numeros: NumeroDaRecepcao[];
-  equipe: { id: string; primeiro_nome: string }[];
+  equipe: Membro[];
   mensagem: string | null;
   /** Quanto tempo o dono do número segura o contato. Vem da Configuração. */
   reservaHoras: number;
@@ -47,6 +49,7 @@ export function RecepcaoNoWhatsapp({
   const [texto, setTexto] = useState(mensagem ?? '');
   const [erro, setErro] = useState<string | null>(null);
   const [salvo, setSalvo] = useState(false);
+  const [editando, setEditando] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
   const router = useRouter();
 
@@ -54,10 +57,13 @@ export function RecepcaoNoWhatsapp({
   const problema = problemaNaMensagemRecepcao(texto);
   const somaPesos = ativos.reduce((s, n) => s + n.peso, 0);
 
-  function agir(acao: () => Promise<{ ok: true } | { ok: false; erro: string }>) {
+  function agir(
+    acao: () => Promise<{ ok: true } | { ok: false; erro: string }>,
+    aoDarCerto?: () => void,
+  ) {
     iniciar(async () => {
       const r = await acao();
-      if (r.ok) { setErro(null); router.refresh(); } else setErro(r.erro);
+      if (r.ok) { setErro(null); aoDarCerto?.(); router.refresh(); } else setErro(r.erro);
     });
   }
 
@@ -91,35 +97,57 @@ export function RecepcaoNoWhatsapp({
           {numeros.map((n) => (
             <li key={n.id}
                 className={cx(
-                  'flex flex-wrap items-center gap-2.5 rounded-xl border px-3.5 py-2.5',
-                  n.ativo ? 'border-borda bg-superficie-alta' : 'border-borda bg-transparent opacity-55',
+                  'rounded-xl border border-borda',
+                  n.ativo ? 'bg-superficie-alta' : 'bg-transparent',
+                  !n.ativo && editando !== n.id && 'opacity-55',
                 )}>
-              <div className="mr-auto min-w-0">
-                <p className="truncate text-sm font-semibold">{n.rotulo}</p>
-                <p className="truncate font-mono text-xs text-suave">
-                  {formatarExibicao(n.numero_e164)}
-                  {n.atendente_id && ` · ${nomeDe(equipe, n.atendente_id)}`}
-                </p>
-              </div>
+              {editando === n.id ? (
+                <div className="p-3.5">
+                  <FormaDoNumero
+                    numero={n} equipe={equipe} reservaHoras={reservaHoras} ocupado={ocupado}
+                    aoEnviar={(form) => agir(
+                      () => alterarNumeroRecepcao(n.id, form),
+                      () => setEditando(null),
+                    )}
+                    aoCancelar={() => { setErro(null); setEditando(null); }}
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2.5 px-3.5 py-2.5">
+                  <div className="mr-auto min-w-0">
+                    <p className="truncate text-sm font-semibold">{n.rotulo}</p>
+                    <p className="truncate font-mono text-xs text-suave">
+                      {formatarExibicao(n.numero_e164)}
+                      {n.atendente_id && ` · ${nomeDe(equipe, n.atendente_id)}`}
+                    </p>
+                  </div>
 
-              {n.peso > 1 && <Pilula cor="acento">peso {n.peso}</Pilula>}
-              <span className="text-xs text-tenue">{n.sorteios}×</span>
+                  {n.peso > 1 && <Pilula cor="acento">peso {n.peso}</Pilula>}
+                  <span className="text-xs text-tenue">{n.sorteios}×</span>
 
-              <button type="button" disabled={ocupado}
-                      title={n.ativo ? 'Tirar do rodízio' : 'Voltar ao rodízio'}
-                      className={cx('grid size-7 place-items-center rounded-lg border transition-colors',
-                        n.ativo
-                          ? 'border-acento/40 bg-acento/15 text-acento'
-                          : 'border-borda text-tenue hover:text-suave')}
-                      onClick={() => agir(() => alternarNumeroRecepcao(n.id, !n.ativo))}>
-                <Power size={13} />
-              </button>
+                  <button type="button" disabled={ocupado} title="Alterar"
+                          className="grid size-7 place-items-center rounded-lg border border-borda text-tenue transition-colors hover:text-suave"
+                          onClick={() => { setErro(null); setEditando(n.id); }}>
+                    <Pencil size={13} />
+                  </button>
 
-              <button type="button" disabled={ocupado} title="Apagar"
-                      className="text-suave hover:text-perigo"
-                      onClick={() => agir(() => removerNumeroRecepcao(n.id))}>
-                <X size={14} />
-              </button>
+                  <button type="button" disabled={ocupado}
+                          title={n.ativo ? 'Tirar do rodízio' : 'Voltar ao rodízio'}
+                          className={cx('grid size-7 place-items-center rounded-lg border transition-colors',
+                            n.ativo
+                              ? 'border-acento/40 bg-acento/15 text-acento'
+                              : 'border-borda text-tenue hover:text-suave')}
+                          onClick={() => agir(() => alternarNumeroRecepcao(n.id, !n.ativo))}>
+                    <Power size={13} />
+                  </button>
+
+                  <button type="button" disabled={ocupado} title="Apagar"
+                          className="text-suave hover:text-perigo"
+                          onClick={() => agir(() => removerNumeroRecepcao(n.id))}>
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -127,28 +155,18 @@ export function RecepcaoNoWhatsapp({
 
       {erro && <Aviso tom="erro" className="mb-4">{erro}</Aviso>}
 
-      {/* ── acrescentar ─────────────────────────────────────────────────── */}
-      <form
-        action={(form) => agir(() => acrescentarNumeroRecepcao(candidatoId, form))}
-        className="mb-5 grid gap-3 rounded-xl border border-borda p-3.5 sm:grid-cols-2"
-      >
-        <Campo rotulo="Nome" name="rotulo" required placeholder="Vitor — Principal" />
-        <Campo rotulo="Número" name="numero" required inputMode="tel" placeholder="(69) 99999-0000" />
-        <Selecao rotulo="De quem é" name="atendente_id"
-                 dica={reservaHoras > 0
-                   ? `Quem cair aqui fica ${reservaHoras}h reservado para essa pessoa.`
-                   : 'A reserva está desligada na Configuração.'}>
-          <option value="">Ninguém do painel</option>
-          {equipe.map((a) => <option key={a.id} value={a.id}>{a.primeiro_nome}</option>)}
-        </Selecao>
-        <Campo rotulo="Peso" name="peso" type="number" min={1} max={10} defaultValue={1}
-               dica="1 é o normal. 2 recebe o dobro dos outros." />
-        <div className="sm:col-span-2">
-          <Botao tamanho="p" type="submit" disabled={ocupado}>
-            <Plus size={13} /> Acrescentar número
-          </Botao>
+      {/* ── acrescentar ─────────────────────────────────────────────────────
+          Some enquanto uma linha está sendo alterada: dois formulários com os
+          MESMOS quatro campos, um debaixo do outro, é o jeito mais fácil de o
+          gestor cadastrar um número novo achando que editou o de cima. */}
+      {!editando && (
+        <div className="mb-5 rounded-xl border border-borda p-3.5">
+          <FormaDoNumero
+            equipe={equipe} reservaHoras={reservaHoras} ocupado={ocupado}
+            aoEnviar={(form) => agir(() => acrescentarNumeroRecepcao(candidatoId, form))}
+          />
         </div>
-      </form>
+      )}
 
       {/* ── a mensagem ──────────────────────────────────────────────────── */}
       <AreaTexto
@@ -195,7 +213,77 @@ export function RecepcaoNoWhatsapp({
   );
 }
 
-function nomeDe(equipe: { id: string; primeiro_nome: string }[], id: string): string {
+/**
+ * Os mesmos quatro campos para cadastrar e para alterar.
+ *
+ * São um formulário só de propósito: dois formulários parecidos divergem com o
+ * tempo, e o gestor descobriria a diferença tentando salvar. Quem muda é o
+ * botão — e o texto da dica, porque trocar o dono de um número que já rodou não
+ * é a mesma coisa que escolher o dono de um número novo.
+ */
+function FormaDoNumero({
+  numero, equipe, reservaHoras, ocupado, aoEnviar, aoCancelar,
+}: {
+  /** Ausente = cadastrando. Presente = alterando esta linha. */
+  numero?: NumeroDaRecepcao;
+  equipe: Membro[];
+  reservaHoras: number;
+  ocupado: boolean;
+  aoEnviar: (form: FormData) => void;
+  aoCancelar?: () => void;
+}) {
+  const reserva = reservaHoras > 0
+    ? `Quem cair aqui fica ${reservaHoras}h reservado para essa pessoa.`
+    : 'A reserva está desligada na Configuração.';
+
+  // ⚠️ O dono pode ser alguém que saiu do painel — `equipe` só traz quem está
+  // ativo. Sem esta opção o `select` cairia em "Ninguém do painel" sozinho, e
+  // salvar o nome do número tiraria o dono junto, sem ninguém pedir.
+  const donoForaDoPainel = Boolean(
+    numero?.atendente_id && !equipe.some((a) => a.id === numero.atendente_id),
+  );
+
+  return (
+    <form action={aoEnviar} className="grid gap-3 sm:grid-cols-2">
+      <Campo rotulo="Nome" name="rotulo" required maxLength={40}
+             defaultValue={numero?.rotulo} placeholder="Vitor — Principal" />
+      <Campo rotulo="Número" name="numero" required inputMode="tel"
+             defaultValue={numero && formatarExibicao(numero.numero_e164)}
+             placeholder="(69) 99999-0000" />
+      <Selecao rotulo="De quem é" name="atendente_id"
+               defaultValue={numero?.atendente_id ?? ''}
+               dica={numero
+                 ? `${reserva} Trocar vale daqui para a frente: quem já veio por este `
+                   + 'número continua com quem era.'
+                 : reserva}>
+        <option value="">Ninguém do painel</option>
+        {equipe.map((a) => <option key={a.id} value={a.id}>{a.primeiro_nome}</option>)}
+        {donoForaDoPainel && (
+          <option value={numero!.atendente_id!}>Quem era (fora do painel)</option>
+        )}
+      </Selecao>
+      <Campo rotulo="Peso" name="peso" type="number" min={1} max={10}
+             defaultValue={numero?.peso ?? 1}
+             dica="1 é o normal. 2 recebe o dobro dos outros." />
+
+      <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+        <Botao tamanho="p" type="submit" disabled={ocupado}>
+          {numero
+            ? <><Check size={13} /> Salvar as alterações</>
+            : <><Plus size={13} /> Acrescentar número</>}
+        </Botao>
+        {aoCancelar && (
+          <Botao tamanho="p" variante="neutro" type="button" disabled={ocupado}
+                 onClick={aoCancelar}>
+            Cancelar
+          </Botao>
+        )}
+      </div>
+    </form>
+  );
+}
+
+function nomeDe(equipe: Membro[], id: string): string {
   return equipe.find((a) => a.id === id)?.primeiro_nome ?? 'fora do painel';
 }
 
