@@ -261,6 +261,15 @@ recebe o endereço por acaso não descobre que existe painel.
 - **O link é `/a/{codigo}`, neutro.** Se carregasse a chave, espalharia o
   segredo por toda conversa de WhatsApp — o oposto do que ele existe para fazer.
   Fica fora do portão do proxy, senão ninguém liberaria o primeiro aparelho.
+- **Abrir o link NÃO libera; o botão libera.** O mensageiro abre o link sozinho
+  para montar a pré-visualização. Quando abrir bastava, em 04/10 um robô
+  ("Chrome 56 no Linux") gastou o convite 15 segundos depois de gerado, ficou
+  com a marca, e o gestor ligou a trava e se trancou para fora. A página só
+  mostra o botão (GET não muda nada); quem gasta o convite é o POST do toque.
+  Nunca volte a liberar no GET, nem "só para pular um clique".
+- **Só liga a trava quem está num navegador liberado.** A conta antiga ("existe
+  algum aparelho liberado?") contou o robô. A pergunta certa é se ESTE
+  navegador passa pelo portão depois de ligar (`aparelhoDesteNavegador`).
 - **O código nunca é gravado em claro**, só o hash. O link aparece uma vez, na
   tela de quem gerou, e não pode ser recuperado nem por quem tem o banco.
 - **O proxy confere só a assinatura**, sem banco: roda em toda requisição
@@ -269,7 +278,8 @@ recebe o endereço por acaso não descobre que existe painel.
   valor vencido uma vez e atualiza por trás).
 - **Falha para o lado de DEIXAR PASSAR**, sempre. Esta camada é obscuridade, não
   a tranca (§7); trocar 30 segundos de endereço exposto por um dia de operação
-  parada seria péssimo negócio.
+  parada seria péssimo negócio. A única conta que falha para o outro lado é a de
+  LIGAR a trava: na dúvida sobre este navegador, ela não liga.
 - **Se você se trancar para fora:**
   `update public.config set exigir_aparelho = false;` no SQL do Supabase.
 

@@ -5,6 +5,7 @@ import { criarClienteServidor } from '@/lib/supabase/server';
 import { exigirGestorOuFalhar } from '@/lib/gestor';
 import { revalidarInterno } from '@/lib/revalidar';
 import { gerarCodigo, hashDoCodigo } from '@/lib/aparelho';
+import { aparelhoDesteNavegador } from '@/lib/aparelho-servidor';
 
 export type Resultado = { ok: true } | { ok: false; erro: string };
 
@@ -66,28 +67,25 @@ export async function revogarAparelho(id: string): Promise<Resultado> {
 /**
  * Liga e desliga a trava.
  *
- * ⚠️ Ligar com nenhum aparelho liberado trancaria o próprio gestor para fora —
- * inclusive desta tela. Por isso a ação recusa: quem opera precisa ter liberado
- * o aparelho dele antes, e ter conferido que entra.
+ * ⚠️ Só liga a partir de um navegador LIBERADO — este, o de quem está ligando.
+ *
+ * Antes a conta era "existe algum aparelho liberado?", e ela deixou o gestor
+ * trancado do lado de fora em 04/10: o único aparelho liberado era o robô de
+ * pré-visualização do WhatsApp, que tinha aberto o convite antes dele. Contar
+ * aparelhos não diz nada sobre quem está prestes a ser barrado; a pergunta
+ * certa é se ESTE navegador passa pelo portão depois que a trava ligar.
  */
 export async function alternarTravaAparelho(ligar: boolean): Promise<Resultado> {
   await exigirGestorOuFalhar();
   const supabase = criarClienteAdmin();
 
-  if (ligar) {
-    const { count } = await supabase
-      .from('aparelhos')
-      .select('id', { count: 'exact', head: true })
-      .not('liberado_em', 'is', null)
-      .is('revogado_em', null);
-
-    if ((count ?? 0) === 0) {
-      return {
-        ok: false,
-        erro: 'Libere pelo menos um aparelho antes — o seu. Ligar agora trancaria '
-          + 'você para fora do painel, inclusive desta tela.',
-      };
-    }
+  if (ligar && !(await aparelhoDesteNavegador())) {
+    return {
+      ok: false,
+      erro: 'Este navegador ainda não está liberado. Gere um link para você, abra-o '
+        + 'AQUI e toque em "Liberar este aparelho" — só então ligue a trava. Ligar agora '
+        + 'trancaria você para fora do painel, inclusive desta tela.',
+    };
   }
 
   const { error } = await supabase

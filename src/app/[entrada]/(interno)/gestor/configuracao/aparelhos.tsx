@@ -31,13 +31,19 @@ export type AparelhoNaTela = {
  * tranca realmente está.
  */
 export function AparelhosLiberados({
-  ligada, aparelhos, equipe, origem,
+  ligada, aparelhos, equipe, origem, esteAparelho,
 }: {
   ligada: boolean;
   aparelhos: AparelhoNaTela[];
   equipe: { id: string; primeiro_nome: string }[];
   /** O endereço público do painel, para montar o link do convite. */
   origem: string;
+  /**
+   * O aparelho de quem está olhando a tela, se este navegador está liberado.
+   * É o que o servidor confere antes de ligar a trava — e a tela mostra o mesmo
+   * de antemão, para o gestor não descobrir pela recusa.
+   */
+  esteAparelho: string | null;
 }) {
   const [pessoa, setPessoa] = useState(equipe[0]?.id ?? '');
   const [rotulo, setRotulo] = useState('');
@@ -83,6 +89,12 @@ export function AparelhosLiberados({
               ? `${liberados.length} aparelho(s) enxergam o painel. O resto vê 404.`
               : 'Qualquer um com o endereço chega na tela de entrar, como sempre foi.'}
           </p>
+          {!ligada && !esteAparelho && (
+            <p className="mt-1 text-xs text-alerta">
+              Este navegador ainda não está liberado. Libere-o antes de ligar — gere um
+              link para você e abra-o aqui.
+            </p>
+          )}
         </div>
         <Botao tamanho="p" variante={ligada ? 'perigo' : 'principal'} disabled={ocupado}
                onClick={() => iniciar(async () => {
@@ -120,7 +132,8 @@ export function AparelhosLiberados({
         {link && (
           <div className="mt-4 rounded-xl border border-acento/30 bg-acento/10 p-3.5">
             <p className="mb-2 text-xs font-semibold text-acento">
-              Mande este link para a pessoa. Ela abre NO APARELHO dela, uma vez.
+              Mande este link para a pessoa. Ela abre NO APARELHO dela e toca em
+              &ldquo;Liberar este aparelho&rdquo;.
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <code className="min-w-0 flex-1 truncate rounded-lg bg-superficie px-3 py-2 font-mono text-xs">
@@ -133,8 +146,9 @@ export function AparelhosLiberados({
             </div>
             {/* O código não é guardado em claro em lugar nenhum — nem no banco. */}
             <p className="mt-2 text-[11px] leading-relaxed text-suave">
-              Vale 48 horas e serve uma vez só. Ele não aparece de novo em lugar nenhum —
-              se perder, é só gerar outro.
+              Vale 48 horas e serve uma vez só. Abrir não gasta — só o toque no botão —,
+              então a pré-visualização do WhatsApp não queima o link. Ele não aparece de
+              novo em lugar nenhum: se perder, é só gerar outro.
             </p>
           </div>
         )}
@@ -190,6 +204,7 @@ export function AparelhosLiberados({
                   {a.ultimo_uso_em && ` · usado em ${quando(a.ultimo_uso_em)}`}
                 </p>
               </div>
+              {a.id === esteAparelho && <Pilula cor="acento">este aparelho</Pilula>}
               <button type="button" disabled={ocupado} title="Tirar este aparelho do ar"
                       className="text-suave hover:text-perigo"
                       onClick={() => iniciar(async () => {
