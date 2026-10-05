@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { Titulo } from '@/components/ui';
 import { criarClienteServidor } from '@/lib/supabase/server';
+import { aparelhoDesteNavegador } from '@/lib/aparelho-servidor';
 import type { Config, DiaBloqueado, SaudeChip, TetoDoChip } from '@/lib/tipos-banco';
 import { FormularioConfig } from './formulario';
 import { AparelhosLiberados, type AparelhoNaTela } from './aparelhos';
@@ -22,7 +23,7 @@ export default async function PaginaConfig({
   // o que faltava na tela era justamente a resposta — qual número está seguindo
   // este número e qual ainda está na rampa de aquecimento.
   const [{ data: config }, { data: dias }, { data: chips }, { data: tetos },
-         { data: aparelhos }, { data: equipe }] = await Promise.all([
+         { data: aparelhos }, { data: equipe }, esteAparelho] = await Promise.all([
     supabase.from('config').select('*').eq('id', 1).single(),
     supabase.from('dias_bloqueados').select('*').order('data'),
     supabase.from('v_saude_chip').select('*').order('rotulo'),
@@ -31,6 +32,7 @@ export default async function PaginaConfig({
       .select('id, rotulo, usuario_id, liberado_em, expira_em, ultimo_uso_em, revogado_em')
       .is('revogado_em', null).order('criado_em', { ascending: false }),
     supabase.from('usuarios').select('id, primeiro_nome').eq('ativo', true).order('primeiro_nome'),
+    aparelhoDesteNavegador(),
   ]);
 
   // O endereço por onde o gestor chegou: é ele que entra no link do convite, e
@@ -50,6 +52,7 @@ export default async function PaginaConfig({
           aparelhos={(aparelhos ?? []) as AparelhoNaTela[]}
           equipe={(equipe ?? []) as { id: string; primeiro_nome: string }[]}
           origem={origem}
+          esteAparelho={esteAparelho}
         />
       </div>
     </>

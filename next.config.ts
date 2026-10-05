@@ -102,8 +102,9 @@ const nextConfig: NextConfig = {
       {
         // As páginas do link levam o token na URL. O token não contém dado
         // pessoal, mas quem o tem consegue descadastrar aquela pessoa — então
-        // ele não pode vazar no Referer para o destino externo.
-        source: '/:rota(r|m)/:token*',
+        // ele não pode vazar no Referer para o destino externo. O `/a/` entra
+        // pelo mesmo motivo: até o toque no botão, o código libera um aparelho.
+        source: '/:rota(r|m|a)/:token*',
         headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }],
       },
     ];

@@ -2,7 +2,7 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import { unstable_cache } from 'next/cache';
 import { criarClienteAdmin } from '@/lib/supabase/admin';
-import { COOKIE_APARELHO, lerAparelho } from '@/lib/aparelho';
+import { COOKIE_APARELHO, hashDoCodigo, lerAparelho } from '@/lib/aparelho';
 
 /**
  * Este aparelho foi revogado depois de liberado?
@@ -45,6 +45,58 @@ export async function aparelhoFoiRevogado(): Promise<boolean> {
 
   try {
     return !(await conferir(id));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * O aparelho deste navegador — liberado e não revogado — ou `null`.
+ *
+ * ⚠️ Sem cache e sem tolerância, ao contrário de `aparelhoFoiRevogado`. Quem
+ * pergunta isto está prestes a LIGAR a trava, e aqui o erro barato é o
+ * oposto: na dúvida responde "não liberado" e a trava não liga. Ligar com a
+ * resposta errada tranca o gestor para fora do painel — inclusive da tela que
+ * desliga a trava.
+ */
+export async function aparelhoDesteNavegador(): Promise<string | null> {
+  const id = await lerAparelho((await cookies()).get(COOKIE_APARELHO)?.value);
+  if (!id) return null;
+
+  try {
+    const { data, error } = await criarClienteAdmin().rpc('aparelho_ativo', { p_id: id });
+    return !error && data === true ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * O convite ainda serve? Só PERGUNTA — não gasta.
+ *
+ * ⚠️ Existe porque abrir o link deixou de liberar. Mensageiro abre o link
+ * sozinho para montar a pré-visualização, e enquanto a liberação acontecia na
+ * abertura o robô gastava o convite antes da pessoa: em 04/10 um "Chrome 56 no
+ * Linux" usou o link 15 segundos depois de gerado, o painel contou "1 aparelho
+ * liberado", aceitou ligar a trava e trancou o gestor para fora. Agora a página
+ * só mostra o botão, e quem gasta o convite é o toque (`usar_convite_aparelho`).
+ *
+ * Isto só decide entre mostrar o botão e devolver 404. A palavra final é da
+ * RPC, no toque: se o convite vencer entre abrir e tocar, a pessoa vê o mesmo
+ * 404 de qualquer convite vencido.
+ */
+export async function conviteDeAparelhoValido(codigo: string): Promise<boolean> {
+  if (!codigo || codigo.length < 20) return false;
+
+  try {
+    const { data, error } = await criarClienteAdmin()
+      .from('aparelhos')
+      .select('id')
+      .eq('codigo_hash', await hashDoCodigo(codigo))
+      .is('revogado_em', null)
+      .gt('expira_em', new Date().toISOString())
+      .maybeSingle();
+    return !error && data !== null;
   } catch {
     return false;
   }
