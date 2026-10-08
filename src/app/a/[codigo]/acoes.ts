@@ -6,6 +6,7 @@ import { criarClienteAdmin } from '@/lib/supabase/admin';
 import { assinarAparelho, COOKIE_APARELHO, hashDoCodigo, VALIDADE_DIAS } from '@/lib/aparelho';
 import { hostEhDoPainel } from '@/lib/host-do-painel';
 import { chavePainel } from '@/lib/rotas';
+import { ajustarCookie } from '@/lib/supabase/cookies';
 
 /**
  * O toque no botão: é AQUI que o convite é gasto e o navegador ganha a marca.
@@ -33,16 +34,19 @@ export async function liberarEsteAparelho(codigo: string): Promise<void> {
   const r = data as { ok: boolean; id?: string } | null;
   if (!r?.ok || !r.id) notFound();
 
-  (await cookies()).set(COOKIE_APARELHO, await assinarAparelho(r.id), {
+  // ⚠️ Em produção sai `SameSite=None`, pelo MESMO motivo do cookie da sessão
+  // (`ajustarCookie`): no painel lateral da extensão a página de topo é
+  // `chrome-extension://…`, o painel roda como conteúdo de terceiro, e cookie
+  // `Lax` não é enviado. Com a marca em `Lax`, ligar a trava derrubava o painel
+  // lateral de TODO atendente — 404 com o aparelho liberado — e só a aba normal
+  // funcionava. `Strict` seria pior ainda: nem o link de fora levaria a marca.
+  (await cookies()).set(COOKIE_APARELHO, await assinarAparelho(r.id), ajustarCookie({
     httpOnly: true,
-    // `lax` e não `strict`: com `strict` o cookie não acompanha a pessoa quando
-    // ela chega ao painel por um link de fora, e ela veria 404 logo depois de
-    // liberar — o defeito mais confuso possível.
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
     maxAge: VALIDADE_DIAS * 86_400,
-  });
+  }));
 
   // Quem leva ao painel é o servidor, depois de marcar o aparelho: a chave não
   // aparece no link nem na página do botão.
