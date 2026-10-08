@@ -270,6 +270,11 @@ recebe o endereço por acaso não descobre que existe painel.
 - **Só liga a trava quem está num navegador liberado.** A conta antiga ("existe
   algum aparelho liberado?") contou o robô. A pergunta certa é se ESTE
   navegador passa pelo portão depois de ligar (`aparelhoDesteNavegador`).
+- **A marca tem de chegar ao painel lateral.** Lá o painel roda num iframe de
+  `chrome-extension://…`, como conteúdo de terceiro, e cookie `Lax` não vai.
+  Por isso a marca sai por `ajustarCookie` (`SameSite=None` em produção), igual
+  ao cookie da sessão. Em `Lax`, ligar a trava daria 404 no painel lateral de
+  todo atendente, com o aparelho liberado e tudo.
 - **O código nunca é gravado em claro**, só o hash. O link aparece uma vez, na
   tela de quem gerou, e não pode ser recuperado nem por quem tem o banco.
 - **O proxy confere só a assinatura**, sem banco: roda em toda requisição
